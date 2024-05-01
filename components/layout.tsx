@@ -23,8 +23,9 @@ export default function Layout({children, accountId, appName, navbarItems}: Prop
 
   return (
     <>
-      <Navbar accountId={accountId} appName={appName} items={navbarItems} />
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">{children}</div>
+
+
+
     </>
   );
 }

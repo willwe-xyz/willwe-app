@@ -3,9 +3,16 @@ import type {AppProps} from 'next/app';
 import Head from 'next/head';
 import {PrivyProvider} from '@privy-io/react-auth';
 import {useRouter} from 'next/router';
+// Replace this with any of the networks listed at https://viem.sh/docs/clients/chains.html
+import {baseSepolia} from 'viem/chains';
+import { ChakraProvider } from '@chakra-ui/react';
+
+
 
 function MyApp({Component, pageProps}: AppProps) {
   const router = useRouter();
+
+  
 
   return (
     <>
@@ -20,14 +27,20 @@ function MyApp({Component, pageProps}: AppProps) {
         <link rel="apple-touch-icon" href="/favicons/apple-touch-icon.png" />
         <link rel="manifest" href="/favicons/manifest.json" />
 
-        <title>Privy Auth Starter</title>
+        <title>BagBok</title>
         <meta name="description" content="Privy Auth Starter" />
       </Head>
       <PrivyProvider
         appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
+        config={{
+          loginMethods: ['farcaster', 'wallet', 'email'],
+          defaultChain: baseSepolia
+        }}
         onSuccess={() => router.push('/dashboard')}
       >
+        <ChakraProvider>
         <Component {...pageProps} />
+        </ChakraProvider>
       </PrivyProvider>
     </>
   );
