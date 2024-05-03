@@ -1,4 +1,3 @@
-import { PrivyClient } from "@privy-io/server-auth";
 import { baseSepolia } from "viem/chains";
 // import { defineChain, Hex } from "viem";
 import {  InterfaceAbi }  from "ethers"
@@ -22,7 +21,6 @@ import {  InterfaceAbi }  from "ethers"
 
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 export const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET;
-export const client = new PrivyClient(PRIVY_APP_ID!, PRIVY_APP_SECRET!);
 export const COV_APIKEY= process.env.COV_APIKEY;
 
 // RVI:  0xdf31D950d8d445206656398Fe8e7C41C98137FA2
@@ -3432,6 +3430,7 @@ export const ABIs: ABIKP = {
 
 
 export const RPCurl : {[key: string]: string } = {
-    "84532": process.env.BB_BASE_SEPOLIA_RPC || baseSepolia.rpcUrls.default.http[0],
+    "84532" : "https://base-sepolia.gateway.tenderly.co/jEm0PDO7ZJVvgOxvBZhg"
+    /// "84532": process.env.BB_BASE_SEPOLIA_RPC || baseSepolia.rpcUrls.default.http[0],
 }
 
