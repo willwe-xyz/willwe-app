@@ -6,8 +6,10 @@ import type { InferGetServerSidePropsType, GetServerSideProps } from 'next'
 import { Stack, HStack, VStack, Container, Box, Spinner } from '@chakra-ui/react'
 
  
-import {getAllData , UserContext, ProtocolBalance, NodeState} from '../lib/chainData'
+import {getAllData , ProtocolBalance, NodeState} from '../lib/chainData'
 import {BalanceItem} from "@covalenthq/client-sdk";
+import { parseEther } from "viem";
+import {TokenBalance} from "../components/TokenBalance";
 
 
 
@@ -32,13 +34,14 @@ export default function DashboardPage() {
     unlinkDiscord,
   } = usePrivy();
 
+
   let BI : BalanceItem[] = [];
-  let PB : ProtocolBalance[] = [];
-  let UN : NodeState[] = [];
+  let PB  : ProtocolBalance[] = [];
+  let NS : NodeState[] = [];
 
   const [chainBalances, setChainBalances] = useState(BI);
   const [protocolBalances , setProtocolBalances] = useState(PB)
-  const [userNodes , setUserNodes] = useState(UN)
+  const [userNodes , setUserNodes] = useState(NS)
 
   const [isLoading, setLoading] = useState(true)
    
@@ -50,9 +53,12 @@ export default function DashboardPage() {
     }
 
     if (ready && authenticated && user) {
-      const chainID = user?.wallet?.chainId.includes(":") ?  user?.wallet?.chainId.split(":")[1] : user?.wallet?.chainId.chainId;
+      let chainID = user?.wallet?.chainId?.includes(":") ?  user?.wallet?.chainId?.split(":")[1] : user?.wallet?.chainId?.chainId;
       const userAddr = user?.wallet?.address || ""
       
+      if (user.farcaster && chainID == "1") chainID = "84532";
+      console.log("CHAIN ID", chainID);
+
 
       fetch(`api/get/userdata/${chainID}/${userAddr}`, { cache: 'no-store' }).then((r) => 
     
@@ -61,7 +67,7 @@ export default function DashboardPage() {
         getAllData(chainID, userAddr).then((data) => {
           setProtocolBalances(data.PB);
           setUserNodes(data.NodeStates);
-          console.log("dataa", data);
+          // console.log("dataa", data);
           console.log("usernodes", userNodes);
           console.log("protocolb", protocolBalances);
           setLoading(false);
@@ -79,14 +85,14 @@ export default function DashboardPage() {
   return (
     <>
       <Head>
-        <title>BagBok</title>
+        <title>WillWe</title>
       </Head>
 
       <main className="flex flex-col min-h-screen px-4 sm:px-20 py-6 sm:py-10 bg-privy-light-blue">
         {ready && authenticated ? (
           <>
             <div className="flex flex-row justify-between">
-              <h1 className="text-2xl font-semibold">BagBok</h1>
+              <h1 className="text-2xl font-semibold">WillWe</h1>
               <button
                 onClick={logout}
                 className="text-sm bg-violet-200 hover:text-violet-900 py-2 px-4 rounded-md text-violet-700"
@@ -110,11 +116,10 @@ export default function DashboardPage() {
             <Spinner size="xs" />
           </Stack>
         ) : (
-          <HStack spacing="24px">
-            <Stack>
-              AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-            </Stack>
-            <p>            {chainBalances[0]?.contract_ticker_symbol}</p>
+          <HStack spacing="24px" overflow="hidden">
+            {chainBalances.map((balance, index) => (
+                <TokenBalance key={index} balanceItem={balance} />
+            ))}
           </HStack>
         )}
       </main>

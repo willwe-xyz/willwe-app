@@ -36,7 +36,7 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>BagBok · Home</title>
+        <title>WillWe · Home</title>
       </Head>
 
       <main className="flex min-h-screen min-w-full">
@@ -44,7 +44,7 @@ export default function LoginPage() {
           <div>
             <Stack className="flex justify-center">
             <Heading mb={4} >
-              BagBok
+              WillWe
             </Heading>
             <Text ml={1} align={"left"} fontSize={'20px'} >
             a living structure <br />that facilitates fully trustless and <br /> explainable collective efforts <br /> by means of grokable devices. <br/> 

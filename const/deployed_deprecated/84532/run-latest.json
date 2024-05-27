@@ -24,7 +24,7 @@
     {
       "hash": "0x4dc32965a75b145ce3cc81854dfe9d376c5367fec9b26ceccd0f68fae41b6dd3",
       "transactionType": "CREATE",
-      "contractName": "RVT",
+      "contractName": "Will",
       "contractAddress": "0xdf31d950d8d445206656398fe8e7c41c98137fa2",
       "function": null,
       "arguments": [
@@ -216,7 +216,7 @@
     {
       "hash": "0x013ee47fe3cc9c92fd999fab0c2986895b20428e0c22946e033ef9059c10c9e0",
       "transactionType": "CALL",
-      "contractName": "RVT",
+      "contractName": "Will",
       "contractAddress": "0xdf31d950d8d445206656398fe8e7c41c98137fa2",
       "function": "setPointer(address)",
       "arguments": [

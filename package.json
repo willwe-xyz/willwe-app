@@ -15,6 +15,7 @@
     "@chakra-ui/next-js": "^2.2.0",
     "@chakra-ui/react": "^2.8.2",
     "@covalenthq/client-sdk": "^1.0.2",
+    "@dm3-org/dm3-messenger-widget": "^1.2.0",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@headlessui/react": "^1.7.3",

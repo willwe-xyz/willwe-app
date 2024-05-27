@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let balances : BalanceItem[] = [];
     resp.data.items.forEach((item:  BalanceItem) => {
       console.log("innn foreach", item.supports_erc)
-      console.log(item);
+      // console.log(item);
       if (item.type != 'dust' && item.supports_erc.includes("erc20")) balances.push(item);
       balances = balances;
       }
