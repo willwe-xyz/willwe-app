@@ -1,7 +1,9 @@
-import { baseSepolia } from "viem/chains";
+import { baseSepolia,  } from "viem/chains";
 // import { defineChain, Hex } from "viem";
-import {  InterfaceAbi }  from "ethers"
- 
+import {  InterfaceAbi }  from "ethers";
+import * as chains from 'viem/chains';
+import { BalanceItem } from "@covalenthq/client-sdk";
+
 
 // export const virtualTenderlyBase = defineChain({
 //   id: 8453,
@@ -19,16 +21,23 @@ import {  InterfaceAbi }  from "ethers"
 // });
 
 
+
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 export const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET;
 export const COV_APIKEY= process.env.COV_APIKEY;
+export const SUPABASE_URL : string = process.env.SUPABASE_URL
+export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 
+
+
+// == Logs ==
+// ##### mockRON token  0xf964eDD864d012a12F5128C6b0A7153e50363e43
 // ###############################
-// Foundation Agent Safe at:  0xDf71f5fbf030007CC7ce340Ce21f16f616004eE4
-// RVI:  0x8AA1A5c88A22B4174bb19Fb114EE41785a4Ee8De
-// Membrane:  0x782dCc38cf28fbdc010c9aABDA5C14fbA11bA859
-// Execution:  0x61CB8eC9E8A11d021F57DF4374A547f2dEbcC038
-// WillWe:  0x49Bd9804DBbF57C3D240840EB72e2BdECBdc2E06
+// Foundation Agent Safe at:  0x8021B76037e14EF6fb15B03ae5707eC50853A33A
+// RVI:  0x8283fb5AB914359E7B32f11D6ce6Ae8Cd38381f4
+// Membrane:  0xf2F94f20Ad3A803545e2475D58DafBD4d5c08530
+// Execution:  0x322dB1C1F3779ecd2f24BCe8a24B5969561c3C92
+// WillWe:  0x0C1E915c168e864C964994C63fa0b8d2A0d16E64
 // ###############################
 
 type Deployments = {
@@ -43,21 +52,43 @@ type ABIKP = {
 };
 
 
-
 export const deployments: Deployments  = {
     "WillWe" : {
-        "84532" :  "0x49Bd9804DBbF57C3D240840EB72e2BdECBdc2E06"
+        "84532" :  "0x0C1E915c168e864C964994C63fa0b8d2A0d16E64"
     },
     "Membrane" : {
-    "84532": "0x782dCc38cf28fbdc010c9aABDA5C14fbA11bA859"
+    "84532": "0xf2F94f20Ad3A803545e2475D58DafBD4d5c08530"
 },
     "Execution": { 
-        "84532": "0x61CB8eC9E8A11d021F57DF4374A547f2dEbcC038",
+        "84532": "0x322dB1C1F3779ecd2f24BCe8a24B5969561c3C92",
 }, "RVI": {
-        "84532" : "0x8AA1A5c88A22B4174bb19Fb114EE41785a4Ee8De"
+        "84532" : "0x8283fb5AB914359E7B32f11D6ce6Ae8Cd38381f4"
 } 
 
 }
+
+
+
+
+
+  /**
+   * Gets the chain object for the given chain id.
+   * @param chainId - Chain id of the target EVM chain.
+   * @returns Viem's chain object.
+   */
+  export function getChainById(chainId: string) {
+    for (const chain of Object.values(chains)) {
+      if ('id' in chain) {
+        if (chain.id === Number(chainId)) {
+          return chain;
+        }
+      }
+    }
+
+    throw new Error(`Chain with id ${chainId} not found`);
+  }
+
+
 
 export const ABIs: ABIKP = {
     "WillWe" : [
@@ -2510,6 +2541,10 @@ export const ABIs: ABIKP = {
             "stateMutability": "nonpayable"
         },
         {
+            "type": "receive",
+            "stateMutability": "payable"
+        },
+        {
             "type": "function",
             "name": "allowance",
             "inputs": [
@@ -2783,6 +2818,19 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "mintFromETH",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "howMuchMinted",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "stateMutability": "payable"
+        },
+        {
+            "type": "function",
             "name": "name",
             "inputs": [],
             "outputs": [
@@ -2816,10 +2864,10 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "setBagBook",
+            "name": "setPointer",
             "inputs": [
                 {
-                    "name": "bagb_",
+                    "name": "newPointer_",
                     "type": "address",
                     "internalType": "address"
                 }
@@ -2829,10 +2877,10 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "setPointer",
+            "name": "setWillWe",
             "inputs": [
                 {
-                    "name": "newPointer_",
+                    "name": "willWe_",
                     "type": "address",
                     "internalType": "address"
                 }
@@ -2912,35 +2960,6 @@ export const ABIs: ABIKP = {
         {
             "type": "function",
             "name": "transferFrom",
-            "inputs": [
-                {
-                    "name": "from",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "to",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bool",
-                    "internalType": "bool"
-                }
-            ],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "transferGas",
             "inputs": [
                 {
                     "name": "from",

@@ -4,6 +4,8 @@ import { CovalentClient, ChainID, BalancesResponse, BalanceItem } from "@covalen
 
 import JSONBig from 'json-bigint';
 import {COV_APIKEY} from '../../../../const/envconst'
+import {getCovalentERC20TokenBalancesOf} from '../../../../lib/chainData'
+import { Chain } from 'viem';
 
 
   
@@ -12,26 +14,13 @@ import {COV_APIKEY} from '../../../../const/envconst'
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   
     const { params } = req.query
-    const chainID:string = params[0]
+    const chainID:ChainID = params[0]
     const userAddr:string = params[1] 
 
-    const client = new CovalentClient(COV_APIKEY);
-    const resp = await client.BalanceService.getTokenBalancesForWalletAddress(chainID, userAddr);
-    let balances : BalanceItem[] = [];
-    resp.data.items.forEach((item:  BalanceItem) => {
-      console.log("innn foreach", item.supports_erc)
-      // console.log(item);
-      if (item.type != 'dust' && item.supports_erc.includes("erc20")) balances.push(item);
-      balances = balances;
-      }
-    );
-    
+    const balances = await getCovalentERC20TokenBalancesOf(userAddr,chainID);
     
     res.status(200).json(JSONBig.parse(JSONBig.stringify( balances )));
 
-
-          
-  
 }
 
 // { } // GET `/api/post` (empty object)

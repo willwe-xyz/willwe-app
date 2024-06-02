@@ -8,11 +8,9 @@ import {baseSepolia} from 'viem/chains';
 import { ChakraProvider } from '@chakra-ui/react';
 
 
-
 function MyApp({Component, pageProps}: AppProps) {
   const router = useRouter();
 
-  
 
   return (
     <>

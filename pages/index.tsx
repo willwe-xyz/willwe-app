@@ -1,37 +1,20 @@
 import Portal from "../components/graphics/portal";
 import { usePrivy } from "@privy-io/react-auth";
 import { GetServerSideProps } from "next";
-import {client} from "../const/envconst";
 import { Text } from '@chakra-ui/react'
 import { Heading, Stack, Grid, GridItem } from '@chakra-ui/react'
-
-
 import Head from "next/head";
+import DashboardPage from "./dashboard"
 
-export const getServerSideProps: GetServerSideProps = async ({ req }) => {
-  const cookieAuthToken = req.cookies["privy-token"];
-
-  // If no cookie is found, skip any further checks
-  if (!cookieAuthToken) return { props: {} };
-
-
-  try {
-    const claims = await client.verifyAuthToken(cookieAuthToken);
-    // Use this result to pass props to a page for server rendering or to drive redirects!
-    // ref https://nextjs.org/docs/pages/api-reference/functions/get-server-side-props
-    console.log({ claims });
-
-    return {
-      props: {},
-      redirect: { destination: "/dashboard", permanent: false },
-    };
-  } catch (error) {
-    return { props: {} };
-  }
-};
 
 export default function LoginPage() {
-  const { login } = usePrivy();
+  const { login, ready, authenticated} = usePrivy();
+
+  if (!ready) return <div>Loading...</div>;
+
+  
+
+  if (authenticated) return <DashboardPage/>
 
   return (
     <>
@@ -72,7 +55,7 @@ export default function LoginPage() {
 </Grid>
              <br/>  
             <Text>
-            <b>Provably neutral</b>
+            <b>Evidently neutral</b>
             </Text>
             <br />
             </Stack>
