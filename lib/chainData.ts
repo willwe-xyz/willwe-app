@@ -2,12 +2,32 @@ import {deployments, ABIs, RPCurl, COV_APIKEY} from '../const/envconst'
 import {BalanceItem , ChainID, CovalentClient} from "@covalenthq/client-sdk";
 import {Contract, ethers} from "ethers";
 
+
+export interface QueryResponse {
+  data: Data | null;
+  loading: boolean;
+  error: Error | null;
+}
+
+export interface Data {
+  data: SocialData;
+}
+
+export interface Error {
+  message: string;
+}
+
 export type ProtocolBalance = {
   id: string,
   parentId: string,
   amount: string,
   membraneId: string
   isMember: boolean
+}
+
+export type FetchedUserData = {
+  balanceItems : BalanceItem[],
+  farcasterData : SocialData
 }
 
 export type UserSignal = {
@@ -29,15 +49,42 @@ export type NodeState =  {
   childrenNodes: string[],
   rootPath: string[]
 }
+
+export type SocialData = {
+  id: string;
+  profileName: string;
+  profileImage: string;
+  profileUrl: string;
+  dappName: string;
+  userAddress: string;
+  twitterUserName: string;
+  profileTokenUri: string;
+  profileTokenId: string;
+  profileTokenAddress: string;
+  profileMetadata: string;
+  identity: string;
+  isDefault: boolean;
+  isFarcasterPowerUser: boolean;
+  metadataURI: string;
+  location: string;
+  profileBio: string;
+  profileHandle: string;
+  profileDisplayName: string;
+}
+
 export type UserContext = {
   protocolBalances: ProtocolBalance[],
   nodes: NodeState[],
+  farcaster: SocialData
 }
 
 export type ActiveBalances = {
   IDs: string[],
   Balances: string[]
 }
+
+
+
 
 
 
@@ -75,4 +122,6 @@ export async function getCovalentERC20TokenBalancesOf(address : string, chainId:
   }
   return balances;
 }
+
+
 

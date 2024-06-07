@@ -6,6 +6,7 @@ import {useRouter} from 'next/router';
 // Replace this with any of the networks listed at https://viem.sh/docs/clients/chains.html
 import {baseSepolia} from 'viem/chains';
 import { ChakraProvider } from '@chakra-ui/react';
+import { init, AirstackProvider } from "@airstack/airstack-react";
 
 
 function MyApp({Component, pageProps}: AppProps) {
@@ -37,7 +38,9 @@ function MyApp({Component, pageProps}: AppProps) {
         onSuccess={() => router.push('/dashboard')}
       >
         <ChakraProvider>
+        <AirstackProvider apiKey={process.env.NEXT_PUBLIC_AIRSTACK_API_KEY ?? ""}>
         <Component {...pageProps} />
+        </AirstackProvider>
         </ChakraProvider>
       </PrivyProvider>
     </>

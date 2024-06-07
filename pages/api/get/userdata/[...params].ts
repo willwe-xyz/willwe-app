@@ -4,9 +4,9 @@ import { CovalentClient, ChainID, BalancesResponse, BalanceItem } from "@covalen
 
 import JSONBig from 'json-bigint';
 import {COV_APIKEY} from '../../../../const/envconst'
-import {getCovalentERC20TokenBalancesOf} from '../../../../lib/chainData'
+import {getCovalentERC20TokenBalancesOf, SocialData, FetchedUserData} from '../../../../lib/chainData'
 import { Chain } from 'viem';
-
+import { getFarcasterProfileData } from '../../../../lib/airstackData';
 
   
 
@@ -17,9 +17,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const chainID:ChainID = params[0]
     const userAddr:string = params[1] 
 
-    const balances = await getCovalentERC20TokenBalancesOf(userAddr,chainID);
+
+    const balances: BalanceItem[] = await getCovalentERC20TokenBalancesOf(userAddr,chainID) || []
+    // let fd: SocialData =  //= await getFarcasterProfileData(userAddr);
+
+    const d: FetchedUserData = {
+    balanceItems: balances,
+    farcasterData: <SocialData>{}
+    }
     
-    res.status(200).json(JSONBig.parse(JSONBig.stringify( balances )));
+
+    res.status(200).json(JSONBig.parse(JSONBig.stringify( d)) );
 
 }
 
