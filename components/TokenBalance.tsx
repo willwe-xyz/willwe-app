@@ -1,19 +1,19 @@
 
 import React from "react";
 import { BalanceItem } from "@covalenthq/client-sdk";
-import {formatEther, parseEther, parseUnits} from "ethers";
+import {ethers,  parseEther, parseUnits} from "ethers";
 import { Stack, Box } from "@chakra-ui/react";
 import { cols } from "../const/colors"
 import { ProtocolBalance } from "../lib/chainData";
-
-
+import { formatEther } from "viem";
 
 interface TokenBalanceProps {
     balanceItem: BalanceItem;
     chainID: string;
+    protocolDeposit?: BalanceItem;
 }
 
-export const TokenBalance: React.FC<TokenBalanceProps> = ({ balanceItem, chainID }) => {
+export const TokenBalance: React.FC<TokenBalanceProps> = ({ balanceItem, chainID, protocolDeposit }) => {
     const b0 :string = balanceItem.pretty_quote;
     const b1 : string = b0.substring(0, b0.length - 1);
     let balance : string[] = b1.split(".");
@@ -39,6 +39,8 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({ balanceItem, chainID
            <p> <span className="text-sm">{balanceItem.contract_display_name}({balanceItem.contract_ticker_symbol})</span><br/>
             <span className="text-sm">{balance[0]}</span><span className="text-xs">.{balance[1]}</span></p>
             <p className="text-xs">{balanceItem.pretty_quote}</p>
+            
+            {protocolDeposit ? <span><hr /> {formatEther(protocolDeposit.balance) || ''} </span> : ''  }
     
       </Box>
 

@@ -12,11 +12,9 @@ import {BalanceItem} from "@covalenthq/client-sdk";
 import { parseEther } from "viem";
 import { ethers } from "ethers";
 import {TokenBalance} from "../components/TokenBalance";
-// import { cols} from "../const/colors"
-// import { RiLogoutBoxRFill } from "react-icons/ri";
-
+import { RiLogoutCircleRFill } from "react-icons/ri";
 import { color } from "framer-motion";
-import {UserAvatar} from "../components/UserAvatar";
+import { cols } from "../const/colors"
 
 import { useQuery } from "@airstack/airstack-react";
 
@@ -159,7 +157,9 @@ export default function DashboardPage() {
                 onClick={logout}
                 className="text-sm text-right bg-violet-200 hover:text-violet-900 py-2 px-4 rounded-md text-violet-700"
               >
-              <UserAvatar userAddress={userAddr}  FD={farcasterData}/>
+              <p className="user-address text-sm text-gray-500 ease-in-out duration-300 hover:text-gray-700">
+                   {userAddr.slice(0, 6)}...{userAddr.slice(-4)} <Icon as={RiLogoutCircleRFill} boxSize={6} color={cols.lightBlue} />
+                </p>
               </button>
             </div>
           </>
@@ -173,8 +173,7 @@ export default function DashboardPage() {
           <HStack spacing="24px" overflow="hidden">
             {chainBalances.map((balance, index) => (
                 <div className="tokenBalWrap" key={index} onClick={async () => {console.log("balance", balance)}}>
-                  balanceItem, protocolBal, chainId
-                <TokenBalance  balanceItem={balance}  chainID={chainID}   />
+                <TokenBalance  balanceItem={balance}  chainID={chainID.toString()} protocolDeposit={WillBals[WillBals.findIndex(x => x.contract_address == balance.contract_address)]}   />
                 </div> 
             ))}
           </HStack>
