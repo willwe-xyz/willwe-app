@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import {Contract, ethers, parseEther, parseUnits} from 'ethers'
 import {ChainID, BalancesResponse, BalanceItem } from "@covalenthq/client-sdk";
-import {getCovalentERC20TokenBalancesOf} from '../../../lib/chainData'
+import {getAllData, getCovalentERC20TokenBalancesOf} from '../../../lib/chainData'
 
 import { deployments, ABIs, getChainById } from '../../../const/envconst';
 import * as chainsData from 'viem/chains';
@@ -28,12 +28,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let response : any = null; 
 
     if (OPERATION === "WILLBALANCES") {
-    console.log("WILLBALANCES.....")
     response = await getCovalentERC20TokenBalancesOf(`${deployments["WillWe"][chainID]}`,chainID);
-    console.log("GOT WILL BALANCES")
-    console.log(response)
     response = response;
     }
+
+    if (OPERATION === "GETUSERCONTEXT") {
+        response = await getAllData(chainID, whoAbout);
+    }
+
 
 
     res.status(200).json(JSONBig.parse(JSONBig.stringify( response )));

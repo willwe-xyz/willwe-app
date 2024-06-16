@@ -1,182 +1,113 @@
 import { useRouter } from "next/router";
-import React, { use, useEffect, useState } from "react";
-import { Wallet, getAccessToken, usePrivy } from "@privy-io/react-auth";
+import React, { useEffect, useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import Head from "next/head";
-import type { InferGetServerSidePropsType, GetServerSideProps } from 'next'
-import { Stack, HStack, VStack, Container, Box, Spinner } from '@chakra-ui/react'
-import { Icon } from '@chakra-ui/react'
-
- 
-import {getAllData , ProtocolBalance, NodeState, SocialData, FetchedUserData, QueryResponse, Data, Error} from '../lib/chainData'
-import {BalanceItem} from "@covalenthq/client-sdk";
-import { parseEther } from "viem";
-import { ethers } from "ethers";
-import {TokenBalance} from "../components/TokenBalance";
+import { Stack, Spinner, Icon } from '@chakra-ui/react';
+import { SiCreatereactapp } from "react-icons/si";
+import { PiCurrencyEurFill } from "react-icons/pi";
 import { RiLogoutCircleRFill } from "react-icons/ri";
-import { color } from "framer-motion";
-import { cols } from "../const/colors"
 
-import { useQuery } from "@airstack/airstack-react";
+import { FetchedUserData, BalanceItem, ProtocolBalance, NodeState, SocialData, ActiveBalances } from '../lib/chainData';
+import { AllStacks } from "../components/AllStacks";
+import { cols } from "../const/colors";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const {
-    ready,
-    authenticated,
-    user,
-    logout,
-    linkEmail,
-    linkWallet,
-    unlinkEmail,
-    linkPhone,
-    unlinkPhone,
-    unlinkWallet,
-    linkGoogle,
-    unlinkGoogle,
-    linkTwitter,
-    unlinkTwitter,
-    linkDiscord,
-    unlinkDiscord,
-  } = usePrivy();
+  const { ready, authenticated, user, logout } = usePrivy();
 
-
-  let BI : BalanceItem[] = [];
-  let PB  : ProtocolBalance[] = [];
-  let NS : NodeState[] = [];
-  let WB : BalanceItem[] = [];
-
-
-
-  const [chainBalances, setChainBalances] = useState(BI);
-  const [protocolBalances , setProtocolBalances] = useState(PB)
-  const [userNodes , setUserNodes] = useState(NS);
-  const [WillBals, setWillBals] = useState(WB);
-  const [isLoading, setLoading] = useState(true)
-  const [chainID, setChainID] = useState(0)
-  const [userAddr, setUserAddr] = useState("")
-  const [farcasterData, setFarcasterData] = useState({} as SocialData);
-
-  
+  const [chainBalances, setChainBalances] = useState<BalanceItem[]>([]);
+  const [protocolBalances, setProtocolBalances] = useState<ActiveBalances[]>([]);
+  const [userNodes, setUserNodes] = useState<NodeState[]>([]);
+  const [WillBals, setWillBals] = useState<BalanceItem[]>([]);
+  const [isLoading, setLoading] = useState(true);
+  const [chainID, setChainID] = useState(0);
+  const [userAddr, setUserAddr] = useState("");
+  const [farcasterData, setFarcasterData] = useState<SocialData>({} as SocialData);
 
   useEffect(() => {
-    if (ready && !authenticated) {
+    const fetchData = async () => {
+      if (ready && authenticated && user) {
+        let chainID = user?.wallet?.chainId?.includes(":") ? user?.wallet?.chainId?.split(":")[1] : user?.wallet?.chainId;
+        let userAddr = user?.wallet?.address || "";
+
+        if (user.farcaster && chainID === "1") chainID = "84532";
+
+        try {
+          const resWillBals = await fetch(`/api/get/WILLBALANCES/${chainID}/0x0000000000000000000000000000000000000000`);
+          const willBals = await resWillBals.json();
+
+          setUserAddr(userAddr);
+          setChainID(chainID);
+
+          const resUserData = await fetch(`/api/get/userdata/${chainID}/${userAddr}`, { cache: 'no-store' });
+          const data: FetchedUserData = await resUserData.json();
+
+          console.log("fetched data 1", data);
+          console.log("fetched data 2", data.userContext.activeBalancesResponse );
+          console.log("fetched data 3", data.balanceItems);
+          console.log("fetched data 4", data.userContext.nodes);
+
+          setChainBalances(data.balanceItems);
+          setProtocolBalances(data.userContext.activeBalancesResponse);
+          setUserNodes(data.userContext.nodes);
+          setWillBals(willBals);
+
+          console.log(userNodes);
+          console.log(userNodes);
+
+          setLoading(false);
+        } catch (error) {
+          console.error("Failed to fetch data", error);
+          setLoading(false);
+        }
+      }
+    };
+
+    if (ready && authenticated) {
+      fetchData();
+    } else if (ready && !authenticated) {
       router.push("/");
     }
-
-    if (ready && authenticated && user) {
-      let chainID = user?.wallet?.chainId?.includes(":") ?  user?.wallet?.chainId?.split(":")[1] : user?.wallet?.chainId?.chainId;
-      let userAddr = user?.wallet?.address || ""
-      
-      setUserAddr(userAddr);
-      setChainID(chainID);
-
-
-
-      if (user.farcaster && chainID == "1") chainID = "84532";
-      console.log("CHAIN ID", chainID);
-
-
-      fetch(`api/get/userdata/${chainID}/${userAddr}`, { cache: 'no-store' }).then((r) => 
-
-        r.json()).then((d:FetchedUserData ) => {
-          setChainBalances(d.balanceItems)
-        }); 
-        
-        getAllData(chainID, userAddr).then((data) => {
-
-          setProtocolBalances(data.PB);
-          setUserNodes(data.NodeStates);
-          // console.log("dataa", data);
-          console.log("usernodes", userNodes);
-          console.log("protocolb", protocolBalances);
-          setLoading(false);
-        })
-
-        
-
-        fetch(`api/get/WILLBALANCES/${chainID}/0x0000000000000000000000000000000000000000`).then((r) => 
-        r.json()).then((d) => setWillBals(d));
-        
-
-
-
-}
-
-
-     
-    
-  }, [ready, authenticated, router]);
-
-
-
-  // const query = `query GetFarcasterProfileByAddressAndChainId {
-  //   Socials(
-  //     input: {filter: {userAssociatedAddresses: {_eq: "${userAddr}"}}, blockchain: base}
-  //   ) {
-  //     Social {
-  //       id
-  //       profileName
-  //       profileImage
-  //       profileUrl
-  //       dappName
-  //       userAddress
-  //       twitterUserName
-  //       profileTokenUri
-  //       profileTokenId
-  //       profileTokenAddress
-  //       profileMetadata
-  //       identity
-  //       isDefault
-  //       isFarcasterPowerUser
-  //       metadataURI
-  //       location
-  //       profileBio
-  //       profileHandle
-  //       profileDisplayName
-  //     }
-  //   }
-  // }`;
-
-
-  // let FD: QueryResponse = useQuery(query);
-  // if (FD.data) setFarcasterData(FD.data.data );
-
+  }, [ready, authenticated, user, router]);
 
   return (
     <>
       <Head>
         <title>WillWe</title>
       </Head>
-
       <main className="flex flex-col min-h-screen px-4 sm:px-20 py-6 sm:py-10 bg-privy-light-blue">
-        {ready && authenticated ? (
-          <>
-            <div className="flex flex-row justify-between">
-              <h1 className="text-2xl font-semibold"></h1>
-              <button
-                onClick={logout}
-                className="text-sm text-right bg-violet-200 hover:text-violet-900 py-2 px-4 rounded-md text-violet-700"
-              >
+        {ready && authenticated && (
+          <div className="flex flex-row px-2 py-1 justify-end m-1">
+            <button
+              onClick={() => { console.log("clicked Definitions button") }}
+              className="text-sm text-right bg-violet-200 py-2 px-4 rounded-md text-violet-700 m-2 ease-in-out duration-300 hover:text-gray-700"
+            >
+              <span className="font-semibold inline-flex space-x-6 items-center"><b><SiCreatereactapp /></b> Definitions</span>
+            </button>
+            <button
+              onClick={() => { console.log("clicked Will token button") }}
+              className="text-sm text-right bg-violet-200 py-2 px-4 rounded-md text-violet-700 m-2 ease-in-out duration-300 hover:text-gray-700"
+            >
+              <span className="font-semibold inline-flex space-x-6 items-center"><PiCurrencyEurFill /> WILL</span>
+            </button>
+            <button
+              onClick={logout}
+              className="text-sm text-right bg-violet-200 py-2 px-4 rounded-md text-violet-700 m-2 ease-in-out duration-300 hover:text-gray-700"
+            >
               <p className="user-address text-sm text-gray-500 ease-in-out duration-300 hover:text-gray-700">
-                   {userAddr.slice(0, 6)}...{userAddr.slice(-4)} <Icon as={RiLogoutCircleRFill} boxSize={6} color={cols.lightBlue} />
-                </p>
-              </button>
-            </div>
-          </>
-        ) : null}
-
+                {userAddr.slice(0, 6)}...{userAddr.slice(-4)} <Icon as={RiLogoutCircleRFill} boxSize={6} color={cols.lightBlue} />
+              </p>
+            </button>
+          </div>
+        )}
         {isLoading ? (
           <Stack direction="row" spacing={4}>
             <Spinner size="lg" />
           </Stack>
         ) : (
-          <HStack spacing="24px" overflow="hidden">
-            {chainBalances.map((balance, index) => (
-                <div className="tokenBalWrap" key={index} onClick={async () => {console.log("balance", balance)}}>
-                <TokenBalance  balanceItem={balance}  chainID={chainID.toString()} protocolDeposit={WillBals[WillBals.findIndex(x => x.contract_address == balance.contract_address)]}   />
-                </div> 
-            ))}
-          </HStack>
+          <div className="container mx-auto px-2">
+            <AllStacks chainBalances={chainBalances} WillBals={WillBals} userNodes={userNodes} chainID={chainID.toString()} />
+          </div>
         )}
       </main>
     </>

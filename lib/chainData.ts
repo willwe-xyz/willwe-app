@@ -27,7 +27,7 @@ export type ProtocolBalance = {
 
 export type FetchedUserData = {
   balanceItems : BalanceItem[],
-  farcasterData : SocialData
+  userContext: UserContext
 }
 
 export type UserSignal = {
@@ -35,20 +35,48 @@ export type UserSignal = {
     lastReidstriSig: string[]
 }
 
-export type NodeState =  {
-  signals: UserSignal[],
-  nodeId: string,
-   inflation: string,
-   balanceAnchor: string,
-   balanceBudget: string,
-   value: string,
-   membraneId: string,
-   lastMinted: string,
-   inflPerSec: string,
-   membersOfNode: string[],
-  childrenNodes: string[],
-  rootPath: string[]
+
+export type UserContext = {
+  activeBalancesResponse: [string[], string[]],
+  nodes: NodeState[],
 }
+
+export type NodeState =  {
+  nodeId: string,
+  inflation: string,
+  balanceAnchor: string,
+  balanceBudget: string,
+  value: string,
+  membraneId: string,
+  membersOfNode: string[],
+  childrenNodes: string[],
+  rootPath: string[],
+  signals: UserSignal[]
+}
+
+[
+  [
+      "1",
+      "1"
+  ],
+  []
+]
+
+
+[
+  [
+      "1",
+      "1"
+  ],
+  []
+]
+
+export type activeBalancesResponse = {
+  IDs: string[],
+  Balances: string[]
+}
+
+
 
 export type SocialData = {
   id: string;
@@ -72,20 +100,6 @@ export type SocialData = {
   profileDisplayName: string;
 }
 
-export type UserContext = {
-  protocolBalances: ProtocolBalance[],
-  nodes: NodeState[],
-  farcaster: SocialData
-}
-
-export type ActiveBalances = {
-  IDs: string[],
-  Balances: string[]
-}
-
-
-
-
 
 
 
@@ -96,16 +110,57 @@ let PB  : ProtocolBalance[] = [];
 let NodeStates : NodeState[] = [];
 
 const provider = new ethers.JsonRpcProvider(RPCurl[chainID]);
-const WW : Contract = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
-const Membrane : Contract= new Contract(deployments["Membrane"][chainID], ABIs["Membrane"], provider);
-const RVI : Contract = new Contract(deployments["RVI"][chainID], ABIs["RVI"], provider);
-const Execution : Contract = new Contract(deployments["Execution"][chainID], ABIs["Execution"], provider);
+const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
+// const Membrane : Contract= new Contract(deployments["Membrane"][chainID], ABIs["Membrane"], provider);
+// const RVI : Contract = new Contract(deployments["RVI"][chainID], ABIs["RVI"], provider);
+// const Execution : Contract = new Contract(deployments["Execution"][chainID], ABIs["Execution"], provider);
 
 
 const UC :UserContext = await WW.getInteractionDataOf(userAddr);
-console.log(UC);
+console.log("USER CONTEXT",UC);
 return UC;
 }
+
+
+
+export function sortChainBalances(chainBalances: BalanceItem[], WillBals: BalanceItem[]): BalanceItem[] {
+  return chainBalances.sort((a, b) => {
+    const WillA = WillBals.find(x => x.contract_address === a.contract_address);
+    const WillB = WillBals.find(x => x.contract_address === b.contract_address);
+
+    if (WillA && WillB) {
+      if (WillA.balance !== WillB.balance) {
+        return WillB.balance - WillA.balance;
+      }
+    }
+
+    if (a.contract_address > b.contract_address) {
+      return -1;
+    }
+    if (a.contract_address < b.contract_address) {
+      return 1;
+    }
+
+    return 0;
+  });
+}
+
+
+export function evmAddressToFullIntegerString(evmAddress: string): string {
+  // Step 1: Remove the '0x' prefix
+  if (evmAddress.startsWith('0x')) {
+      evmAddress = evmAddress.slice(2);
+  }
+
+  // Step 2: Convert the hexadecimal string to a BigInt
+  const integerValue = BigInt(`0x${evmAddress}`);
+
+  // Step 3: Convert the BigInt to a string
+  const integerString = integerValue.toString();
+
+  return integerString;
+}
+
 
 export const covalentClient = new CovalentClient(COV_APIKEY);
 

@@ -19,28 +19,37 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({ balanceItem, chainID
     let balance : string[] = b1.split(".");
     // let ofProtocolBalance = fetch(`/api/get/BALANCE/${chainID}/${balanceItem.contract_address}/0x0000000000000000000000000000000000000000`);
 
-
     
     return (
-
+        
         <Box
-            backgroundColor={cols.lightGrey}
-            color={cols.darkGreen}
-            fontWeight='semibold'
-            letterSpacing='wide'
+            borderWidth={protocolDeposit ? 2 : 1}
+            borderColor={protocolDeposit ? cols.darkBlue : cols.lightBlue}
             fontSize='xs'
+            color={`#${balanceItem.contract_address.slice(2,8)}`}
             paddingBlock={1}
             paddingInline={2}
-            borderRadius={10}
-            borderColor={cols.lightBlue}
-            marginInlineEnd={0.1}
-            ml=''>
+            borderRadius={0}
+            marginInlineEnd={0.2}
+            height={100}
+            marginBottom={1}
+        >
         
-           <p> <span className="text-sm">{balanceItem.contract_display_name}({balanceItem.contract_ticker_symbol})</span><br/>
+           <p title={balanceItem.contract_display_name} > <span className="text"> {balanceItem.contract_ticker_symbol}</span><br/>
             <span className="text-sm">{balance[0]}</span><span className="text-xs">.{balance[1]}</span></p>
             <p className="text-xs">{balanceItem.pretty_quote}</p>
             
-            {protocolDeposit ? <span><hr /> {formatEther(protocolDeposit.balance) || ''} </span> : ''  }
+          <div className="protocolBalance">
+          <hr className="h-1" color={`#${balanceItem.contract_address.slice(2,8)}`} />
+
+          <p className="text-xs text-[#9DA4B1]"> 
+        
+             {protocolDeposit ? 
+            <span>  {formatEther(protocolDeposit.balance) || ''} </span> 
+            : ''  }
+          
+          </p>
+          </div>
     
       </Box>
 
