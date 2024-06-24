@@ -54,22 +54,6 @@ export type NodeState =  {
   signals: UserSignal[]
 }
 
-[
-  [
-      "1",
-      "1"
-  ],
-  []
-]
-
-
-[
-  [
-      "1",
-      "1"
-  ],
-  []
-]
 
 export type activeBalancesResponse = {
   IDs: string[],
@@ -117,34 +101,56 @@ const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider
 
 
 const UC :UserContext = await WW.getInteractionDataOf(userAddr);
-console.log("USER CONTEXT",UC);
 return UC;
 }
 
+export async function getNodeData(chainID: string, nodeId: string) : Promise<NodeState> {
+
+  
+  const provider = new ethers.JsonRpcProvider(RPCurl[chainID]);
+  const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
+  const NodeData : NodeState = await WW.getNodeData(nodeId);
+  console.log('got node state ----3######$ ', NodeData);
+  return NodeData;
+  }
 
 
-export function sortChainBalances(chainBalances: BalanceItem[], WillBals: BalanceItem[]): BalanceItem[] {
-  return chainBalances.sort((a, b) => {
-    const WillA = WillBals.find(x => x.contract_address === a.contract_address);
-    const WillB = WillBals.find(x => x.contract_address === b.contract_address);
 
-    if (WillA && WillB) {
-      if (WillA.balance !== WillB.balance) {
-        return WillB.balance - WillA.balance;
+
+  export function sortChainBalances(chainBalances: BalanceItem[], WillBals: BalanceItem[]): BalanceItem[] {
+    // Check if inputs are arrays
+    if (!Array.isArray(chainBalances) || !Array.isArray(WillBals)) {
+      console.error('sortChainBalances: Inputs must be arrays');
+      return [];
+    }
+  
+    return chainBalances.sort((a, b) => {
+      let WillA, WillB;
+  
+      try {
+        WillA = WillBals.find(x => x.contract_address === a.contract_address);
+        WillB = WillBals.find(x => x.contract_address === b.contract_address);
+      } catch (error) {
+        console.error('Error in find operation:', error);
+        return 0;
       }
-    }
-
-    if (a.contract_address > b.contract_address) {
-      return -1;
-    }
-    if (a.contract_address < b.contract_address) {
-      return 1;
-    }
-
-    return 0;
-  });
-}
-
+  
+      if (WillA && WillB) {
+        if (WillA.balance !== WillB.balance) {
+          return Number(WillB.balance) - Number(WillA.balance);
+        }
+      }
+  
+      if (a.contract_address > b.contract_address) {
+        return -1;
+      }
+      if (a.contract_address < b.contract_address) {
+        return 1;
+      }
+  
+      return 0;
+    });
+  }
 
 export function evmAddressToFullIntegerString(evmAddress: string): string {
   // Step 1: Remove the '0x' prefix
@@ -165,15 +171,15 @@ export function evmAddressToFullIntegerString(evmAddress: string): string {
 export const covalentClient = new CovalentClient(COV_APIKEY);
 
 
-export async function getCovalentERC20TokenBalancesOf(address : string, chainId:ChainID) {
-  let balances : BalanceItem[];
+export async function getCovalentERC20TokenBalancesOf(address : string, chainId:ChainID) : Promise<BalanceItem[]> {
+  let balances : BalanceItem[] =[]
   try {
       const response = await covalentClient.BalanceService.getTokenBalancesForWalletAddress(chainId, address);
       balances = response.data.items;
 
   } catch (error) {
       console.error('Error fetching token balances:', error);
-      return ;
+      return balances;
   }
   return balances;
 }

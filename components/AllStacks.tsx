@@ -1,98 +1,106 @@
-import { HStack } from "@chakra-ui/react";
-import { TokenBalance } from "../components/TokenBalance";
+import { HStack, Box, Text, Button, Card } from "@chakra-ui/react";
+import { TokenBalance } from "./TokenBalance";
 import { BalanceItem } from "@covalenthq/client-sdk";
-import {sortChainBalances} from "../lib/chainData";
-import { useEffect, useState } from "react";
-import { UserSignal, NodeState, evmAddressToFullIntegerString } from "../lib/chainData";
-
-
-
+import { sortChainBalances, evmAddressToFullIntegerString } from "../lib/chainData";
+import { useState, useEffect } from "react";
+import { NodeState } from "../lib/chainData";
+import { NodeStacks } from "./NodeStacks";
+import { SiCreatereactapp } from "react-icons/si";
 
 interface RootStack {
-    chainBalances: BalanceItem[], 
-    WillBals: BalanceItem[], 
-    userNodes: NodeState[], 
-    chainID: string
+  chainBalances: BalanceItem[],
+  WillBals: BalanceItem[],
+  userNodes: NodeState[],
+  chainID: string,
+  userAddress: string
 }
 
-export const AllStacks: React.FC<RootStack> = ({ chainBalances, WillBals, userNodes, chainID }) => {
-  chainBalances = sortChainBalances(chainBalances, WillBals);
-  console.log(userNodes);
-  
-  let nodesArray : NodeState[] = []
-  let lastActivatedNode : NodeState = {} as NodeState;
+export const AllStacks: React.FC<RootStack> = ({ chainBalances, WillBals, userNodes, chainID, userAddress }) => {
+  // Ensure WillBals is always an array
+  const safeWillBals = Array.isArray(WillBals) ? WillBals : [];
 
-  const [activeStack, setStack] = useState(nodesArray);
-  const [selectedNode, setSelectedNode] = useState(lastActivatedNode);
+  const [sortedChainBalances, setSortedChainBalances] = useState<BalanceItem[]>([]);
 
+  useEffect(() => {
+    setSortedChainBalances(sortChainBalances(chainBalances, safeWillBals));
+  }, [chainBalances, safeWillBals]);
 
+  // State to hold active node stack and selected node
+  const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
+  const [nodeStack, setNodeStack] = useState<NodeState[] | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState('');
 
-
-  function setNodeStack(selectedNode: NodeState) {
-    let nodeStack: NodeState[] = [];
-    let path : string[] = selectedNode.rootPath;
-    console.log('path : ', path);
-    for (let i = 0; i < path.length; i++) {
-      let node: NodeState = userNodes.find(x => x.nodeId === path[i]) as NodeState;
-      nodeStack.push(node);
-    }
-    console.log('nodeStack : ', nodeStack);
-    setStack(nodeStack);
-  }
-
-  async function setCurrentActivatedNode(selectedNodeId: string) {
-    console.log(userNodes);
-    const selectedN: NodeState = userNodes.find(x => x.nodeId === selectedNodeId) as NodeState;
-
-    console.log('selected node : ', evmAddressToFullIntegerString(selectedNodeId) )
-    // const isRoot: boolean = selectedNodeId == selectedN.rootPath[0];
-    // let nodeNumber = isRoot ? evmAddressToFullIntegerString(selectedNodeId) : selectedNodeId;
-
-    
-
-    // console.log('nodeNumber : ', nodeNumber);
-    // console.log('selectedN : ', selectedN);
-
-    // if (selectedN.rootPath.length == 0) console.log(Error("Bad Path or None Found"));
-    // setSelectedNode(selectedN);
-    // setNodeStack(selectedN);
-
-
-  }
-
-
-return (
-
-<div className="allstacks">
-  <div className="WalletHStack">
-  <HStack 
-    spacing="2px" 
-    overflow="scroll" 
-    overflowY={'hidden'} 
-    className={`h-30 scrollbar custom-scrollbar scrollbar-h-2 scrollbar-thumb-[#5EA9B3] hover:scrollbar-thumb-[#19232F] active:scrollbar-thumb-[#dad6d6]`}
-  > 
-    
-    {chainBalances.map((balance, index) => {
-      if (balance.contract_address == '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
-        return null;
+  // Function to handle click on token balance
+  function handleNodeClick(nodeId: string) {
+    if (nodeId) setSelectedNodeId(nodeId);
+    const sN = userNodes.find(node => node.nodeId === nodeId);
+    if (sN) {
+      setSelectedNode(sN);
+      if (sN.rootPath.length > 1) {
+        const nodeStack = sN.rootPath.map(nodeId => userNodes.find(node => node.nodeId === nodeId)).filter(Boolean) as NodeState[];
+        setNodeStack(nodeStack);
+      } else {
+        setNodeStack([sN]);
       }
-      return (
-        <div className="tokenBalWrap" key={index} onClick={() => setCurrentActivatedNode(balance.contract_address) } >
-          <div className="tbContaier">
-          <TokenBalance 
-            balanceItem={balance} 
-            chainID={chainID.toString()} 
-            protocolDeposit={WillBals[WillBals.findIndex(x => x.contract_address === balance.contract_address)]}
-          />
+    } else {
+      setSelectedNode(null);
+      setNodeStack(null);
+    }
+
+    console.log(nodeId);
+    console.log(sN);
+    console.log(nodeStack);
+  }
+
+  return (
+    <div className="allstacks">
+      <HStack spacing='3px' overflowX="auto" sx={{
+        '&::-webkit-scrollbar': {
+          height: '4px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: 'gray',
+          borderRadius: '10px',
+        },
+        '&::-webkit-scrollbar-track': {
+          background: 'transparent',
+        },
+      }}>
+        {sortedChainBalances.map((balance, index) => (
+          <Box
+            key={index}
+            onClick={() => handleNodeClick(evmAddressToFullIntegerString(balance.contract_address))}
+            _hover={{ backgroundColor: 'gray.200' }}
+            _selected={{ bg: 'gray.200' }}
+          >
+            <TokenBalance
+              balanceItem={balance}
+              chainID={chainID}
+              protocolDeposit={safeWillBals.find(willBal => willBal.contract_address === balance.contract_address)}
+              isSelected={selectedNode?.nodeId === evmAddressToFullIntegerString(balance.contract_address)}
+            />
+          </Box>
+        ))}
+      </HStack>
+      <Card>
+        {selectedNode && nodeStack ? (
+          <NodeStacks nodeStack={nodeStack} selectedNode={selectedNode} userAddress={userAddress} chainID={chainID} />
+        ) : (
+          <div className="NoNodeContent">
+            {selectedNodeId ? (
+              <div>
+                <Text>No Nodes Found</Text>
+                <hr />
+                <Button>
+                  <SiCreatereactapp />Spawn Node
+                </Button>
+              </div>
+            ) : (
+              <Text>No node Selected</Text>
+            )}
           </div>
-
-        </div>
-      );
-    })}
-  </HStack>
-  </div>
-</div>
-
-
-);
-}
+        )}
+      </Card>
+    </div>
+  );
+};

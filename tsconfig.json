@@ -10,6 +10,9 @@
       "dom.iterable",
       "esnext"
     ],
+    "plugins": [
+      { "name": "viem/ts-plugin" }
+    ],
     "declaration": true,
     "sourceMap": true,
     "stripInternal": true,

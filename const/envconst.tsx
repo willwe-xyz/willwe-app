@@ -3,6 +3,7 @@ import { baseSepolia,  } from "viem/chains";
 import {  InterfaceAbi }  from "ethers";
 import * as chains from 'viem/chains';
 import { BalanceItem } from "@covalenthq/client-sdk";
+import { Chain } from "viem";
 
 
 // export const virtualTenderlyBase = defineChain({
@@ -37,16 +38,16 @@ export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 //   ###############################
 //   ##### Deployer :  0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93 | expected 0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93
 //   #________________________________
-//   ##### mockRON token  0x05A27BBCba0B7618A805Ca18135b708D9DBa67e8
+//   ##### mockRON token  0x0Cc1791DB04BA51dd4482e63Da49bEa476E787a3
 //   ###############################
    
-//   Fun deployed at :  0xD6c1Fc16D2A24D364291473CF8e4aF51B94925eC
+//   Fun deployed at :  0xD46F628219e59EdA1489847f864B92D289bf4b13
    
 //   ###############################
 //   control ---  0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93 0x0000000000000000000000000000000000000000 0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93
 //   ###############################
    
-//   Foundation Agent in Control :  0x3996b45f97Caa95Aa97534c8eEFd8E6A0C933373
+//   Foundation Agent in Control :  0x244743CDF9A161f6d5a237B0A7293120E31D15ac
 //   Is Foundation Anget contract:  true
 //   Deployer is member  true
 //   ###############################
@@ -54,11 +55,11 @@ export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 //   0 10000000000000000000000000 0
    
 //   ###############################
-//   Foundation Agent Safe at:  0x3996b45f97Caa95Aa97534c8eEFd8E6A0C933373
-//   RVI:  0x6b584Cfefd5bc1636D02BCb0854b6971dE66e142
-//   Membrane:  0x33bb7Ed03F8C16C81Cbd9bfBfF25Db50a46AE21c
-//   Execution:  0xe001b63467A5Bb452021572183bA4084aA96F1A8
-//   WillWe:  0xD6c1Fc16D2A24D364291473CF8e4aF51B94925eC
+//   Foundation Agent Safe at:  0x244743CDF9A161f6d5a237B0A7293120E31D15ac
+//   RVI:  0x843AF17bD3bb77D3B498335C57015E9A72Ffdd4A
+//   Membrane:  0x356B0817C2bC2fB622c3BA154cb49a3611C9841b
+//   Execution:  0x13De973c04F0e4D9835090B7481BfA0185b48014
+//   WillWe:  0xD46F628219e59EdA1489847f864B92D289bf4b13
 //   ###############################
 
 
@@ -76,15 +77,15 @@ type ABIKP = {
 
 export const deployments: Deployments  = {
     "WillWe" : {
-        "84532" :  "0xD6c1Fc16D2A24D364291473CF8e4aF51B94925eC"
+        "84532" :  "0xD46F628219e59EdA1489847f864B92D289bf4b13"
     },
     "Membrane" : {
-    "84532": "0x33bb7Ed03F8C16C81Cbd9bfBfF25Db50a46AE21c"
+    "84532": "0x356B0817C2bC2fB622c3BA154cb49a3611C9841b"
 },
     "Execution": { 
-        "84532": "0xe001b63467A5Bb452021572183bA4084aA96F1A8",
+        "84532": "0x13De973c04F0e4D9835090B7481BfA0185b48014",
 }, "RVI": {
-        "84532" : "0x6b584Cfefd5bc1636D02BCb0854b6971dE66e142"
+        "84532" : "0x843AF17bD3bb77D3B498335C57015E9A72Ffdd4A"
 } 
 
 }
@@ -98,11 +99,11 @@ export const deployments: Deployments  = {
    * @param chainId - Chain id of the target EVM chain.
    * @returns Viem's chain object.
    */
-  export function getChainById(chainId: string) {
+  export function getChainById(chainId: string) : Chain {
     for (const chain of Object.values(chains)) {
       if ('id' in chain) {
         if (chain.id === Number(chainId)) {
-          return chain;
+          return chain as Chain;
         }
       }
     }
@@ -505,6 +506,89 @@ export const ABIs: ABIKP = {
                     "name": "",
                     "type": "uint256",
                     "internalType": "uint256"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getNodeData",
+            "inputs": [
+                {
+                    "name": "n",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "N",
+                    "type": "tuple",
+                    "internalType": "struct NodeState",
+                    "components": [
+                        {
+                            "name": "nodeId",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "inflation",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "balanceAnchor",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "balanceBudget",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "value",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "membraneId",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "membersOfNode",
+                            "type": "address[]",
+                            "internalType": "address[]"
+                        },
+                        {
+                            "name": "childrenNodes",
+                            "type": "string[]",
+                            "internalType": "string[]"
+                        },
+                        {
+                            "name": "rootPath",
+                            "type": "string[]",
+                            "internalType": "string[]"
+                        },
+                        {
+                            "name": "signals",
+                            "type": "tuple[]",
+                            "internalType": "struct UserSignal[]",
+                            "components": [
+                                {
+                                    "name": "MembraneInflation",
+                                    "type": "string[][2]",
+                                    "internalType": "string[][2]"
+                                },
+                                {
+                                    "name": "lastRedistSignal",
+                                    "type": "string[]",
+                                    "internalType": "string[]"
+                                }
+                            ]
+                        }
+                    ]
                 }
             ],
             "stateMutability": "view"

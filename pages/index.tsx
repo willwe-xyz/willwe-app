@@ -30,7 +30,7 @@ export default function LoginPage() {
               WillWe
             </Heading>
             <Text ml={1} align={"left"} fontSize={'20px'} >
-            a living structure <br />that facilitates fully trustless and <br /> explainable collective efforts <br /> by means of grokable devices. <br/> 
+            a living structure <br />facilitating fully trustless and <br /> self-explaining efforts <br />. <br/> 
             </Text><br />
 
             <Grid
