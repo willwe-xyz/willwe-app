@@ -1,4 +1,14 @@
-import { VStack, Box, Text, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Container } from "@chakra-ui/react";
+import {
+  VStack,
+  Box,
+  Text,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  Container,
+} from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { NodeState } from "../lib/chainData";
 import SubNodes from "./SubNodes";
@@ -10,51 +20,77 @@ interface NodeStacksProps {
   chainID: string;
 }
 
-export const NodeStacks: React.FC<NodeStacksProps> = ({ nodeStack, selectedNode, userAddress, chainID }) => {
-  const [activeStack, setActiveStack] = useState<NodeState[]>([]);
-  const [indexOfSelected, setIndexOfSelected] = useState<number>(0);
+export const NodeStacks: React.FC<NodeStacksProps> = ({
+  nodeStack,
+  selectedNode,
+  userAddress,
+  chainID,
+}) => {
+  const [activeStack, setActiveStack] = useState<NodeState[]>(nodeStack);
 
   useEffect(() => {
-    const selectedIndex = nodeStack.findIndex((node) => node.nodeId === selectedNode.nodeId);
-    setActiveStack(nodeStack.slice(0, selectedIndex + 1));
-    setIndexOfSelected(selectedIndex);
-  }, [nodeStack, selectedNode]);
+    if (nodeStack.length == 0) setActiveStack(nodeStack);
+  }, []);
 
   async function handleNodeClick(nodeId: string) {
-    console.log('node clicked', nodeId);
-    const index = nodeStack.findIndex((node) => node.nodeId === nodeId);
-  
-    if (index === -1) {
-      try {
-        const response = await fetch(`/api/get/NODE-DATA/${chainID}/${nodeId}`);
-        const newNodeData: NodeState = await response.json();
-  
-        if (newNodeData.nodeId !== '') {
-          const updatedNodeStack = [...nodeStack, newNodeData];
-          setActiveStack(updatedNodeStack);
-          setIndexOfSelected(updatedNodeStack.length - 1);
-        } else {
-          const newStack: NodeState[] = newNodeData.rootPath.map(n => 
-            nodeStack.find(node => node.nodeId === n) || {} as NodeState
-          );
-          setActiveStack(newStack);
-          setIndexOfSelected(newStack.length - 1);
-        }
-      } catch (error) {
-        console.error("Error fetching node data:", error);
-      }
-    } else {
-      setIndexOfSelected(index);
-      setActiveStack(nodeStack.slice(0, index + 1));
+    console.log(nodeStack);
+    console.log("node clicked", nodeId);
+
+    let selectedNode : NodeState = nodeStack.find((node) => node.nodeId === nodeId) || {} as NodeState;
+    const indexOfSelected = nodeStack.indexOf(selectedNode);
+    console.log("selected node", selectedNode);
+    console.log("index of selected", indexOfSelected);
+
+    if (! selectedNode.nodeId) {
+      const response = await fetch(`/api/get/NODE-DATA/${chainID}/${nodeId}`);
+       selectedNode = await response.json();
+      console.log("got node data", selectedNode);
     }
+
+    if (indexOfSelected == -1) {
+      nodeStack.push(selectedNode);
+      setActiveStack(nodeStack);
+    } else {
+      nodeStack.slice(0,indexOfSelected + 1);
+      setActiveStack(nodeStack);
+    }
+
+    const newStack : NodeState[] = nodeStack.slice(0, parseInt(indexOfSelected) + 1);
+    setActiveStack(newStack);
+
+
+
+
+    // try {
+    //   const response = await fetch(`/api/get/NODE-DATA/${chainID}/${nodeId}`);
+    //   const clickedNodeData: NodeState = await response.json();
+
+    //   if (clickedNodeData.nodeId !== "") {
+    //     let newStack: NodeState[] = [...activeStack];
+
+    //     const parentIndex = newStack.findIndex((node) => node.nodeId === nodeId);
+    //     if (parentIndex === -1) {
+    //       newStack = [...newStack, clickedNodeData];
+    //     } else {
+    //       newStack[parentIndex] = clickedNodeData;
+    //     }
+
+    //     setActiveStack(newStack);
+    //     console.log("New active stack:", newStack);
+    //   } else {
+    //     console.log("Clicked node is invalid");
+    //   }
+    // } catch (error) {
+    //   console.error("Error fetching node data:", error);
+    // }
   }
 
   return (
-    <VStack spacing={4} align="stretch" key={selectedNode.nodeId}>
-      {activeStack.map((node) => (
-        <Box key={node.nodeId} borderWidth="1px" borderRadius="lg" overflow="hidden" p={4}>
-          <Accordion allowToggle>
-            <AccordionItem key={node.nodeId}>
+    <VStack spacing={4} align="stretch" >
+      {activeStack.map((node, index) => (
+        <Box key={index} borderWidth="1px" borderRadius="lg" overflow="hidden" p={4}>
+          <Accordion defaultIndex={[0]} allowToggle>
+            <AccordionItem>
               <h2>
                 <AccordionButton>
                   <Box flex="1" textAlign="left">
@@ -64,17 +100,26 @@ export const NodeStacks: React.FC<NodeStacksProps> = ({ nodeStack, selectedNode,
                 </AccordionButton>
               </h2>
               <AccordionPanel pb={4}>
-                <Container id='nodeData'>
-                  {/* Add more node-specific content here */}
+                <Container id="nodeData">
                   <Text>User Address: {userAddress}</Text>
+                  <Text>Inflation: {node.inflation}</Text>
+                  <Text>Balance Anchor: {node.balanceAnchor}</Text>
+                  <Text>Balance Budget: {node.balanceBudget}</Text>
+                  <Text>Value: {node.value}</Text>
+                  <Text>Membrane ID: {node.membraneId}</Text>
+                  <Text>Members: {node.membersOfNode?.join(", ")}</Text>
                 </Container>
-                <SubNodes
-                  chNodes={node.childrenNodes}
-                  handleNodeClick={handleNodeClick}
-                />
+                
+                  <SubNodes
+                    key={index}
+                    chNodes={node.childrenNodes}
+                    handleNodeClick={handleNodeClick}
+                    stackid={node.nodeId}
+                  />
+                
               </AccordionPanel>
             </AccordionItem>
-          </Accordion>
+          </Accordion>          
         </Box>
       ))}
     </VStack>

@@ -3,11 +3,16 @@ import { Box, HStack, Text } from "@chakra-ui/react";
 interface SubNodesProps {
   chNodes: string[];
   handleNodeClick: (nodeId: string) => void;
+  stackid: string;
 }
 
-const SubNodes: React.FC<SubNodesProps> = ({ chNodes = [], handleNodeClick }) => {
+const SubNodes: React.FC<SubNodesProps> = ({ chNodes, handleNodeClick, stackid }) => {
   return (
     <HStack
+      direction="row"
+      flexWrap="wrap"
+      justifyContent="flex-start"
+      key={stackid}
       overflowX="auto"
       spacing={4}
       py={2}
@@ -24,13 +29,13 @@ const SubNodes: React.FC<SubNodesProps> = ({ chNodes = [], handleNodeClick }) =>
         },
       }}
     >
-      {chNodes.length > 0 ? (
+      {chNodes?.length > 0 ? (
         chNodes.map((child) => (
           <Box
-            key={child}  // Use the child ID as the key
+            key={child}
+            id="subnodeId"
             onClick={() => handleNodeClick(child)}
-            _hover={{ backgroundColor: 'gray.200' }}
-            _selected={{ bg: 'gray.200' }}
+            _hover={{ backgroundColor: "gray.200" }}
             p={2}
             borderWidth="1px"
             borderRadius="lg"
@@ -41,7 +46,7 @@ const SubNodes: React.FC<SubNodesProps> = ({ chNodes = [], handleNodeClick }) =>
           </Box>
         ))
       ) : (
-        <Text>No children nodes available</Text>
+        <Text>No children nodes available: {stackid}</Text>
       )}
     </HStack>
   );

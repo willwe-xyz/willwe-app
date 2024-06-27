@@ -16,40 +16,27 @@ interface RootStack {
 }
 
 export const AllStacks: React.FC<RootStack> = ({ chainBalances, WillBals, userNodes, chainID, userAddress }) => {
-  // Ensure WillBals is always an array
   const safeWillBals = Array.isArray(WillBals) ? WillBals : [];
-
   const [sortedChainBalances, setSortedChainBalances] = useState<BalanceItem[]>([]);
+  const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
+  const [nodeStack, setNodeStack] = useState<NodeState[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState('');
 
   useEffect(() => {
     setSortedChainBalances(sortChainBalances(chainBalances, safeWillBals));
-  }, [chainBalances, safeWillBals]);
+  }, []);
 
-  // State to hold active node stack and selected node
-  const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
-  const [nodeStack, setNodeStack] = useState<NodeState[] | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState('');
-
-  // Function to handle click on token balance
   function handleNodeClick(nodeId: string) {
-    if (nodeId) setSelectedNodeId(nodeId);
-    const sN = userNodes.find(node => node.nodeId === nodeId);
-    if (sN) {
-      setSelectedNode(sN);
-      if (sN.rootPath.length > 1) {
-        const nodeStack = sN.rootPath.map(nodeId => userNodes.find(node => node.nodeId === nodeId)).filter(Boolean) as NodeState[];
-        setNodeStack(nodeStack);
-      } else {
-        setNodeStack([sN]);
-      }
+    const clickedNode = userNodes.find(node => node.nodeId === nodeId);
+    if (clickedNode) {
+      setSelectedNode(clickedNode);
+      setNodeStack([clickedNode]);
+      setSelectedNodeId(nodeId);
     } else {
       setSelectedNode(null);
-      setNodeStack(null);
+      setNodeStack([]);
+      setSelectedNodeId('');
     }
-
-    console.log(nodeId);
-    console.log(sN);
-    console.log(nodeStack);
   }
 
   return (
@@ -83,7 +70,7 @@ export const AllStacks: React.FC<RootStack> = ({ chainBalances, WillBals, userNo
         ))}
       </HStack>
       <Card>
-        {selectedNode && nodeStack ? (
+        {selectedNode ? (
           <NodeStacks nodeStack={nodeStack} selectedNode={selectedNode} userAddress={userAddress} chainID={chainID} />
         ) : (
           <div className="NoNodeContent">

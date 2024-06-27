@@ -4,7 +4,7 @@ import { getAllData, getNodeData, getCovalentERC20TokenBalancesOf } from '../../
 import { deployments, getChainById } from '../../../const/envconst'
 import JSONBig from 'json-bigint'
 
-type Operation = 'WILLBALANCES' | 'userdata' | 'NODE-DATA'
+type Operation = 'WILLBALANCES' | 'userdata' | 'NODE-DATA' 
 
 interface ParsedQuery {
   operation: Operation
