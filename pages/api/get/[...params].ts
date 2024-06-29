@@ -3,6 +3,8 @@ import { ethers } from 'ethers'
 import { getAllData, getNodeData, getCovalentERC20TokenBalancesOf } from '../../../lib/chainData'
 import { deployments, getChainById } from '../../../const/envconst'
 import JSONBig from 'json-bigint'
+import { BalanceItem } from '@covalenthq/client-sdk'
+import { NodeState } from '../../../lib/chainData'  // Ensure this import path is correct
 
 type Operation = 'WILLBALANCES' | 'userdata' | 'NODE-DATA' 
 
@@ -12,6 +14,16 @@ interface ParsedQuery {
   contract?: string
   userAddress?: string
   nodeId?: string
+}
+
+export type UserContext = {
+  activeBalancesResponse: [string[], string[]],
+  nodes: NodeState[],
+}
+
+export type FetchedUserData = {
+  balanceItems: BalanceItem[],
+  userContext: UserContext
 }
 
 function parseQuery(query: { params?: string[] }): ParsedQuery {
@@ -46,10 +58,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!userAddress) {
           return res.status(400).json({ error: "userAddress is required for userdata operation" })
         }
-        response = await getAllData(chainID, userAddress)
+        const allData = await getAllData(chainID, userAddress)
+        response = {
+          balanceItems: allData.chainBalances,
+          userContext: {
+            activeBalancesResponse: allData.activeBalancesResponse,
+            nodes: allData.userNodes
+          }
+        } as FetchedUserData
         break
       case 'NODE-DATA':
-        console.log('have node id', nodeId, chainID)
         if (!nodeId) {
           return res.status(400).json({ error: "nodeId is required for NODE-DATA operation" })
         }

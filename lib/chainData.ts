@@ -117,7 +117,11 @@ export async function getNodeData(chainID: string, nodeId: string) : Promise<Nod
 
 
 
-  export function sortChainBalances(chainBalances: BalanceItem[], WillBals: BalanceItem[]): BalanceItem[] {
+  export function sortChainBalances(chainBalances: BalanceItem[] | null, WillBals: BalanceItem[]): BalanceItem[] {
+    if (!chainBalances || !WillBals) {
+      return chainBalances || [];
+    }
+  
     // Check if inputs are arrays
     if (!Array.isArray(chainBalances) || !Array.isArray(WillBals)) {
       console.error('sortChainBalances: Inputs must be arrays');

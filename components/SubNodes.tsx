@@ -1,4 +1,5 @@
-import { Box, HStack, Text } from "@chakra-ui/react";
+import React from 'react';
+import { HStack, Box, Text } from "@chakra-ui/react";
 
 interface SubNodesProps {
   chNodes: string[];
@@ -6,15 +7,11 @@ interface SubNodesProps {
   stackid: string;
 }
 
-const SubNodes: React.FC<SubNodesProps> = ({ chNodes, handleNodeClick, stackid }) => {
+export const SubNodes: React.FC<SubNodesProps> = ({ chNodes, handleNodeClick, stackid }) => {
   return (
     <HStack
-      direction="row"
-      flexWrap="wrap"
-      justifyContent="flex-start"
-      key={stackid}
-      overflowX="auto"
       spacing={4}
+      overflowX="auto"
       py={2}
       sx={{
         '&::-webkit-scrollbar': {
@@ -33,23 +30,18 @@ const SubNodes: React.FC<SubNodesProps> = ({ chNodes, handleNodeClick, stackid }
         chNodes.map((child) => (
           <Box
             key={child}
-            id="subnodeId"
             onClick={() => handleNodeClick(child)}
-            _hover={{ backgroundColor: "gray.200" }}
+            _hover={{ backgroundColor: "gray.200", cursor: "pointer" }}
             p={2}
             borderWidth="1px"
             borderRadius="lg"
           >
-            <Text fontSize="sm" color="gray.500">
-              {child}
-            </Text>
+            <Text fontSize="sm">{child}</Text>
           </Box>
         ))
       ) : (
-        <Text>No children nodes available: {stackid}</Text>
+        <Text color="gray.500">No children nodes available for {stackid}</Text>
       )}
     </HStack>
   );
 };
-
-export default SubNodes;

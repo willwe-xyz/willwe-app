@@ -1,93 +1,114 @@
-import { HStack, Box, Text, Button, Card } from "@chakra-ui/react";
+import React, { useState, useCallback, useMemo } from 'react';
+import { HStack, VStack, Box, Spinner, Text } from "@chakra-ui/react";
 import { TokenBalance } from "./TokenBalance";
 import { BalanceItem } from "@covalenthq/client-sdk";
-import { sortChainBalances, evmAddressToFullIntegerString } from "../lib/chainData";
-import { useState, useEffect } from "react";
-import { NodeState } from "../lib/chainData";
+import { sortChainBalances, evmAddressToFullIntegerString, NodeState } from "../lib/chainData";
 import { NodeStacks } from "./NodeStacks";
-import { SiCreatereactapp } from "react-icons/si";
+import { User } from "@privy-io/react-auth";
+import { useFetchUserData, FetchedUserData } from '../hooks/useFetchUserData';
+import HeaderButtons from './HeaderButtons';
+import { cols } from '../const/colors';
 
 interface RootStack {
-  chainBalances: BalanceItem[],
-  WillBals: BalanceItem[],
-  userNodes: NodeState[],
-  chainID: string,
-  userAddress: string
+  privyData: User | null;
+  ready: boolean;
+  authenticated: boolean;
+  logout: () => Promise<void>;
 }
 
-export const AllStacks: React.FC<RootStack> = ({ chainBalances, WillBals, userNodes, chainID, userAddress }) => {
-  const safeWillBals = Array.isArray(WillBals) ? WillBals : [];
-  const [sortedChainBalances, setSortedChainBalances] = useState<BalanceItem[]>([]);
+export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated, logout }) => {
+  const { userData, isLoading, error } = useFetchUserData(ready, authenticated, privyData);
+  
   const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
-  const [nodeStack, setNodeStack] = useState<NodeState[]>([]);
-  const [selectedNodeId, setSelectedNodeId] = useState('');
+  const [activeStack, setActiveStack] = useState<NodeState[]>([]);
+  const [selectedToken, setSelectedToken] = useState('');
 
-  useEffect(() => {
-    setSortedChainBalances(sortChainBalances(chainBalances, safeWillBals));
-  }, []);
+  const sortedUniqueBalances = useMemo(() => {
+    if (userData) {
+      // Create a map to store unique balances by contract address
+      const balanceMap = new Map<string, BalanceItem>();
+      
+      userData.balanceItems.forEach(item => {
+        const existingItem = balanceMap.get(item.contract_address);
+        if (!existingItem || (item.type === 'protocol' && existingItem.type !== 'protocol')) {
+          balanceMap.set(item.contract_address, item);
+        }
+      });
 
-  function handleNodeClick(nodeId: string) {
-    const clickedNode = userNodes.find(node => node.nodeId === nodeId);
-    if (clickedNode) {
-      setSelectedNode(clickedNode);
-      setNodeStack([clickedNode]);
-      setSelectedNodeId(nodeId);
-    } else {
-      setSelectedNode(null);
-      setNodeStack([]);
-      setSelectedNodeId('');
+      // Convert map back to array and sort
+      const uniqueBalances = Array.from(balanceMap.values());
+      return sortChainBalances(uniqueBalances, []);
     }
+    return [];
+  }, [userData]);
+
+  const nodeStack = useMemo(() => {
+    return userData?.userContext.nodes || [];
+  }, [userData]);
+
+  const handleNodeClick = useCallback((nodeId: string) => {
+    if (nodeId.includes('0x')) {
+      setSelectedToken(nodeId);
+      nodeId = evmAddressToFullIntegerString(nodeId);
+    } 
+     
+    const selectedNode = nodeStack.find(n => n.nodeId === nodeId);
+    const path = selectedNode ? selectedNode.rootPath : [nodeId]; 
+    const newStack = nodeStack.filter(n => path.includes(n.nodeId));
+    setActiveStack(newStack);
+    setSelectedNode(selectedNode || null);
+  }, [nodeStack]);
+
+  if (isLoading) {
+    return <Spinner />;
+  }
+
+  if (error) {
+    return <Text>Error: {error.message}</Text>;
+  }
+
+  if (!userData) {
+    return <Text>No user data available.</Text>;
   }
 
   return (
-    <div className="allstacks">
-      <HStack spacing='3px' overflowX="auto" sx={{
-        '&::-webkit-scrollbar': {
-          height: '4px',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: 'gray',
-          borderRadius: '10px',
-        },
-        '&::-webkit-scrollbar-track': {
-          background: 'transparent',
-        },
-      }}>
-        {sortedChainBalances.map((balance, index) => (
-          <Box
-            key={index}
-            onClick={() => handleNodeClick(evmAddressToFullIntegerString(balance.contract_address))}
-            _hover={{ backgroundColor: 'gray.200' }}
-            _selected={{ bg: 'gray.200' }}
-          >
-            <TokenBalance
-              balanceItem={balance}
-              chainID={chainID}
-              protocolDeposit={safeWillBals.find(willBal => willBal.contract_address === balance.contract_address)}
-              isSelected={selectedNode?.nodeId === evmAddressToFullIntegerString(balance.contract_address)}
-            />
-          </Box>
-        ))}
-      </HStack>
-      <Card>
-        {selectedNode ? (
-          <NodeStacks nodeStack={nodeStack} selectedNode={selectedNode} userAddress={userAddress} chainID={chainID} />
-        ) : (
-          <div className="NoNodeContent">
-            {selectedNodeId ? (
-              <div>
-                <Text>No Nodes Found</Text>
-                <hr />
-                <Button>
-                  <SiCreatereactapp />Spawn Node
-                </Button>
-              </div>
-            ) : (
-              <Text>No node Selected</Text>
-            )}
-          </div>
-        )}
-      </Card>
-    </div>
+    <VStack align="stretch" spacing={2}>
+      <HeaderButtons logout={logout} userAddress={privyData?.wallet?.address} cols={cols} />
+
+      <Box
+        width="100%"
+        overflowX="auto"
+        overflowY="hidden"
+        css={{
+          '&::-webkit-scrollbar': {
+            height: '6px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'rgba(0, 0, 0, 0.1)',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: 'rgba(0, 0, 0, 0.3)',
+            borderRadius: '3px',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            background: 'rgba(0, 0, 0, 0.4)',
+          },
+        }}
+      >
+        <HStack spacing={1} py={1} px={1}>
+          {sortedUniqueBalances.map((balance, index) => (
+            <Box key={balance.contract_address} onClick={() => handleNodeClick(balance.contract_address)}>
+              <TokenBalance
+                balanceItem={balance}
+                protocolDeposit={balance.type === 'protocol' ? balance : undefined}
+                isSelected={selectedToken === balance.contract_address}
+              />
+            </Box>
+          ))}
+        </HStack>
+      </Box>
+    
+      <NodeStacks stack={activeStack} nodeClick={handleNodeClick} />
+    </VStack>
   );
 };
