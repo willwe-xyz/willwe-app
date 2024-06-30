@@ -8,7 +8,8 @@ export type UserContext = {
 }
 
 export type FetchedUserData = {
-  balanceItems: BalanceItem[];
+  UserBalanceItems: BalanceItem[];
+  WillBalanceItems: BalanceItem[];
   userContext: UserContext;
 }
 
@@ -37,11 +38,9 @@ export const useFetchUserData = (ready: boolean, authenticated: boolean, user: U
 
           const willBals: BalanceItem[] = await willBalsRes.json();
           const fetchedUserData: FetchedUserData = await userDataRes.json();
+          fetchedUserData.WillBalanceItems = willBals;
 
-          setUserData({
-            balanceItems: [...fetchedUserData.balanceItems, ...willBals],
-            userContext: fetchedUserData.userContext
-          });
+          setUserData(fetchedUserData);
         } catch (error) {
           console.error("Failed to fetch user data", error);
           setError(error instanceof Error ? error : new Error('An unknown error occurred'));

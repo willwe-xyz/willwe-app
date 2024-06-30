@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { HStack, VStack, Box, Spinner, Text } from "@chakra-ui/react";
 import { TokenBalance } from "./TokenBalance";
 import { BalanceItem } from "@covalenthq/client-sdk";
@@ -23,27 +23,35 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
   const [activeStack, setActiveStack] = useState<NodeState[]>([]);
   const [selectedToken, setSelectedToken] = useState('');
 
+  useEffect(() => {
+    console.log("userData:", userData);
+  }, [userData]);
+
   const sortedUniqueBalances = useMemo(() => {
-    if (userData) {
+    console.log("Computing sortedUniqueBalances");
+    if (userData && Array.isArray(userData.balanceItems)) {
+      console.log("balanceItems:", userData.balanceItems);
       // Create a map to store unique balances by contract address
       const balanceMap = new Map<string, BalanceItem>();
       
       userData.balanceItems.forEach(item => {
-        const existingItem = balanceMap.get(item.contract_address);
-        if (!existingItem || (item.type === 'protocol' && existingItem.type !== 'protocol')) {
+        if (item && item.contract_address) {
           balanceMap.set(item.contract_address, item);
         }
       });
 
       // Convert map back to array and sort
       const uniqueBalances = Array.from(balanceMap.values());
-      return sortChainBalances(uniqueBalances, []);
+      const sortedBalances = sortChainBalances(uniqueBalances, []);
+      console.log("Sorted balances:", sortedBalances);
+      return sortedBalances;
     }
+    console.log("No valid balanceItems found");
     return [];
   }, [userData]);
 
   const nodeStack = useMemo(() => {
-    return userData?.userContext.nodes || [];
+    return userData?.userContext?.nodes || [];
   }, [userData]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -59,6 +67,12 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
     setSelectedNode(selectedNode || null);
   }, [nodeStack]);
 
+  const getProtocolBalance = useCallback((contractAddress: string) => {
+    // Since we don't have WillBalanceItems in this structure, we'll return null
+    // You may need to adjust this based on where the protocol balance is stored
+    return null;
+  }, [userData]);
+
   if (isLoading) {
     return <Spinner />;
   }
@@ -67,8 +81,8 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
     return <Text>Error: {error.message}</Text>;
   }
 
-  if (!userData) {
-    return <Text>No user data available.</Text>;
+  if (!userData || !Array.isArray(userData.balanceItems) || userData.balanceItems.length === 0) {
+    return <Text>No user balance data available.</Text>;
   }
 
   return (
@@ -96,15 +110,30 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
         }}
       >
         <HStack spacing={1} py={1} px={1}>
-          {sortedUniqueBalances.map((balance, index) => (
-            <Box key={balance.contract_address} onClick={() => handleNodeClick(balance.contract_address)}>
-              <TokenBalance
-                balanceItem={balance}
-                protocolDeposit={balance.type === 'protocol' ? balance : undefined}
-                isSelected={selectedToken === balance.contract_address}
-              />
-            </Box>
-          ))}
+          {sortedUniqueBalances.length > 0 ? (
+            sortedUniqueBalances.map((balance) => {
+              const protocolBalance = getProtocolBalance(balance.contract_address);
+              return (
+                <Box key={balance.contract_address} onClick={() => handleNodeClick(balance.contract_address)}>
+                  <TokenBalance
+                    balanceItem={balance}
+                    isSelected={selectedToken === balance.contract_address}
+                    protocolDeposit={userData.WillBalanceItems.find(
+                      (item) => item.contract_address === balance.contract_address
+                    )}
+                  />
+                  <hr />
+                  {protocolBalance && (
+                    <Text fontSize="xs" mt={1}>
+                      Protocol Balance: {protocolBalance.pretty_quote}
+                    </Text>
+                  )}
+                </Box>
+              );
+            })
+          ) : (
+            <Text>No balance items to display</Text>
+          )}
         </HStack>
       </Box>
     
