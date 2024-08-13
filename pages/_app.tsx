@@ -4,7 +4,7 @@ import Head from 'next/head';
 import {PrivyProvider} from '@privy-io/react-auth';
 import {useRouter} from 'next/router';
 // Replace this with any of the networks listed at https://viem.sh/docs/clients/chains.html
-import {baseSepolia} from 'viem/chains';
+  import {localhost,base, optimismSepolia} from 'viem/chains';
 import { ChakraProvider } from '@chakra-ui/react';
 import { init, AirstackProvider } from "@airstack/airstack-react";
 
@@ -33,7 +33,8 @@ function MyApp({Component, pageProps}: AppProps) {
         appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
         config={{
           loginMethods: ['farcaster', 'wallet', 'email'],
-          defaultChain: baseSepolia
+          defaultChain: localhost,
+          supportedChains: [localhost, base, optimismSepolia]
         }}
         onSuccess={() => router.push('/dashboard')}
       >

@@ -1,25 +1,32 @@
 import React from "react";
 import { BalanceItem } from "@covalenthq/client-sdk";
-import { Box, Text, VStack, HStack, Tooltip } from "@chakra-ui/react";
+import { Box, Text, VStack, Tooltip } from "@chakra-ui/react";
 import { formatEther } from "viem";
-import { getDistinguishableColor, getReverseColor } from "../const/colors";
 
 interface TokenBalanceProps {
     balanceItem: BalanceItem;
     protocolDeposit?: BalanceItem;
     isSelected: boolean;
+    contrastingColor: string;
+    reverseColor: string;
+    onClick: () => void;
 }
 
 export const TokenBalance: React.FC<TokenBalanceProps> = ({ 
     balanceItem, 
     protocolDeposit, 
     isSelected,
+    contrastingColor,
+    reverseColor,
+    onClick
 }) => {
-    const contrastingColor = getDistinguishableColor(`#${balanceItem.contract_address.slice(2, 8)}`, '#e2e8f0');
-    const reverseColor = getReverseColor(contrastingColor);
-
     // Format the nominal balance to exactly 4 decimal points
     const nominalBalance = parseFloat(formatEther(BigInt(balanceItem.balance))).toFixed(4);
+
+    // Format the protocol balance if it exists
+    const protocolBalance = protocolDeposit 
+        ? parseFloat(formatEther(BigInt(protocolDeposit.balance))).toFixed(4)
+        : "0.0000";
 
     return (
         <Box
@@ -38,33 +45,38 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
                 fontWeight: isSelected ? 'bold' : 'normal',
                 filter: isSelected ? '' : 'brightness(95%)',
             }}
+            onClick={onClick}
         >
             <VStack align="start" spacing={0} height="100%">
                 <Text fontSize="2xs" fontWeight="bold" isTruncated title={balanceItem.contract_display_name} width="100%">
                     {balanceItem.contract_ticker_symbol}
                 </Text>
                 <Text fontSize="2xs" isTruncated width="100%">{balanceItem.pretty_quote}</Text>
-                <Text fontSize="2xs" isTruncated width="100%">
-                    {nominalBalance}
-                </Text>
-                {protocolDeposit && (
-    <>
-        <Box height="1px" width="100%" backgroundColor={contrastingColor} my="1px" />
-        <Box position="relative" width="100%" height="14px"> {/* Adjust height as needed */}
-            <Tooltip label="Protocol wide current balance" aria-label="Protocol balance explanation">
-                <Text
-                    fontSize="2xs"
-                    fontWeight="bold"
-                    position="absolute"
-                    right="0"
-                    bottom="0"
+                <Tooltip 
+                    label={`Protocol balance: ${protocolBalance} ${balanceItem.contract_ticker_symbol}`}
+                    aria-label="Protocol balance"
+                    placement="top"
                 >
-                    {parseFloat(formatEther(BigInt(protocolDeposit.balance))).toFixed(4)}
-                </Text>
-            </Tooltip>
-        </Box>
-    </>
-)}
+                    <Text fontSize="2xs" isTruncated width="100%">
+                        {nominalBalance}
+                    </Text>
+                </Tooltip>
+                {protocolDeposit && (
+                    <>
+                        <Box height="1px" width="100%" backgroundColor={contrastingColor} my="1px" />
+                        <Box position="relative" width="100%" height="14px">
+                            <Text
+                                fontSize="2xs"
+                                fontWeight="bold"
+                                position="absolute"
+                                right="0"
+                                bottom="0"
+                            >
+                                {protocolBalance}
+                            </Text>
+                        </Box>
+                    </>
+                )}
             </VStack>
         </Box>
     );

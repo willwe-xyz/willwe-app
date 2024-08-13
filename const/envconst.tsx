@@ -5,24 +5,6 @@ import * as chains from 'viem/chains';
 import { BalanceItem } from "@covalenthq/client-sdk";
 import { Chain } from "viem";
 
-
-// export const virtualTenderlyBase = defineChain({
-//   id: 8453,
-//   name: 'Virtual Base',
-//   nativeCurrency: { name: 'vETH', symbol: 'vETH', decimals: 18 },
-//   rpcUrls: {
-//     default: { http: ['https://virtual.base.rpc.tenderly.co/0814d5bb-2565-4a2a-a783-05b8e57eb7f8'] }
-//   },
-//   blockExplorers: {
-//     default: {
-//       name: 'Tenderly Explorer',
-//       url: 'https://virtual.base.rpc.tenderly.co/6167980a-133f-48b2-a55b-137c7b3e8630'
-//     }
-//   },
-// });
-
-
-
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 export const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET;
 export const COV_APIKEY= process.env.COV_APIKEY;
@@ -30,38 +12,70 @@ export const SUPABASE_URL : string = process.env.SUPABASE_URL
 export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 
 
+
+
 // == Logs ==
 //   ###############################
+                                                               
+//      Deploy script started for network :  11155420
+                                                               
+//   ###############################
+//   ##### Deployer :  0x259c1F1FaF930a23D009e85867A6b5206b2a6d44 | expected 0x259c1F1FaF930a23D009e85867A6b5206b2a6d44
+//   #________________________________
+//   ###############################
+   
+//   Fun deployed at :  0x264336ec33fab9CC7859b2C5b431f42020a20E75
+   
+//   ###############################
+//   ###############################
+   
+//   Root Value in Control :  0x9d814170537951fE8eD28A534CDE9F30Fd731A64
+//   Controling Extrmity:  0xDD9e56E94B6166f47D8F597AECeB38e72e274E92
+//   ###############################
+//   Balances: deployer | Agent 
+//   0 10000000
+//   Will Price in ETH: 1000000000
+   
+//   ###############################
+   
+//   ###############################
+//   Foundation Agent Safe at:  0xDD9e56E94B6166f47D8F597AECeB38e72e274E92
+//   Will:  0x9d814170537951fE8eD28A534CDE9F30Fd731A64
+//   Membrane:  0x36C70f035c39e4072822F8C33C4427ae59298451
+//   Execution:  0xEDf98928d9513051D75e72244e0b4DD254DB1462
+//   WillWe:  0x264336ec33fab9CC7859b2C5b431f42020a20E75
+//   ###############################
+
+// == Logs ==
                                                                
 //      Deploy script started for network :  84532
                                                                
 //   ###############################
-//   ##### Deployer :  0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93 | expected 0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93
+//   ##### Deployer :  0x259c1F1FaF930a23D009e85867A6b5206b2a6d44 | expected 0x259c1F1FaF930a23D009e85867A6b5206b2a6d44
 //   #________________________________
-//   ##### mockRON token  0x0Cc1791DB04BA51dd4482e63Da49bEa476E787a3
 //   ###############################
    
-//   Fun deployed at :  0xD46F628219e59EdA1489847f864B92D289bf4b13
+//   Fun deployed at :  0xf32F9c6004Cd998Bc0319290b348A1DbFFc4Ef67
    
 //   ###############################
-//   control ---  0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93 0x0000000000000000000000000000000000000000 0xB76eF2DdE3d0b8AE716272f1BB943610C77a4C93
 //   ###############################
    
-//   Foundation Agent in Control :  0x244743CDF9A161f6d5a237B0A7293120E31D15ac
-//   Is Foundation Anget contract:  true
-//   Deployer is member  true
+//   Root Value in Control :  0x6EdE1d85BBC8922E493F5507Df3BCC3960599a97
+//   Controling Extrmity:  0xA9aD58dAB684B27a6D9D2D24F8303a17732bca2f
 //   ###############################
-//   Balances: deployer | Agent | f0
-//   0 10000000000000000000000000 0
+//   Balances: deployer | Agent 
+//   0 10000000
+//   Will Price in ETH: 1000000000
    
 //   ###############################
-//   Foundation Agent Safe at:  0x244743CDF9A161f6d5a237B0A7293120E31D15ac
-//   RVI:  0x843AF17bD3bb77D3B498335C57015E9A72Ffdd4A
-//   Membrane:  0x356B0817C2bC2fB622c3BA154cb49a3611C9841b
-//   Execution:  0x13De973c04F0e4D9835090B7481BfA0185b48014
-//   WillWe:  0xD46F628219e59EdA1489847f864B92D289bf4b13
+   
 //   ###############################
-
+//   Foundation Agent Safe at:  0xA9aD58dAB684B27a6D9D2D24F8303a17732bca2f
+//   Will:  0x6EdE1d85BBC8922E493F5507Df3BCC3960599a97
+//   Membrane:  0x214FEA19B4ef0C3d1440398ECd0A2523dCf14210
+//   Execution:  0x96B88F2B098AE65CFD93B226F1a9444EC4043eBe
+//   WillWe:  0xf32F9c6004Cd998Bc0319290b348A1DbFFc4Ef67
+//   ###############################
 
 type Deployments = {
     [key: string]: {
@@ -77,15 +91,20 @@ type ABIKP = {
 
 export const deployments: Deployments  = {
     "WillWe" : {
-        "84532" :  "0xD46F628219e59EdA1489847f864B92D289bf4b13"
+        "84532" :  "0xf32f9c6004cd998bc0319290b348a1dbffc4ef67",
+        "11155420": "0x264336ec33fab9CC7859b2C5b431f42020a20E75"
+
     },
     "Membrane" : {
-    "84532": "0x356B0817C2bC2fB622c3BA154cb49a3611C9841b"
+    "84532": "0x214fea19b4ef0c3d1440398ecd0a2523dcf14210",
+    "11155420": "0x36C70f035c39e4072822F8C33C4427ae59298451"
 },
     "Execution": { 
-        "84532": "0x13De973c04F0e4D9835090B7481BfA0185b48014",
+        "84532": "0x96b88f2b098ae65cfd93b226f1a9444ec4043ebe",
+        "11155420": "0xEDf98928d9513051D75e72244e0b4DD254DB1462"
 }, "RVI": {
-        "84532" : "0x843AF17bD3bb77D3B498335C57015E9A72Ffdd4A"
+        "84532" : "0x6ede1d85bbc8922e493f5507df3bcc3960599a97",
+        "11155420": "0x9d814170537951fE8eD28A534CDE9F30Fd731A64"
 } 
 
 }
@@ -114,7 +133,7 @@ export const deployments: Deployments  = {
 
 
 export const ABIs: ABIKP = {
-    "WillWe" :  [
+    "WillWe" :   [
         {
             "type": "constructor",
             "inputs": [
@@ -367,6 +386,64 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "getAllNodesForRoot",
+            "inputs": [
+                {
+                    "name": "rootAddress",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "nodes",
+                    "type": "tuple[]",
+                    "internalType": "struct NodeState[]",
+                    "components": [
+                        {
+                            "name": "basicInfo",
+                            "type": "string[]",
+                            "internalType": "string[]"
+                        },
+                        {
+                            "name": "membersOfNode",
+                            "type": "address[]",
+                            "internalType": "address[]"
+                        },
+                        {
+                            "name": "childrenNodes",
+                            "type": "string[]",
+                            "internalType": "string[]"
+                        },
+                        {
+                            "name": "rootPath",
+                            "type": "string[]",
+                            "internalType": "string[]"
+                        },
+                        {
+                            "name": "signals",
+                            "type": "tuple[]",
+                            "internalType": "struct UserSignal[]",
+                            "components": [
+                                {
+                                    "name": "MembraneInflation",
+                                    "type": "string[][2]",
+                                    "internalType": "string[][2]"
+                                },
+                                {
+                                    "name": "lastRedistSignal",
+                                    "type": "string[]",
+                                    "internalType": "string[]"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
             "name": "getChildrenOf",
             "inputs": [
                 {
@@ -415,44 +492,14 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "activeBalancesResponse",
-                    "type": "string[][2]",
-                    "internalType": "string[][2]"
-                },
-                {
                     "name": "NSs",
                     "type": "tuple[]",
                     "internalType": "struct NodeState[]",
                     "components": [
                         {
-                            "name": "nodeId",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "inflation",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "balanceAnchor",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "balanceBudget",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "value",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "membraneId",
-                            "type": "string",
-                            "internalType": "string"
+                            "name": "basicInfo",
+                            "type": "string[]",
+                            "internalType": "string[]"
                         },
                         {
                             "name": "membersOfNode",
@@ -527,34 +574,67 @@ export const ABIs: ABIKP = {
                     "internalType": "struct NodeState",
                     "components": [
                         {
-                            "name": "nodeId",
-                            "type": "string",
-                            "internalType": "string"
+                            "name": "basicInfo",
+                            "type": "string[]",
+                            "internalType": "string[]"
                         },
                         {
-                            "name": "inflation",
-                            "type": "string",
-                            "internalType": "string"
+                            "name": "membersOfNode",
+                            "type": "address[]",
+                            "internalType": "address[]"
                         },
                         {
-                            "name": "balanceAnchor",
-                            "type": "string",
-                            "internalType": "string"
+                            "name": "childrenNodes",
+                            "type": "string[]",
+                            "internalType": "string[]"
                         },
                         {
-                            "name": "balanceBudget",
-                            "type": "string",
-                            "internalType": "string"
+                            "name": "rootPath",
+                            "type": "string[]",
+                            "internalType": "string[]"
                         },
                         {
-                            "name": "value",
-                            "type": "string",
-                            "internalType": "string"
-                        },
+                            "name": "signals",
+                            "type": "tuple[]",
+                            "internalType": "struct UserSignal[]",
+                            "components": [
+                                {
+                                    "name": "MembraneInflation",
+                                    "type": "string[][2]",
+                                    "internalType": "string[][2]"
+                                },
+                                {
+                                    "name": "lastRedistSignal",
+                                    "type": "string[]",
+                                    "internalType": "string[]"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getNodes",
+            "inputs": [
+                {
+                    "name": "nodeIds",
+                    "type": "uint256[]",
+                    "internalType": "uint256[]"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "nodes",
+                    "type": "tuple[]",
+                    "internalType": "struct NodeState[]",
+                    "components": [
                         {
-                            "name": "membraneId",
-                            "type": "string",
-                            "internalType": "string"
+                            "name": "basicInfo",
+                            "type": "string[]",
+                            "internalType": "string[]"
                         },
                         {
                             "name": "membersOfNode",
@@ -737,6 +817,19 @@ export const ABIs: ABIKP = {
                 }
             ],
             "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "initSelfControl",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "controlingAgent",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "stateMutability": "nonpayable"
         },
         {
             "type": "function",
@@ -978,50 +1071,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "proposeMovement",
-            "inputs": [
-                {
-                    "name": "typeOfMovement",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "node_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "expiresInDays",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "executingAccount",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "descriptionHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "data",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "movementHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
             "name": "redistribute",
             "inputs": [
                 {
@@ -1236,6 +1285,50 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "startMovement",
+            "inputs": [
+                {
+                    "name": "typeOfMovement",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "node",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "expiresInDays",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "executingAccount",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "descriptionHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "data",
+                    "type": "bytes",
+                    "internalType": "bytes"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "movementHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
             "name": "submitSignatures",
             "inputs": [
                 {
@@ -1410,16 +1503,79 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "NewMovement",
+            "name": "BranchSpawned",
             "inputs": [
                 {
-                    "name": "nodeID",
+                    "name": "parentId",
                     "type": "uint256",
                     "indexed": true,
                     "internalType": "uint256"
                 },
                 {
-                    "name": "movementID",
+                    "name": "newBranchId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "creator",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "InflationMinted",
+            "inputs": [
+                {
+                    "name": "branchId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "MembershipMinted",
+            "inputs": [
+                {
+                    "name": "branchId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "member",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "NewMovement",
+            "inputs": [
+                {
+                    "name": "nodeId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "movementHash",
                     "type": "bytes32",
                     "indexed": false,
                     "internalType": "bytes32"
@@ -1435,22 +1591,85 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "Signal",
+            "name": "SelfControlAtAddress",
             "inputs": [
                 {
-                    "name": "nodeID",
+                    "name": "AgencyLocus",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "SignalSent",
+            "inputs": [
+                {
+                    "name": "branchId",
                     "type": "uint256",
                     "indexed": true,
                     "internalType": "uint256"
                 },
                 {
-                    "name": "origin",
+                    "name": "sender",
                     "type": "address",
-                    "indexed": false,
+                    "indexed": true,
                     "internalType": "address"
                 },
                 {
-                    "name": "value",
+                    "name": "signals",
+                    "type": "uint256[]",
+                    "indexed": false,
+                    "internalType": "uint256[]"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "TokensBurned",
+            "inputs": [
+                {
+                    "name": "branchId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "burner",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "TokensMinted",
+            "inputs": [
+                {
+                    "name": "branchId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "minter",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
@@ -1729,6 +1948,11 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "UnsupportedTransfer",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "isControled",
             "inputs": []
         }
     ],
@@ -2489,7 +2713,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Membrane" :  [
+    "Membrane" : [
         {
             "type": "function",
             "name": "createMembrane",
@@ -3601,5 +3825,6 @@ export const ABIs: ABIKP = {
 export const RPCurl : {[key: string]: string } = {
     // "84532" : "https://base-sepolia.gateway.tenderly.co/jEm0PDO7ZJVvgOxvBZhg"
     "84532": process.env.BB_BASE_SEPOLIA_RPC || baseSepolia.rpcUrls.default.http[0],
-}
+    "11155420": process.env.OPTIMISM_SEPOLIA_RPC || baseSepolia.rpcUrls.default.http[0],
 
+}

@@ -1,143 +1,170 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { HStack, VStack, Box, Spinner, Text } from "@chakra-ui/react";
-import { TokenBalance } from "./TokenBalance";
+import React, { useState, useMemo, useEffect } from 'react';
+import { VStack, Box, Spinner, Text, Grid, GridItem, Flex, useBreakpointValue } from "@chakra-ui/react";
 import { BalanceItem } from "@covalenthq/client-sdk";
-import { sortChainBalances, evmAddressToFullIntegerString, NodeState } from "../lib/chainData";
-import { NodeStacks } from "./NodeStacks";
+import { sortChainBalances, evmAddressToFullIntegerString, NodeState, UserContext } from "../lib/chainData";
 import { User } from "@privy-io/react-auth";
-import { useFetchUserData, FetchedUserData } from '../hooks/useFetchUserData';
+import { useFetchUserData } from '../hooks/useFetchUserData';
 import HeaderButtons from './HeaderButtons';
 import { cols } from '../const/colors';
+import { useRouter } from 'next/router';
+import GridNavigation from './GridNavigation';
+import BalanceList from './BalanceList';
+import { getDistinguishableColor, getReverseColor } from "../const/colors";
 
 interface RootStack {
   privyData: User | null;
   ready: boolean;
   authenticated: boolean;
   logout: () => Promise<void>;
+  login: () => Promise<void>;
 }
 
-export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated, logout }) => {
+export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated, logout, login }) => {
+  const router = useRouter();
+  const { nodeId } = router.query;
   const { userData, isLoading, error } = useFetchUserData(ready, authenticated, privyData);
   
   const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
-  const [activeStack, setActiveStack] = useState<NodeState[]>([]);
   const [selectedToken, setSelectedToken] = useState('');
+  const [filteredNodes, setFilteredNodes] = useState<NodeState[]>([]);
+  const [contrastingColor, setContrastingColor] = useState<string>('#000000');
+  const [reverseColor, setReverseColor] = useState<string>('#ffffff');
 
-  useEffect(() => {
-    console.log("userData:", userData);
-  }, [userData]);
+  const balanceListWidth = useBreakpointValue({ base: "100%", sm: "33%", md: "25%" });
 
   const sortedUniqueBalances = useMemo(() => {
-    console.log("Computing sortedUniqueBalances");
-    if (userData && Array.isArray(userData.balanceItems)) {
-      console.log("balanceItems:", userData.balanceItems);
-      // Create a map to store unique balances by contract address
+    if (userData?.balanceItems) {
       const balanceMap = new Map<string, BalanceItem>();
-      
       userData.balanceItems.forEach(item => {
-        if (item && item.contract_address) {
+        if (item?.contract_address) {
           balanceMap.set(item.contract_address, item);
         }
       });
-
-      // Convert map back to array and sort
-      const uniqueBalances = Array.from(balanceMap.values());
-      const sortedBalances = sortChainBalances(uniqueBalances, []);
-      console.log("Sorted balances:", sortedBalances);
-      return sortedBalances;
+      return sortChainBalances(Array.from(balanceMap.values()), []);
     }
-    console.log("No valid balanceItems found");
     return [];
   }, [userData]);
 
-  const nodeStack = useMemo(() => {
-    return userData?.userContext?.nodes || [];
-  }, [userData]);
-
-  const handleNodeClick = useCallback((nodeId: string) => {
+  const handleNodeClick = (nodeId: string) => {
     if (nodeId.includes('0x')) {
       setSelectedToken(nodeId);
       nodeId = evmAddressToFullIntegerString(nodeId);
-    } 
+    }
      
-    const selectedNode = nodeStack.find(n => n.nodeId === nodeId);
-    const path = selectedNode ? selectedNode.rootPath : [nodeId]; 
-    const newStack = nodeStack.filter(n => path.includes(n.nodeId));
-    setActiveStack(newStack);
-    setSelectedNode(selectedNode || null);
-  }, [nodeStack]);
+    const clickedNode = userData?.userContext.nodes.find(n => n.nodeId === nodeId);
+    setSelectedNode(clickedNode || null);
+  };
 
-  const getProtocolBalance = useCallback((contractAddress: string) => {
-    // Since we don't have WillBalanceItems in this structure, we'll return null
-    // You may need to adjust this based on where the protocol balance is stored
-    return null;
+  const handleTokenSelect = (tokenAddress: string) => {
+    setSelectedToken(tokenAddress);
+    const nodeId = evmAddressToFullIntegerString(tokenAddress);
+    const filteredNodes = userData?.userContext.nodes.filter(node => 
+      node.rootPath.includes(nodeId) || node.nodeId === nodeId
+    ) || [];
+    setFilteredNodes(filteredNodes);
+    if (filteredNodes.length > 0) {
+      setSelectedNode(filteredNodes[0]);
+    }
+
+    // Update colors
+    const newContrastingColor = getDistinguishableColor(`#${tokenAddress.slice(2, 8)}`, '#e2e8f0');
+    setContrastingColor(newContrastingColor);
+    setReverseColor(getReverseColor(newContrastingColor));
+  };
+
+  useEffect(() => {
+    if (userData?.userContext.nodes) {
+      setFilteredNodes(userData.userContext.nodes);
+    }
   }, [userData]);
 
-  if (isLoading) {
-    return <Spinner />;
-  }
-
-  if (error) {
-    return <Text>Error: {error.message}</Text>;
-  }
-
-  if (!userData || !Array.isArray(userData.balanceItems) || userData.balanceItems.length === 0) {
-    return <Text>No user balance data available.</Text>;
-  }
+  if (isLoading) return <Spinner />;
+  if (error) return <Text>Error: {error.message}</Text>;
 
   return (
-    <VStack align="stretch" spacing={2}>
-      <HeaderButtons logout={logout} userAddress={privyData?.wallet?.address} cols={cols} />
-
-      <Box
-        width="100%"
-        overflowX="auto"
-        overflowY="hidden"
-        css={{
-          '&::-webkit-scrollbar': {
-            height: '6px',
-          },
-          '&::-webkit-scrollbar-track': {
-            background: 'rgba(0, 0, 0, 0.1)',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: 'rgba(0, 0, 0, 0.3)',
-            borderRadius: '3px',
-          },
-          '&::-webkit-scrollbar-thumb:hover': {
-            background: 'rgba(0, 0, 0, 0.4)',
-          },
-        }}
-      >
-        <HStack spacing={1} py={1} px={1}>
-          {sortedUniqueBalances.length > 0 ? (
-            sortedUniqueBalances.map((balance) => {
-              const protocolBalance = getProtocolBalance(balance.contract_address);
-              return (
-                <Box key={balance.contract_address} onClick={() => handleNodeClick(balance.contract_address)}>
-                  <TokenBalance
-                    balanceItem={balance}
-                    isSelected={selectedToken === balance.contract_address}
-                    protocolDeposit={userData.WillBalanceItems.find(
-                      (item) => item.contract_address === balance.contract_address
-                    )}
-                  />
-                  <hr />
-                  {protocolBalance && (
-                    <Text fontSize="xs" mt={1}>
-                      Protocol Balance: {protocolBalance.pretty_quote}
-                    </Text>
-                  )}
-                </Box>
-              );
-            })
-          ) : (
-            <Text>No balance items to display</Text>
-          )}
-        </HStack>
-      </Box>
-    
-      <NodeStacks stack={activeStack} nodeClick={handleNodeClick} />
+    <VStack spacing={4} align="stretch" height="100vh">
+      <HeaderButtons 
+        logout={logout} 
+        login={login}
+        userAddress={privyData?.wallet?.address || ''} 
+        cols={cols}
+        nodes={filteredNodes}
+        onNodeSelect={handleNodeClick}
+      />
+      <Flex direction={{ base: "column", sm: "row" }} align="stretch" flex={1} overflow="hidden">
+        <Box 
+          width={balanceListWidth} 
+          minWidth="80px" 
+          maxWidth="13%"
+          overflowY="auto"
+          css={{
+            '&::-webkit-scrollbar': {
+              width: '6px',
+            },
+            '&::-webkit-scrollbar-track': {
+              width: '8px',
+              background: 'transparent',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: contrastingColor,
+              borderRadius: '24px',
+              transition: 'background-color 0.2s',
+            },
+            '&:hover::-webkit-scrollbar-thumb': {
+              background: reverseColor,
+            },
+            'scrollbarWidth': 'thin',
+            'scrollbarColor': `${contrastingColor} transparent`,
+            '&:hover': {
+              scrollbarColor: `${reverseColor} transparent`,
+            },
+            'transition': 'scrollbar-color 0.2s',
+          }}
+        >
+          <BalanceList 
+            balances={sortedUniqueBalances} 
+            selectedToken={selectedToken} 
+            handleTokenSelect={handleTokenSelect} 
+            willBalanceItems={userData?.WillBalanceItems || []}
+            contrastingColor={contrastingColor}
+            reverseColor={reverseColor}
+          />
+        </Box>
+        <Box flex={1} minWidth={{ base: "100%", sm: "60%" }} overflowY="auto">
+          <Grid templateColumns='repeat(1, 1fr)' gap={4}>
+            <GridItem>
+              {filteredNodes.length > 0 && (
+                <GridNavigation
+                  nodes={filteredNodes}
+                  initialNodeId={(nodeId as string) || (filteredNodes[0]?.nodeId || '')}
+                  onNodeSelect={handleNodeClick}
+                />
+              )}
+            </GridItem>
+            {selectedNode && (
+              <GridItem>
+                <NodeDetails node={selectedNode} />
+              </GridItem>
+            )}
+          </Grid>
+        </Box>
+      </Flex>
     </VStack>
   );
 };
+
+const NodeDetails: React.FC<{ node: NodeState }> = ({ node }) => (
+  <Box p={4} borderWidth={1} borderRadius="lg">
+    <Text fontWeight="bold" fontSize="xl">{node.nodeId}</Text>
+    <Text>Inflation: {node.inflation}</Text>
+    <Text>Balance Anchor: {node.balanceAnchor}</Text>
+    <Text>Balance Budget: {node.balanceBudget}</Text>
+    <Text>Value: {node.value}</Text>
+    <Text>Membrane ID: {node.membraneId}</Text>
+    <Text>Members: {node.membersOfNode.join(', ')}</Text>
+    <Text>Children: {node.childrenNodes.join(', ')}</Text>
+    <Text>Root Path: {node.rootPath.join(' > ')}</Text>
+  </Box>
+);
+
+export default AllStacks;

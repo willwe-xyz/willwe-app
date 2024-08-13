@@ -26,6 +26,7 @@ export const useFetchUserData = (ready: boolean, authenticated: boolean, user: U
         try {
           const chainID = user.wallet.chainId.includes(":") ? user.wallet.chainId.split(":")[1] : user.wallet.chainId;
           const userAddress = user.wallet.address;
+          console.log("chainId isssssss --------", chainID);
 
           const [willBalsRes, userDataRes] = await Promise.all([
             fetch(`/api/get/WILLBALANCES/${chainID}/0x0000000000000000000000000000000000000000`),

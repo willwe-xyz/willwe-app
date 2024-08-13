@@ -4,7 +4,9 @@ import { getAllData, getNodeData, getCovalentERC20TokenBalancesOf } from '../../
 import { deployments, getChainById } from '../../../const/envconst'
 import JSONBig from 'json-bigint'
 import { BalanceItem } from '@covalenthq/client-sdk'
-import { NodeState } from '../../../lib/chainData'  // Ensure this import path is correct
+import { NodeState } from '../../../lib/chainData'  
+import {RPCurl} from '../../../const/envconst' 
+
 
 type Operation = 'WILLBALANCES' | 'userdata' | 'NODE-DATA' 
 
@@ -17,7 +19,6 @@ interface ParsedQuery {
 }
 
 export type UserContext = {
-  activeBalancesResponse: [string[], string[]],
   nodes: NodeState[],
 }
 
@@ -47,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const currentChain = getChainById(chainID)
-    const provider = new ethers.JsonRpcProvider(currentChain.rpcUrls.default.http[0])
+    const provider = new ethers.JsonRpcProvider(RPCurl[chainID] || currentChain.rpcUrls.default.http[0])
     let response: any = null
 
     switch (operation) {

@@ -1,4 +1,4 @@
-import {deployments, ABIs, RPCurl, COV_APIKEY} from '../const/envconst'
+import {deployments, ABIs, RPCurl, COV_APIKEY, getChainById} from '../const/envconst'
 import {BalanceItem , ChainID, CovalentClient} from "@covalenthq/client-sdk";
 import {Contract, ethers} from "ethers";
 
@@ -37,22 +37,20 @@ export type UserSignal = {
 
 
 export type UserContext = {
-  activeBalancesResponse: [string[], string[]],
-  nodes: NodeState[],
+  userNodes: NodeState[],
+  nodesOfRoot: NodeState[]
 }
 
-export type NodeState =  {
-  nodeId: string,
-  inflation: string,
-  balanceAnchor: string,
-  balanceBudget: string,
-  value: string,
-  membraneId: string,
-  membersOfNode: string[],
-  childrenNodes: string[],
-  rootPath: string[],
-  signals: UserSignal[]
+export type NodeState = {
+  basicInfo: string[]; // [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, currentUserBalance]
+  membersOfNode: string[]; // Assuming 'address' is represented as a string
+  childrenNodes: string[];
+  rootPath: string[];
+  signals: UserSignal[]; // Assuming UserSignal is defined elsewhere
 }
+
+
+
 
 
 export type activeBalancesResponse = {
@@ -88,21 +86,23 @@ export type SocialData = {
 
 
 
-export async function getAllData(chainID: string, userAddr: string) {
+// export async function getAllData(chainID: string, userAddr: string, rootTokenAddr: string) : Promise<UserContext> {
 
-let PB  : ProtocolBalance[] = [];
-let NodeStates : NodeState[] = [];
+// // let PB  : ProtocolBalance[] = [];
 
-const provider = new ethers.JsonRpcProvider(RPCurl[chainID]);
-const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
-// const Membrane : Contract= new Contract(deployments["Membrane"][chainID], ABIs["Membrane"], provider);
-// const RVI : Contract = new Contract(deployments["RVI"][chainID], ABIs["RVI"], provider);
-// const Execution : Contract = new Contract(deployments["Execution"][chainID], ABIs["Execution"], provider);
+// const currentChain = getChainById(chainID)
+// const provider = new ethers.JsonRpcProvider(RPCurl[chainID] || currentChain.rpcUrls.default.http[0])
 
+// const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
+// // const Membrane : Contract= new Contract(deployments["Membrane"][chainID], ABIs["Membrane"], provider);
+// // const RVI : Contract = new Contract(deployments["RVI"][chainID], ABIs["RVI"], provider);
+// // const Execution : Contract = new Contract(deployments["Execution"][chainID], ABIs["Execution"], provider);
 
-const UC :UserContext = await WW.getInteractionDataOf(userAddr);
-return UC;
-}
+// let UserNodes : NodeState[] = await WW.getInteractionDataOf(userAddr);
+// let RootNodes : NodeState[] = await WW.getAllNodesForRoot(rootTokenAddr);
+// const UC :UserContext = {userNodes: UserNodes, nodesOfRoot: RootNodes} 
+// return UC;
+// }
 
 export async function getNodeData(chainID: string, nodeId: string) : Promise<NodeState> {
 
