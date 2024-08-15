@@ -1,5 +1,5 @@
 import React from 'react';
-import { HStack, Button, Icon } from '@chakra-ui/react';
+import { HStack, Button } from '@chakra-ui/react';
 import { ComposePanel } from './ComposePanel';
 import { LogOut, Puzzle, LogIn } from 'lucide-react';
 
@@ -8,11 +8,11 @@ interface HeaderButtonsProps {
   logout: () => void;
   login: () => void;
   cols: any;
-  nodes: any[]; // Add this prop for the GridNavigation
-  onNodeSelect: (nodeId: string) => void; // Add this prop for the GridNavigation
+  nodes: any[];
+  onNodeSelect: (nodeId: string) => void;
 }
 
-export const HeaderButtons: React.FC<HeaderButtonsProps> = ({ 
+const HeaderButtons: React.FC<HeaderButtonsProps> = ({ 
   userAddress, 
   logout, 
   login, 
@@ -21,39 +21,41 @@ export const HeaderButtons: React.FC<HeaderButtonsProps> = ({
   onNodeSelect
 }) => {
   return (
-    <HStack justifyContent="flex-end" width="100%" spacing={2}>
+    <HStack spacing={2}>
       <ComposePanel>
         {(onOpen) => (
           <Button
-            leftIcon={<Puzzle color='white' size={18} />}
+            leftIcon={<Puzzle size={18} />}
             onClick={onOpen}
             size="sm"
-            colorScheme="blue"
-            variant="solid"
+            variant="outline"
+            color="black"
+            _hover={{ bg: 'purple.500', color: 'white' }}
           >
             Compose
           </Button>
         )}
       </ComposePanel>
 
-
       {userAddress ? (
         <Button
-          leftIcon={<LogOut color='white' size={18} />}
+          leftIcon={<LogOut size={18} />}
           onClick={logout}
           size="sm"
-          colorScheme="purple"
-          variant="solid"
+          variant="outline"
+          color="black"
+          _hover={{ bg: 'purple.500', color: 'white' }}
         >
           {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
         </Button>
       ) : (
         <Button
-          leftIcon={<LogIn color='white' size={18} />}
+          leftIcon={<LogIn size={18} />}
           onClick={login}
           size="sm"
-          colorScheme="green"
-          variant="solid"
+          variant="outline"
+          color="black"
+          _hover={{ bg: 'purple.500', color: 'white' }}
         >
           Login
         </Button>

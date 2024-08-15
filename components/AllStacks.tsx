@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { VStack, Box, Spinner, Text, Grid, GridItem, Flex, useBreakpointValue } from "@chakra-ui/react";
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { VStack, Box, Spinner, Text, Grid, GridItem, Flex, Button, HStack } from "@chakra-ui/react";
 import { BalanceItem } from "@covalenthq/client-sdk";
 import { sortChainBalances, evmAddressToFullIntegerString, NodeState, UserContext } from "../lib/chainData";
 import { User } from "@privy-io/react-auth";
@@ -10,6 +10,7 @@ import { useRouter } from 'next/router';
 import GridNavigation from './GridNavigation';
 import BalanceList from './BalanceList';
 import { getDistinguishableColor, getReverseColor } from "../const/colors";
+import { Palette } from 'lucide-react';
 
 interface RootStack {
   privyData: User | null;
@@ -29,8 +30,8 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
   const [filteredNodes, setFilteredNodes] = useState<NodeState[]>([]);
   const [contrastingColor, setContrastingColor] = useState<string>('#000000');
   const [reverseColor, setReverseColor] = useState<string>('#ffffff');
-
-  const balanceListWidth = useBreakpointValue({ base: "100%", sm: "33%", md: "25%" });
+  const [hoverColor, setHoverColor] = useState<string>('#e2e8f0');
+  const [isHovering, setIsHovering] = useState(false);
 
   const sortedUniqueBalances = useMemo(() => {
     if (userData?.balanceItems) {
@@ -66,11 +67,23 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
       setSelectedNode(filteredNodes[0]);
     }
 
-    // Update colors
-    const newContrastingColor = getDistinguishableColor(`#${tokenAddress.slice(2, 8)}`, '#e2e8f0');
+    updateColors(tokenAddress);
+  };
+
+  const updateColors = useCallback((baseColor: string) => {
+    const newContrastingColor = getDistinguishableColor(`#${baseColor.slice(-6)}`, '#e2e8f0');
     setContrastingColor(newContrastingColor);
     setReverseColor(getReverseColor(newContrastingColor));
-  };
+    setHoverColor(getReverseColor(newContrastingColor, 0.2));
+  }, []);
+
+  const cycleColors = useCallback(() => {
+    const currentHue = parseInt(contrastingColor.slice(1), 16);
+    const newHue = (currentHue + 0.08 * 16777215) % 16777215; // 8% shift on the spectrum
+    const noise = Math.floor(Math.random() * 1000); // Add some noise
+    const newColor = Math.floor(newHue + noise).toString(16).padStart(6, '0');
+    updateColors(newColor);
+  }, [contrastingColor, updateColors]);
 
   useEffect(() => {
     if (userData?.userContext.nodes) {
@@ -78,48 +91,52 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
     }
   }, [userData]);
 
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    if (isHovering) {
+      intervalId = setInterval(cycleColors, 100); // Cycle every 100ms while hovering
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isHovering, cycleColors]);
+
   if (isLoading) return <Spinner />;
   if (error) return <Text>Error: {error.message}</Text>;
 
   return (
     <VStack spacing={4} align="stretch" height="100vh">
-      <HeaderButtons 
-        logout={logout} 
-        login={login}
-        userAddress={privyData?.wallet?.address || ''} 
-        cols={cols}
-        nodes={filteredNodes}
-        onNodeSelect={handleNodeClick}
-      />
-      <Flex direction={{ base: "column", sm: "row" }} align="stretch" flex={1} overflow="hidden">
+      <Flex justifyContent="space-between" alignItems="center" p={2}>
+        <Button
+          leftIcon={<Palette size={18} />}
+          onClick={cycleColors}
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => setIsHovering(false)}
+          size="sm"
+          variant="outline"
+          color="black"
+          _hover={{ bg: 'purple.500', color: 'white' }}
+        >
+          Cycle
+        </Button>
+        <HeaderButtons 
+          logout={logout} 
+          login={login}
+          userAddress={privyData?.wallet?.address || ''} 
+          cols={cols}
+          nodes={filteredNodes}
+          onNodeSelect={handleNodeClick}
+        />
+      </Flex>
+      <Box height="2px" bg={contrastingColor} transition="background-color 0.3s" />
+      <Flex direction="row" align="stretch" flex={1} overflow="hidden">
         <Box 
-          width={balanceListWidth} 
-          minWidth="80px" 
-          maxWidth="13%"
-          overflowY="auto"
-          css={{
-            '&::-webkit-scrollbar': {
-              width: '6px',
-            },
-            '&::-webkit-scrollbar-track': {
-              width: '8px',
-              background: 'transparent',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: contrastingColor,
-              borderRadius: '24px',
-              transition: 'background-color 0.2s',
-            },
-            '&:hover::-webkit-scrollbar-thumb': {
-              background: reverseColor,
-            },
-            'scrollbarWidth': 'thin',
-            'scrollbarColor': `${contrastingColor} transparent`,
-            '&:hover': {
-              scrollbarColor: `${reverseColor} transparent`,
-            },
-            'transition': 'scrollbar-color 0.2s',
-          }}
+          width="auto"
+          minWidth="80px"
+          padding={0}
+          borderRight="1px solid"
+          borderColor="gray.200"
+          position="relative"
         >
           <BalanceList 
             balances={sortedUniqueBalances} 
@@ -128,9 +145,10 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
             willBalanceItems={userData?.WillBalanceItems || []}
             contrastingColor={contrastingColor}
             reverseColor={reverseColor}
+            hoverColor={hoverColor}
           />
         </Box>
-        <Box flex={1} minWidth={{ base: "100%", sm: "60%" }} overflowY="auto">
+        <Box flex={1} overflowY="auto" marginLeft={2}>
           <Grid templateColumns='repeat(1, 1fr)' gap={4}>
             <GridItem>
               {filteredNodes.length > 0 && (
