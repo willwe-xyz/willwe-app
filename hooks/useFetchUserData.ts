@@ -8,7 +8,7 @@ export type UserContext = {
 }
 
 export type FetchedUserData = {
-  UserBalanceItems: BalanceItem[];
+  balanceItems: BalanceItem[];
   WillBalanceItems: BalanceItem[];
   userContext: UserContext;
 }
@@ -26,10 +26,9 @@ export const useFetchUserData = (ready: boolean, authenticated: boolean, user: U
         try {
           const chainID = user.wallet.chainId.includes(":") ? user.wallet.chainId.split(":")[1] : user.wallet.chainId;
           const userAddress = user.wallet.address;
-          console.log("chainId isssssss --------", chainID);
 
           const [willBalsRes, userDataRes] = await Promise.all([
-            fetch(`/api/get/WILLBALANCES/${chainID}/0x0000000000000000000000000000000000000000`),
+            fetch(`/api/get/WILLBALANCES/${chainID}`),
             fetch(`/api/get/userdata/${chainID}/${userAddress}`, { cache: 'no-store' })
           ]);
 
@@ -38,10 +37,12 @@ export const useFetchUserData = (ready: boolean, authenticated: boolean, user: U
           }
 
           const willBals: BalanceItem[] = await willBalsRes.json();
-          const fetchedUserData: FetchedUserData = await userDataRes.json();
-          fetchedUserData.WillBalanceItems = willBals;
+          const fetchedUserData: Omit<FetchedUserData, 'WillBalanceItems'> = await userDataRes.json();
 
-          setUserData(fetchedUserData);
+          setUserData({
+            ...fetchedUserData,
+            WillBalanceItems: willBals
+          });
         } catch (error) {
           console.error("Failed to fetch user data", error);
           setError(error instanceof Error ? error : new Error('An unknown error occurred'));

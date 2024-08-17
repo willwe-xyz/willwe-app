@@ -1,86 +1,132 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { ethers } from 'ethers'
-import { getAllData, getNodeData, getCovalentERC20TokenBalancesOf } from '../../../lib/chainData'
-import { deployments, getChainById } from '../../../const/envconst'
-import JSONBig from 'json-bigint'
-import { BalanceItem } from '@covalenthq/client-sdk'
-import { NodeState } from '../../../lib/chainData'  
-import {RPCurl} from '../../../const/envconst' 
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { Contract, ethers } from 'ethers';
+import { ChainID, BalanceItem } from "@covalenthq/client-sdk";
+import { RPCurl, deployments, ABIs } from '../../../const/envconst';
+import { 
+  getCovalentERC20TokenBalancesOf, 
+  FetchedUserData, 
+  UserContext, 
+  NodeState, 
+  getAllNodesForRoot,
+  getNodeData
+} from '../../../lib/chainData';
 
-
-type Operation = 'WILLBALANCES' | 'userdata' | 'NODE-DATA' 
+type Operation = 'WILLBALANCES' | 'userdata' | 'NODE-DATA' | 'ALLNODESFOR';
 
 interface ParsedQuery {
-  operation: Operation
-  chainID: string
-  contract?: string
-  userAddress?: string
-  nodeId?: string
+  operation: Operation;
+  chainID: ChainID;
+  param1?: string;
+  param2?: string;
 }
 
-export type UserContext = {
-  nodes: NodeState[],
-}
+type RawNodeState = {
+  basicInfo: any[];
+  membersOfNode: any[];
+  childrenNodes: any[];
+  rootPath: any[];
+  signals: {
+    MembraneInflation: [any[], any[]];
+    lastRedistSignal: any[];
+  }[];
+};
 
-export type FetchedUserData = {
-  balanceItems: BalanceItem[],
-  userContext: UserContext
-}
+const convertToString = (item: any): string => item.toString();
 
-function parseQuery(query: { params?: string[] }): ParsedQuery {
-  const [operation, chainID, thirdParam] = query.params || []
-  
+const parseNodeState = (NS: RawNodeState): NodeState => ({
+  basicInfo: NS.basicInfo.map(convertToString),
+  membersOfNode: NS.membersOfNode.map(convertToString),
+  childrenNodes: NS.childrenNodes.map(convertToString),
+  rootPath: NS.rootPath.map(convertToString),
+  signals: NS.signals.map(signal => ({
+    MembraneInflation: [
+      signal.MembraneInflation[0].map(convertToString),
+      signal.MembraneInflation[1].map(convertToString)
+    ],
+    lastRedistSignal: signal.lastRedistSignal.map(convertToString)
+  }))
+});
+
+const fetchUserInteractionData = async (userAddr: string, chainID: ChainID): Promise<NodeState[]> => {
+  const provider = new ethers.JsonRpcProvider(RPCurl[chainID]);
+  const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
+  const rawData = await WW.getInteractionDataOf(userAddr);
+  return rawData.map(parseNodeState);
+};
+
+const createUserContext = (nodes: NodeState[]): UserContext => ({ nodes });
+
+const serializeData = (data: any): string => 
+  JSON.stringify(data, (_, value) => typeof value === 'bigint' ? value.toString() : value);
+
+function parseQuery(params: string[]): ParsedQuery {
+  const [operation, chainID, param1, param2] = params;
   return {
     operation: operation as Operation,
-    chainID,
-    contract: operation === 'WILLBALANCES' ? thirdParam : undefined,
-    userAddress: operation === 'userdata' ? thirdParam : undefined,
-    nodeId: operation === 'NODE-DATA' ? thirdParam : undefined
-  }
+    chainID: chainID as ChainID,
+    param1,
+    param2
+  };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  try {
-    const { operation, chainID, userAddress, nodeId, contract } = parseQuery(req.query)
-    
-    if (!operation || !chainID) {
-      return res.status(400).json({ error: "Operation and chainID are required" })
-    }
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
-    const currentChain = getChainById(chainID)
-    const provider = new ethers.JsonRpcProvider(RPCurl[chainID] || currentChain.rpcUrls.default.http[0])
-    let response: any = null
+  const { params } = req.query;
+  if (!Array.isArray(params) || params.length < 2) {
+    return res.status(400).json({ error: 'Invalid parameters' });
+  }
+
+  const { operation, chainID, param1, param2 } = parseQuery(params);
+
+  try {
+    let response: any;
 
     switch (operation) {
       case 'WILLBALANCES':
-        response = await getCovalentERC20TokenBalancesOf(deployments["WillWe"][chainID], chainID)
-        break
-      case 'userdata':
-        if (!userAddress) {
-          return res.status(400).json({ error: "userAddress is required for userdata operation" })
-        }
-        const allData = await getAllData(chainID, userAddress)
-        response = {
-          balanceItems: allData.chainBalances,
-          userContext: {
-            activeBalancesResponse: allData.activeBalancesResponse,
-            nodes: allData.userNodes
+        response = await getCovalentERC20TokenBalancesOf(deployments["WillWe"][chainID], chainID);
+        break;
+
+        case 'userdata':
+          if (!param1) {
+            return res.status(400).json({ error: "User address is required for userdata operation" });
           }
-        } as FetchedUserData
-        break
+          console.log('Fetching user data for:', param1, 'on chain:', chainID);
+          const [balances, nodes] = await Promise.all([
+            getCovalentERC20TokenBalancesOf(param1, chainID),
+            fetchUserInteractionData(param1, chainID)
+          ]);
+          console.log('Balances:', balances);
+          console.log('Nodes:', nodes);
+          response = {
+            balanceItems: balances || [],
+            userContext: createUserContext(nodes)
+          };
+          break;
       case 'NODE-DATA':
-        if (!nodeId) {
-          return res.status(400).json({ error: "nodeId is required for NODE-DATA operation" })
+        if (!param1) {
+          return res.status(400).json({ error: "Node ID is required for NODE-DATA operation" });
         }
-        response = await getNodeData(chainID, nodeId)
-        break
+        response = await getNodeData(chainID, param1);
+        break;
+
+      case 'ALLNODESFOR':
+        if (!param1) {
+          return res.status(400).json({ error: "Root address is required for ALLNODESFOR operation" });
+        }
+        response = await getAllNodesForRoot(chainID, param1);
+        break;
+
       default:
-        return res.status(400).json({ error: "Invalid operation" })
+        return res.status(400).json({ error: "Invalid operation" });
     }
 
-    res.status(200).json(JSONBig.parse(JSONBig.stringify(response)))
+    const serializedData = JSON.parse(serializeData(response));
+    res.status(200).json(serializedData);
   } catch (error) {
-    console.error('Error in API handler:', error)
-    res.status(500).json({ error: "Internal server error" })
+    console.error('Error in API handler:', error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
   }
 }

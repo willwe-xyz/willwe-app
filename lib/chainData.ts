@@ -1,7 +1,7 @@
 import {deployments, ABIs, RPCurl, COV_APIKEY, getChainById} from '../const/envconst'
 import {BalanceItem , ChainID, CovalentClient} from "@covalenthq/client-sdk";
 import {Contract, ethers} from "ethers";
-
+export type {BalanceItem} from "@covalenthq/client-sdk";
 
 export interface QueryResponse {
   data: Data | null;
@@ -114,6 +114,40 @@ export async function getNodeData(chainID: string, nodeId: string) : Promise<Nod
   return NodeData;
   }
 
+
+  export type RootNodeState = {
+    nodes: NodeState[];
+    depth: string;
+  }
+  
+
+  export async function getAllNodesForRoot(chainID: string, tokenAddress: string): Promise<RootNodeState[]> {
+    const provider = new ethers.JsonRpcProvider(RPCurl[chainID]);
+    const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
+    const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress);
+  
+    // Group nodes by their depth
+    const nodesByDepth: { [depth: string]: NodeState[] } = {};
+  
+    nodeData.forEach((node) => {
+      const depth = (node.rootPath.length - 1).toString();
+      if (!nodesByDepth[depth]) {
+        nodesByDepth[depth] = [];
+      }
+      nodesByDepth[depth].push(node);
+    });
+  
+    // Convert the grouped nodes into RootNodeState array
+    const rootNodeStates: RootNodeState[] = Object.entries(nodesByDepth).map(([depth, nodes]) => ({
+      nodes,
+      depth
+    }));
+  
+    // Sort the result by depth
+    rootNodeStates.sort((a, b) => parseInt(a.depth) - parseInt(b.depth));
+  
+    return rootNodeStates;
+  }
 
 
 
