@@ -1,16 +1,14 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { VStack, Box, Spinner, Text, Grid, GridItem, Flex } from "@chakra-ui/react";
+import { VStack, Box, Spinner, Text, Flex, useBreakpointValue } from "@chakra-ui/react";
 import { BalanceItem } from "@covalenthq/client-sdk";
-import { sortChainBalances, evmAddressToFullIntegerString, NodeState } from "../lib/chainData";
+import { sortChainBalances, NodeState } from "../lib/chainData";
 import { User } from "@privy-io/react-auth";
 import { useFetchUserData } from '../hooks/useFetchUserData';
 import HeaderButtons from './HeaderButtons';
 import { cols } from '../const/colors';
 import { useRouter } from 'next/router';
-import GridNavigation from './GridNavigation';
-import BalanceList from './BalanceList';
-
-import {ActivityLogs, NodeDetails, PaletteButton, useColorManagement, RootNodeDetails} from './AllStackComponents';
+import { PaletteButton, useColorManagement } from './AllStackComponents';
+import MainContent from './MainContent';
 
 interface RootStack {
   privyData: User | null;
@@ -26,8 +24,9 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
   
   const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
   const [selectedToken, setSelectedToken] = useState('');
-  const [filteredNodes, setFilteredNodes] = useState<NodeState[]>([]);
   const { colorState, updateColors, cycleColors } = useColorManagement();
+
+  const chainId = useMemo(() => privyData?.wallet?.chainId?.toString() || '', [privyData]);
 
   const sortedUniqueBalances = useMemo(() => {
     if (userData?.balanceItems) {
@@ -40,7 +39,7 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
       return sortChainBalances(Array.from(balanceMap.values()), []);
     }
     return [];
-  }, [userData]);
+  }, [userData?.balanceItems]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
     const clickedNode = userData?.userContext.nodes.find(n => n.nodeId === nodeId);
@@ -51,33 +50,18 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
 
   const handleTokenSelect = useCallback((tokenAddress: string) => {
     setSelectedToken(tokenAddress);
-    const nodeId = evmAddressToFullIntegerString(tokenAddress);
-    console.log("fx() - handleTokenSelect : ", tokenAddress, nodeId);
-
-    const filteredNodes = userData?.userContext.nodes.filter(node => 
-      node.rootPath[0] === nodeId
-    ) || [];
-    setFilteredNodes(filteredNodes);
-    if (filteredNodes.length > 0) {
-      console.log("selected root node : ", filteredNodes[0]);
-      setSelectedNode(filteredNodes[0]);
-    } else {
-      setSelectedNode(null);
-    }
+    setSelectedNode(null);
     updateColors(tokenAddress);
-  }, [userData?.userContext.nodes, updateColors]);
-
-  useEffect(() => {
-    if (userData?.userContext.nodes) {
-      setFilteredNodes(userData.userContext.nodes);
-    }
-  }, [userData]);
+    console.log("Selected token:", tokenAddress, "Chain ID:", chainId);
+  }, [updateColors, chainId]);
 
   useEffect(() => {
     if (router.pathname === '/node/undefined') {
       router.replace('/dashboard');
     }
   }, [router]);
+
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   if (isLoading) return <Spinner />;
   if (error) return <Text>Error: {error.message}</Text>;
@@ -95,49 +79,23 @@ export const AllStacks: React.FC<RootStack> = ({ privyData, ready, authenticated
           login={login}
           userAddress={privyData?.wallet?.address || ''} 
           cols={cols}
-          nodes={filteredNodes}
+          nodes={userData?.userContext.nodes || []}
           onNodeSelect={handleNodeClick}
         />
       </Flex>
       <Box height="2px" bg={colorState.contrastingColor} transition="background-color 0.3s" />
-      <Flex direction="row" align="stretch" flex={1} overflow="hidden">
-        <Box 
-          width="auto"
-          minWidth="80px"
-          padding={0}
-          borderRight="1px solid"
-          borderColor="gray.200"
-          position="relative"
-        >
-          <BalanceList 
-            balances={sortedUniqueBalances} 
-            selectedToken={selectedToken} 
-            handleTokenSelect={handleTokenSelect} 
-            willBalanceItems={userData?.WillBalanceItems || []}
-            {...colorState}
-          />
-        </Box>
-        <Box flex={1} overflowY="auto" marginLeft={2}>
-          {selectedNode ? (
-            <Grid templateColumns='repeat(1, 1fr)' gap={4}>
-              <GridItem>
-                <GridNavigation
-                  nodes={filteredNodes}
-                  initialNodeId={selectedNode.nodeId}
-                  onNodeSelect={handleNodeClick}
-                />
-              </GridItem>
-              <GridItem>
-                <NodeDetails node={selectedNode} />
-              </GridItem>
-            </Grid>
-          ) : selectedToken ? (
-            <RootNodeDetails rootToken={selectedToken} nodes={filteredNodes} />
-          ) : (
-            <ActivityLogs />
-          )}
-        </Box>
-      </Flex>
+      <MainContent
+        isMobile={isMobile}
+        sortedUniqueBalances={sortedUniqueBalances}
+        selectedToken={selectedToken}
+        handleTokenSelect={handleTokenSelect}
+        willBalanceItems={userData?.WillBalanceItems || []}
+        colorState={colorState}
+        selectedNode={selectedNode}
+        userData={userData}
+        handleNodeClick={handleNodeClick}
+        chainId={chainId}
+      />
     </VStack>
   );
 };

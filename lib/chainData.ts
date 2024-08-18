@@ -124,6 +124,7 @@ export async function getNodeData(chainID: string, nodeId: string) : Promise<Nod
   export async function getAllNodesForRoot(chainID: string, tokenAddress: string): Promise<RootNodeState[]> {
     const provider = new ethers.JsonRpcProvider(RPCurl[chainID]);
     const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
+    console.log("Fetching all root nodes for ", chainID , tokenAddress);
     const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress);
   
     // Group nodes by their depth
