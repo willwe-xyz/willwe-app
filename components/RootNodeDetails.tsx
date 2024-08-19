@@ -1,188 +1,223 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import {
-  Box, Heading, Text, VStack, Alert, AlertIcon, Button, Skeleton,
-  Code, Accordion, AccordionItem, AccordionButton, AccordionPanel,
-  AccordionIcon, Input, InputGroup, InputLeftElement, Tooltip
-} from "@chakra-ui/react";
+import { Box, Grid, GridItem, Button, Spinner, Tooltip, Text, Flex, VStack, HStack, Badge } from "@chakra-ui/react";
 import { NodeState, getAllNodesForRoot, RootNodeState } from "../lib/chainData";
-import { RefreshCw, Search, ChevronRight } from 'lucide-react';
+import { RefreshCw, TrendingUp, TrendingDown, Users } from 'lucide-react';
+import { useRouter } from 'next/router';
 import { motion } from "framer-motion";
+import { ethers } from 'ethers';
+import chroma from 'chroma-js';
 
 interface RootNodeDetailsProps {
   chainId: string;
   rootToken: string;
+  selectedTokenColor?: string;
 }
 
 interface NodeBoxProps {
   node: NodeState;
   depth: number;
+  maxDepth: number;
+  parentValue: number;
+  rootValue: number;
+  color: string;
+  onClick: () => void;
 }
 
-const NodeBox: React.FC<NodeBoxProps> = ({ node, depth }) => {
-  const [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, currentUserBalance] = node.basicInfo;
+const NodeBox: React.FC<NodeBoxProps> = ({ node, depth, maxDepth, parentValue, rootValue, color, onClick }) => {
+  const [nodeId, inflation, balanceAnchor, balanceBudget] = node.basicInfo;
+  const nodeValue = parseFloat(ethers.formatEther(balanceBudget));
+  const relativeToParent = parentValue > 0 ? nodeValue / parentValue : 0;
+  const relativeToRoot = rootValue > 0 ? nodeValue / rootValue : 0;
+
+  const baseColor = chroma(color);
+  const nodeColor = baseColor.saturate(relativeToParent * 2).brighten(3 - relativeToRoot * 3);
+
+  const formattedBA = parseFloat(ethers.formatEther(balanceAnchor)).toFixed(4);
+  const formattedBB = parseFloat(ethers.formatEther(balanceBudget)).toFixed(4);
+  const formattedInflation = (parseFloat(inflation) / 1e9).toFixed(2);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, delay: depth * 0.1 }}
-    >
-      <Accordion allowToggle>
-        <AccordionItem>
-          <h2>
-            <AccordionButton>
-              <Box flex="1" textAlign="left">
-                <Text fontWeight="bold">Node ID: {nodeId}</Text>
-              </Box>
-              <AccordionIcon />
-            </AccordionButton>
-          </h2>
-          <AccordionPanel pb={4}>
-            <VStack align="start" spacing={1}>
-              <Text fontSize="sm">Inflation: {inflation}</Text>
-              <Text fontSize="sm">Balance Anchor: {balanceAnchor}</Text>
-              <Text fontSize="sm">Balance Budget: {balanceBudget}</Text>
-              <Text fontSize="sm">Value: {value}</Text>
-              <Text fontSize="sm">Membrane ID: {membraneId}</Text>
-              <Text fontSize="sm">Current User Balance: {currentUserBalance}</Text>
-              <Text fontSize="sm">Members: {node.membersOfNode.length}</Text>
-              <Text fontSize="sm">Children: {node.childrenNodes.length}</Text>
-              {node.childrenNodes.length > 0 && (
-                <Button
-                  size="sm"
-                  leftIcon={<ChevronRight size={16} />}
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Implement logic to expand child nodes
-                  }}
-                >
-                  Show Children
-                </Button>
-              )}
-            </VStack>
-          </AccordionPanel>
-        </AccordionItem>
-      </Accordion>
+    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={onClick}>
+      <Box
+        width="100%"
+        height="120px"
+        borderWidth={2}
+        borderColor={nodeColor.darken().hex()}
+        borderRadius="md"
+        overflow="hidden"
+        cursor="pointer"
+        boxShadow="md"
+        bg={nodeColor.hex()}
+        position="relative"
+        p={3}
+      >
+        <VStack align="stretch" height="100%" justify="space-between">
+          <HStack justify="space-between">
+            <Text fontSize="sm" fontWeight="bold">{nodeId.slice(0, 8)}...</Text>
+            <HStack>
+              <Users size={14} />
+              <Text fontSize="xs">{node.membersOfNode.length}</Text>
+            </HStack>
+          </HStack>
+          <VStack align="stretch" spacing={1}>
+            <Text fontSize="xs">BA: {formattedBA}</Text>
+            <Text fontSize="xs">BB: {formattedBB}</Text>
+          </VStack>
+          <HStack justify="space-between">
+            <Badge colorScheme={parseFloat(formattedInflation) > 0 ? "green" : "red"} fontSize="xs">
+              {parseFloat(formattedInflation) > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+              {formattedInflation}%
+            </Badge>
+            <Text fontSize="xs">Depth: {depth}</Text>
+          </HStack>
+        </VStack>
+        <Box
+          position="absolute"
+          bottom={0}
+          left={0}
+          width="100%"
+          height="4px"
+          bg={baseColor.darken(2).hex()}
+          opacity={(depth + 1) / (maxDepth + 1)}
+        />
+      </Box>
     </motion.div>
   );
 };
 
-const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({ chainId, rootToken }) => {
+export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({ chainId, rootToken, selectedTokenColor = '#3182CE' }) => {
   const [nodes, setNodes] = useState<RootNodeState[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [rawError, setRawError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
-
-  const numericChainId = useMemo(() => {
-    const match = chainId.match(/:\s*(\d+)/);
-    return match ? match[1] : chainId;
-  }, [chainId]);
+  const [error, setError] = useState<Error | null>(null);
+  const router = useRouter();
 
   const fetchNodes = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    setRawError(null);
-    
-    if (!numericChainId || !rootToken) {
-      setError(`Missing ${!numericChainId ? 'chainId' : 'rootToken'}`);
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      console.log("Fetching nodes for chainId:", numericChainId, "and rootToken:", rootToken);
-      const fetchedNodes = await getAllNodesForRoot(numericChainId, rootToken);
+      const fetchedNodes = await getAllNodesForRoot(chainId, rootToken);
       setNodes(fetchedNodes);
     } catch (error) {
       console.error("Error fetching nodes:", error);
-      setError("Failed to fetch nodes. Please check the console for more details.");
-      setRawError(error instanceof Error ? error.message : String(error));
+      setError(error instanceof Error ? error : new Error('An unknown error occurred'));
     } finally {
       setIsLoading(false);
     }
-  }, [numericChainId, rootToken]);
+  }, [chainId, rootToken]);
 
   useEffect(() => {
     fetchNodes();
-  }, [fetchNodes, retryCount]);
+  }, [fetchNodes]);
 
-  const handleRetry = () => {
-    setRetryCount(prev => prev + 1);
+  const handleRetry = () => fetchNodes();
+
+  const handleNodeClick = (nodeId: string) => {
+    router.push(`/nodes/${nodeId}`);
   };
 
-  const filteredNodes = useMemo(() => {
-    return nodes.map(rootNode => ({
-      ...rootNode,
-      nodes: rootNode.nodes.filter(node => 
-        node.basicInfo[0].toLowerCase().includes(searchTerm.toLowerCase()) ||
-        node.basicInfo.some(info => info.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
-    })).filter(rootNode => rootNode.nodes.length > 0);
-  }, [nodes, searchTerm]);
+  const { colorMap, gridData, maxDepth, rootValue, totalNodes, totalValue, totalMembers } = useMemo(() => {
+    const baseColor = chroma(selectedTokenColor);
+    const colorMap: { [key: string]: string } = {};
+    const grid: NodeState[][] = [];
+    let maxDepth = 0;
+    let rootValue = 0;
+    let totalNodes = 0;
+    let totalValue = 0;
+    let totalMembers = 0;
 
-  if (isLoading) {
-    return (
-      <Box p={4}>
-        <Skeleton height="40px" mb={4} />
-        <VStack spacing={4}>
-          {[...Array(6)].map((_, index) => (
-            <Skeleton key={index} height="100px" width="100%" />
-          ))}
-        </VStack>
-      </Box>
-    );
-  }
+    const generateColor = (parentColor: string, index: number) => {
+      return chroma(parentColor)
+        .set('hsl.h', (chroma(parentColor).get('hsl.h') + 60 * index) % 360)
+        .hex();
+    };
 
-  if (error) {
-    return (
-      <Alert status="error" flexDirection="column" alignItems="center" justifyContent="center" textAlign="center" p={4}>
-        <AlertIcon boxSize="40px" mr={0} />
-        <Text mt={4} mb={2}>{error}</Text>
-        {rawError && (
-          <Code p={2} maxWidth="100%" overflowX="auto" fontSize="sm" mt={2}>
-            {rawError}
-          </Code>
-        )}
-        <Button leftIcon={<RefreshCw size={16} />} onClick={handleRetry} mt={4}>
-          Retry
-        </Button>
-      </Alert>
-    );
-  }
+    nodes.forEach((rootNode) => {
+      const depth = parseInt(rootNode.depth);
+      maxDepth = Math.max(maxDepth, depth);
+      
+      if (!grid[depth]) {
+        grid[depth] = [];
+      }
+      
+      rootNode.nodes.forEach((node, index) => {
+        grid[depth].push(node);
+        const parentKey = node.rootPath.slice(0, -1).join('-') || 'root';
+        const nodeKey = node.rootPath.join('-');
+        
+        if (!colorMap[nodeKey]) {
+          colorMap[nodeKey] = generateColor(colorMap[parentKey] || baseColor.hex(), index);
+        }
+        
+        const nodeValue = parseFloat(ethers.formatEther(node.basicInfo[3]));
+        if (depth === 0) {
+          rootValue += nodeValue;
+        }
+        totalValue += nodeValue;
+        totalNodes++;
+        totalMembers += node.membersOfNode.length;
+      });
+    });
+
+    grid.forEach(row => row.sort((a, b) => parseFloat(ethers.formatEther(b.basicInfo[3])) - parseFloat(ethers.formatEther(a.basicInfo[3]))));
+
+    return { colorMap, gridData: grid, maxDepth, rootValue, totalNodes, totalValue, totalMembers };
+  }, [nodes, selectedTokenColor]);
+
+  if (isLoading) return <Spinner size="xl" />;
+  if (error) return <Button onClick={handleRetry}>Retry</Button>;
 
   return (
     <Box p={4}>
-      <Heading size="md" mb={4}>Nodes for Root Token: {rootToken}</Heading>
-      <Text mb={2}>Chain ID: {chainId} (Numeric: {numericChainId})</Text>
-      <Button leftIcon={<RefreshCw size={16} />} onClick={handleRetry} mb={4} size="sm">
-        Refresh
-      </Button>
-      <InputGroup mb={4}>
-        <InputLeftElement pointerEvents="none">
-          <Search size={20} />
-        </InputLeftElement>
-        <Input
-          placeholder="Search nodes..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </InputGroup>
-      {filteredNodes.length === 0 ? (
-        <Text>No nodes found matching your search criteria.</Text>
+      <Flex justify="space-between" align="center" mb={4}>
+        <Button leftIcon={<RefreshCw size={16} />} onClick={handleRetry} size="sm">Refresh</Button>
+        <VStack align="flex-end" spacing={1}>
+          <HStack>
+            <Text fontWeight="bold">Total Nodes:</Text>
+            <Badge colorScheme="blue">{totalNodes}</Badge>
+          </HStack>
+          <HStack>
+            <Text fontWeight="bold">Total Members:</Text>
+            <Badge colorScheme="green">{totalMembers}</Badge>
+          </HStack>
+          <HStack>
+            <Text fontWeight="bold">Total Value:</Text>
+            <Badge colorScheme="purple">{totalValue.toFixed(4)}</Badge>
+          </HStack>
+        </VStack>
+      </Flex>
+      
+      {gridData.length === 0 ? (
+        <Text>No nodes found for this root token.</Text>
       ) : (
-        filteredNodes.map((rootNode, index) => (
-          <Box key={index} mb={4}>
-            <Heading size="sm" mb={2}>Depth: {rootNode.depth}</Heading>
-            <VStack spacing={4} align="stretch">
-              {rootNode.nodes.map((node) => (
-                <NodeBox key={node.basicInfo[0]} node={node} depth={rootNode.depth} />
-              ))}
-            </VStack>
-          </Box>
-        ))
+        <VStack spacing={8}>
+          {gridData.map((row, depth) => (
+            <Grid
+              key={depth}
+              templateColumns={`repeat(${Math.min(row.length, 4)}, 1fr)`}
+              gap={4}
+              width="100%"
+            >
+              {row.map((node) => {
+                const nodeKey = node.rootPath.join('-');
+                const parentKey = node.rootPath.slice(0, -1).join('-') || 'root';
+                const parentValue = depth > 0 ? parseFloat(ethers.formatEther(gridData[depth - 1].find(n => n.basicInfo[0] === parentKey)?.basicInfo[3] || '0')) : rootValue;
+                return (
+                  <GridItem key={node.basicInfo[0]}>
+                    <NodeBox
+                      node={node}
+                      depth={depth}
+                      maxDepth={maxDepth}
+                      parentValue={parentValue}
+                      rootValue={rootValue}
+                      color={colorMap[nodeKey] || colorMap.root}
+                      onClick={() => handleNodeClick(node.basicInfo[0])}
+                    />
+                  </GridItem>
+                );
+              })}
+            </Grid>
+          ))}
+        </VStack>
       )}
     </Box>
   );

@@ -51,7 +51,7 @@ const MainContent: React.FC<MainContentProps> = ({
           handleNodeClick={handleNodeClick}
         />
       ) : selectedToken && chainId ? (
-        <RootNodeDetails chainId={chainId} rootToken={selectedToken} />
+        <RootNodeDetails chainId={chainId} rootToken={selectedToken}     selectedTokenColor={colorState.backgroundColor} />
       ) : selectedToken ? (
         <NoChainIdWarning />
       ) : (

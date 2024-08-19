@@ -122,32 +122,65 @@ export async function getNodeData(chainID: string, nodeId: string) : Promise<Nod
   
 
   export async function getAllNodesForRoot(chainID: string, tokenAddress: string): Promise<RootNodeState[]> {
-    const provider = new ethers.JsonRpcProvider(RPCurl[chainID]);
-    const WW = new Contract(deployments["WillWe"][chainID], ABIs["WillWe"], provider);
-    console.log("Fetching all root nodes for ", chainID , tokenAddress);
-    const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress);
+    console.log(`getAllNodesForRoot called with chainID: ${chainID}, tokenAddress: ${tokenAddress}`);
   
-    // Group nodes by their depth
-    const nodesByDepth: { [depth: string]: NodeState[] } = {};
+    // Handle the chainID prefix
+    const actualChainID = chainID.startsWith('eip155:') ? chainID.split(':')[1] : chainID;
   
-    nodeData.forEach((node) => {
-      const depth = (node.rootPath.length - 1).toString();
-      if (!nodesByDepth[depth]) {
-        nodesByDepth[depth] = [];
+    if (!actualChainID) {
+      throw new Error(`Invalid chain ID format: ${chainID}`);
+    }
+  
+    if (!RPCurl[actualChainID]) {
+      throw new Error(`No RPC URL found for chain ID: ${actualChainID}`);
+    }
+  
+    if (!ethers.isAddress(tokenAddress)) {
+      throw new Error(`Invalid token address: ${tokenAddress}`);
+    }
+  
+    try {
+      const provider = new ethers.JsonRpcProvider(RPCurl[actualChainID]);
+      console.log(`Provider created for chain ID ${actualChainID}`);
+  
+      if (!deployments["WillWe"][actualChainID]) {
+        throw new Error(`No WillWe contract deployment found for chain ID: ${actualChainID}`);
       }
-      nodesByDepth[depth].push(node);
-    });
   
-    // Convert the grouped nodes into RootNodeState array
-    const rootNodeStates: RootNodeState[] = Object.entries(nodesByDepth).map(([depth, nodes]) => ({
-      nodes,
-      depth
-    }));
+      const WW = new Contract(deployments["WillWe"][actualChainID], ABIs["WillWe"], provider);
+      console.log(`WillWe contract instance created at ${deployments["WillWe"][actualChainID]}`);
   
-    // Sort the result by depth
-    rootNodeStates.sort((a, b) => parseInt(a.depth) - parseInt(b.depth));
+      console.log(`Fetching all root nodes for chain ID ${actualChainID}, token address ${tokenAddress}`);
+      const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress);
+      console.log(`Fetched ${nodeData.length} nodes`);
   
-    return rootNodeStates;
+      // Group nodes by their depth
+      const nodesByDepth: { [depth: string]: NodeState[] } = {};
+  
+      nodeData.forEach((node) => {
+        const depth = (node.rootPath.length - 1).toString();
+        if (!nodesByDepth[depth]) {
+          nodesByDepth[depth] = [];
+        }
+        nodesByDepth[depth].push(node);
+      });
+  
+      // Convert the grouped nodes into RootNodeState array
+      const rootNodeStates: RootNodeState[] = Object.entries(nodesByDepth).map(([depth, nodes]) => ({
+        nodes,
+        depth
+      }));
+  
+      // Sort the result by depth
+      rootNodeStates.sort((a, b) => parseInt(a.depth) - parseInt(b.depth));
+  
+      console.log(`Processed ${rootNodeStates.length} distinct depths`);
+      return rootNodeStates;
+  
+    } catch (error) {
+      console.error('Error in getAllNodesForRoot:', error);
+      throw error;
+    }
   }
 
 
