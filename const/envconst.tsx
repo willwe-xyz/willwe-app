@@ -46,22 +46,18 @@ export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 //   WillWe:  0x264336ec33fab9CC7859b2C5b431f42020a20E75
 //   ###############################
 
-// == Logs ==
-                                                               
-//      Deploy script started for network :  84532
-                                                               
 //   ###############################
 //   ##### Deployer :  0x259c1F1FaF930a23D009e85867A6b5206b2a6d44 | expected 0x259c1F1FaF930a23D009e85867A6b5206b2a6d44
 //   #________________________________
 //   ###############################
    
-//   Fun deployed at :  0xf32F9c6004Cd998Bc0319290b348A1DbFFc4Ef67
+//   Fun deployed at :  0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41
    
 //   ###############################
 //   ###############################
    
-//   Root Value in Control :  0x6EdE1d85BBC8922E493F5507Df3BCC3960599a97
-//   Controling Extrmity:  0xA9aD58dAB684B27a6D9D2D24F8303a17732bca2f
+//   Root Value in Control :  0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae
+//   Controling Extrmity:  0xc01F390530ca36Ec1871F9E4D74b0B2aaf852A44
 //   ###############################
 //   Balances: deployer | Agent 
 //   0 10000000
@@ -70,11 +66,11 @@ export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 //   ###############################
    
 //   ###############################
-//   Foundation Agent Safe at:  0xA9aD58dAB684B27a6D9D2D24F8303a17732bca2f
-//   Will:  0x6EdE1d85BBC8922E493F5507Df3BCC3960599a97
-//   Membrane:  0x214FEA19B4ef0C3d1440398ECd0A2523dCf14210
-//   Execution:  0x96B88F2B098AE65CFD93B226F1a9444EC4043eBe
-//   WillWe:  0xf32F9c6004Cd998Bc0319290b348A1DbFFc4Ef67
+//   Foundation Agent Safe at:  0xc01F390530ca36Ec1871F9E4D74b0B2aaf852A44
+//   Will:  0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae
+//   Membrane:  0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f
+//   Execution:  0x3D52a3A5D12505B148a46B5D69887320Fc756F96
+//   WillWe:  0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41
 //   ###############################
 
 type Deployments = {
@@ -91,19 +87,19 @@ type ABIKP = {
 
 export const deployments: Deployments  = {
     "WillWe" : {
-        "84532" :  "0xf32f9c6004cd998bc0319290b348a1dbffc4ef67",
+        "84532" :  "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
         "11155420": "0x264336ec33fab9CC7859b2C5b431f42020a20E75"
 
     },
     "Membrane" : {
-    "84532": "0x214fea19b4ef0c3d1440398ecd0a2523dcf14210",
+    "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
     "11155420": "0x36C70f035c39e4072822F8C33C4427ae59298451"
 },
     "Execution": { 
-        "84532": "0x96b88f2b098ae65cfd93b226f1a9444ec4043ebe",
+        "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
         "11155420": "0xEDf98928d9513051D75e72244e0b4DD254DB1462"
 }, "RVI": {
-        "84532" : "0x6ede1d85bbc8922e493f5507df3bcc3960599a97",
+        "84532" : "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
         "11155420": "0x9d814170537951fE8eD28A534CDE9F30Fd731A64"
 } 
 
@@ -1090,6 +1086,25 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "redistributePath",
+            "inputs": [
+                {
+                    "name": "nodeId_",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "distributedAmt",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
             "name": "removeSignature",
             "inputs": [
                 {
@@ -1817,6 +1832,11 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
+            "name": "Disabled",
+            "inputs": []
+        },
+        {
+            "type": "error",
             "name": "EOA",
             "inputs": []
         },
@@ -1887,12 +1907,22 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
+            "name": "NoiseNotVoice",
+            "inputs": []
+        },
+        {
+            "type": "error",
             "name": "NotMember",
             "inputs": []
         },
         {
             "type": "error",
             "name": "NotOwnerNorApproved",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "PathTooShort",
             "inputs": []
         },
         {
@@ -1913,6 +1943,11 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "StableRoot",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "TargetIsRoot",
             "inputs": []
         },
         {

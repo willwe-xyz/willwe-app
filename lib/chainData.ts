@@ -36,21 +36,19 @@ export type UserSignal = {
 }
 
 
+export type NodeState = {
+  basicInfo: string[]; // [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, currentUserBalance]
+  membersOfNode: string[];
+  childrenNodes: string[];
+  rootPath: string[];
+  signals: UserSignal[];
+}
+
+
 export type UserContext = {
   userNodes: NodeState[],
   nodesOfRoot: NodeState[]
 }
-
-export type NodeState = {
-  basicInfo: string[]; // [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, currentUserBalance]
-  membersOfNode: string[]; // Assuming 'address' is represented as a string
-  childrenNodes: string[];
-  rootPath: string[];
-  signals: UserSignal[]; // Assuming UserSignal is defined elsewhere
-}
-
-
-
 
 
 export type activeBalancesResponse = {

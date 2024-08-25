@@ -1,17 +1,20 @@
 import '../styles/globals.css';
-import type {AppProps} from 'next/app';
+import type { AppProps } from 'next/app';
 import Head from 'next/head';
-import {PrivyProvider} from '@privy-io/react-auth';
-import {useRouter} from 'next/router';
-// Replace this with any of the networks listed at https://viem.sh/docs/clients/chains.html
-  import {localhost,base, optimismSepolia} from 'viem/chains';
+import { PrivyProvider } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
+import { localhost, base, optimismSepolia } from 'viem/chains';
 import { ChakraProvider } from '@chakra-ui/react';
-import { init, AirstackProvider } from "@airstack/airstack-react";
+import { AirstackProvider } from "@airstack/airstack-react";
+import { useEffect, useState } from 'react';
 
-
-function MyApp({Component, pageProps}: AppProps) {
+function MyApp({ Component, pageProps }: AppProps) {
   const router = useRouter();
+  const [isClient, setIsClient] = useState(false);
 
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   return (
     <>
@@ -39,9 +42,9 @@ function MyApp({Component, pageProps}: AppProps) {
         onSuccess={() => router.push('/dashboard')}
       >
         <ChakraProvider>
-        <AirstackProvider apiKey={process.env.NEXT_PUBLIC_AIRSTACK_API_KEY ?? ""}>
-        <Component {...pageProps} />
-        </AirstackProvider>
+          <AirstackProvider apiKey={process.env.NEXT_PUBLIC_AIRSTACK_API_KEY ?? ""}>
+            {isClient ? <Component {...pageProps} /> : null}
+          </AirstackProvider>
         </ChakraProvider>
       </PrivyProvider>
     </>
