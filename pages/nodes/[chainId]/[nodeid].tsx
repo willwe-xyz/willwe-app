@@ -1,66 +1,67 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { Suspense } from 'react';
 import { useRouter } from 'next/router';
-import { Spinner, Box, Alert, AlertIcon } from '@chakra-ui/react';
+import { Box, Spinner } from '@chakra-ui/react';
+import { usePrivy } from '@privy-io/react-auth';
+import { SWRConfig } from 'swr';
+import dynamic from 'next/dynamic';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { useCovalentBalances } from '../../../hooks/useCovalentBalances';
-import NodeViewLayout from '../../../components/NodeViewLayout';
-import { usePrivy } from '@privy-io/react-auth';
+import LoadingSkeleton from '../../../components/LoadingSkeleton';
+
+const NodeViewLayout = dynamic(() => import('../../../components/NodeViewLayout'), {
+  loading: () => <LoadingSkeleton />
+});
 
 const NodePage: React.FC = () => {
   const router = useRouter();
   const { user, ready, authenticated } = usePrivy();
   const { chainId, nodeid } = router.query;
 
-  const { nodeData, isLoading: isNodeLoading, error: nodeError, refetch: refetchNodeData } = useNodeData(
-    chainId as string,
-    nodeid as string
-  );
-
-  const { balances, isLoading: isBalancesLoading, error: balancesError, refetch: refetchBalances } = useCovalentBalances(
-    authenticated ? user?.wallet?.address || '' : '',
-    chainId as string
-  );
-
-  useEffect(() => {
-    if (chainId && nodeid) {
-      refetchNodeData();
-      if (authenticated && refetchBalances) {
-        refetchBalances();
-      }
-    }
-  }, [chainId, nodeid, authenticated, refetchNodeData, refetchBalances]);
-
-  const handleNodeSelect = useCallback((selectedNodeId: string) => {
-    if (chainId) {
-      router.push(`/nodes/${chainId}/${selectedNodeId}`);
-    }
-  }, [chainId, router]);
-
   if (!router.isReady || !chainId || !nodeid) {
-    return <Spinner size="xl" />;
+    return <LoadingSkeleton />;
   }
 
-  if (typeof chainId !== 'string' || typeof nodeid !== 'string') {
-    return (
-      <Box p={4}>
-        <Alert status="error">
-          <AlertIcon />
-          Invalid chainID or nodeId in URL
-        </Alert>
-      </Box>
-    );
-  }
+  return (
+    <SWRConfig
+      value={{
+        suspense: true,
+        revalidateOnFocus: false,
+      }}
+    >
+      <Suspense fallback={<LoadingSkeleton />}>
+        <NodePageContent
+          chainId={chainId as string}
+          nodeid={nodeid as string}
+          userAddress={authenticated ? user?.wallet?.address : ''}
+        />
+      </Suspense>
+    </SWRConfig>
+  );
+};
+
+const NodePageContent: React.FC<{ chainId: string; nodeid: string; userAddress: string }> = ({
+  chainId,
+  nodeid,
+  userAddress,
+}) => {
+  const router = useRouter();
+  const { nodeData } = useNodeData(chainId, nodeid);
+  const { balances } = useCovalentBalances(userAddress, chainId);
+
+  const handleNodeSelect = (selectedNodeId: string) => {
+    router.push(`/nodes/${chainId}/${selectedNodeId}`);
+  };
 
   return (
     <NodeViewLayout
       chainId={chainId}
       nodeId={nodeid}
       balances={balances}
-      isBalancesLoading={isBalancesLoading}
-      balancesError={balancesError}
+      isBalancesLoading={false}
+      balancesError={null}
       nodeData={nodeData}
-      isNodeLoading={isNodeLoading}
-      nodeError={nodeError}
+      isNodeLoading={false}
+      nodeError={null}
       onNodeSelect={handleNodeSelect}
     />
   );

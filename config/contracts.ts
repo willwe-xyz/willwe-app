@@ -1,10 +1,13 @@
 import { deployments, ABIs, getChainById } from './deployments';
 
+
+
 export { deployments, ABIs, getChainById };
 
 export const getRPCUrl = (chainId: string): string => {
   let url;
-  switch (chainId) {
+  const cleanChainId = chainId.includes('eip') ? chainId.toString().replace('eip155:', '') : chainId
+  switch (cleanChainId) {
     case '84532': // Base Sepolia
       url = process.env.NEXT_PUBLIC_RPC_URL_BASE_SEPOLIA;
       break;
@@ -15,7 +18,7 @@ export const getRPCUrl = (chainId: string): string => {
       url = process.env.NEXT_PUBLIC_RPC_URL_SCROLL_TESTNET;
       break;
     default:
-      url = process.env[`NEXT_PUBLIC_RPC_URL_${chainId}`];
+      url = process.env[`NEXT_PUBLIC_RPC_URL_${cleanChainId}`]; /// use getChainByID or set some defaults via viem
   }
   
   if (!url) {
