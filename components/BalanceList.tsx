@@ -31,15 +31,15 @@ const BalanceList: React.FC<BalanceListProps> = ({
     overflowX="hidden"
     css={{
       '&::-webkit-scrollbar': {
-        width: '6px',
+        width: '4px',
       },
       '&::-webkit-scrollbar-track': {
-        width: '6px',
+        width: '4px',
         background: 'transparent',
       },
       '&::-webkit-scrollbar-thumb': {
         background: reverseColor,
-        borderRadius: '3px',
+        borderRadius: '2px',
       },
       '&:hover::-webkit-scrollbar-thumb': {
         background: contrastingColor,
@@ -60,7 +60,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
           backgroundColor: hoverColor,
         }}
         width="100%"
-        padding={0}
+        padding={1}
       >
         <TokenBalance
           balanceItem={balance}
@@ -71,7 +71,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
         />
       </Box>
     )) : (
-      <Text>No balance items to display</Text>
+      <Text color={contrastingColor}>No balance items to display</Text>
     )}
   </VStack>
 );

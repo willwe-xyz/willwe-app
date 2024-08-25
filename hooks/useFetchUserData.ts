@@ -1,61 +1,48 @@
 import { useState, useEffect } from 'react';
-import { BalanceItem, NodeState } from '../lib/chainData';
-import { User } from "@privy-io/react-auth";
-
-export type UserContext = {
-  activeBalancesResponse: [string[], string[]],
-  nodes: NodeState[],
-}
-
-export type FetchedUserData = {
-  balanceItems: BalanceItem[];
-  WillBalanceItems: BalanceItem[];
-  userContext: UserContext;
-}
+import { User } from '@privy-io/react-auth';
+import { useCovalentBalances } from './useCovalentBalances';
+import { FetchedUserData, UserContext } from '../types/chainData';
+import { getCovalentApiKey } from '../config/apiKeys';
 
 export const useFetchUserData = (ready: boolean, authenticated: boolean, user: User | null) => {
   const [userData, setUserData] = useState<FetchedUserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  const chainId = user?.wallet?.chainId;
+  const address = user?.wallet?.address;
+
+  const { balances, isLoading: isBalancesLoading, error: balancesError } = useCovalentBalances(address || '', chainId || '1');
+
   useEffect(() => {
-    const fetchData = async () => {
-      if (ready && authenticated && user?.wallet) {
-        setIsLoading(true);
-        setError(null);
-        try {
-          const chainID = user.wallet.chainId.includes(":") ? user.wallet.chainId.split(":")[1] : user.wallet.chainId;
-          const userAddress = user.wallet.address;
+    const fetchUserContext = async () => {
+      if (!ready || !authenticated || !user || !chainId || !address) {
+        setIsLoading(false);
+        return;
+      }
 
-          const [willBalsRes, userDataRes] = await Promise.all([
-            fetch(`/api/get/WILLBALANCES/${chainID}`),
-            fetch(`/api/get/userdata/${chainID}/${userAddress}`, { cache: 'no-store' })
-          ]);
+      try {
+        // Fetch user context from your backend or smart contract
+        // This is a placeholder and should be replaced with your actual implementation
+        const userContext: UserContext = {
+          userNodes: [],
+          nodesOfRoot: []
+        };
 
-          if (!willBalsRes.ok || !userDataRes.ok) {
-            throw new Error('Failed to fetch data');
-          }
-
-          const willBals: BalanceItem[] = await willBalsRes.json();
-          const fetchedUserData: Omit<FetchedUserData, 'WillBalanceItems'> = await userDataRes.json();
-
-          setUserData({
-            ...fetchedUserData,
-            WillBalanceItems: willBals
-          });
-        } catch (error) {
-          console.error("Failed to fetch user data", error);
-          setError(error instanceof Error ? error : new Error('An unknown error occurred'));
-        } finally {
-          setIsLoading(false);
-        }
-      } else {
+        setUserData({
+          balanceItems: balances,
+          userContext: userContext
+        });
+      } catch (err) {
+        console.error('Error fetching user context:', err);
+        setError(err instanceof Error ? err : new Error('An unknown error occurred'));
+      } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, [ready, authenticated, user]);
+    fetchUserContext();
+  }, [ready, authenticated, user, chainId, address, balances]);
 
-  return { userData, isLoading, error };
+  return { userData, isLoading: isLoading || isBalancesLoading, error: error || balancesError };
 };

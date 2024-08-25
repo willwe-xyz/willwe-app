@@ -1,13 +1,12 @@
 import React from 'react';
-import { HStack, Button } from '@chakra-ui/react';
+import { HStack, Button, Text } from '@chakra-ui/react';
 import { ComposePanel } from './ComposePanel';
 import { LogOut, Puzzle, LogIn } from 'lucide-react';
 
 interface HeaderButtonsProps {
-  userAddress: string | undefined;
+  userAddress: string;
   logout: () => void;
   login: () => void;
-  cols: any;
   nodes: any[];
   onNodeSelect: (nodeId: string) => void;
 }
@@ -16,7 +15,6 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
   userAddress, 
   logout, 
   login, 
-  cols,
   nodes,
   onNodeSelect
 }) => {
@@ -36,6 +34,10 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
           </Button>
         )}
       </ComposePanel>
+
+      {nodes.length > 0 && (
+        <Text>Nodes: {nodes.length}</Text>
+      )}
 
       {userAddress ? (
         <Button

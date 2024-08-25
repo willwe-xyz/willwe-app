@@ -1,28 +1,14 @@
 import React from 'react';
 import { Box, Text, VStack, HStack, Badge, Code, Table, Thead, Tbody, Tr, Th, Td } from "@chakra-ui/react";
-
-export type UserSignal = {
-    MembraneAndInflation: [string[], string[]],
-    lastReidstriSig: string[]
-}
-
-export type NodeState = {
-  basicInfo: string[]; // [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, currentUserBalance]
-  membersOfNode: string[]; // Assuming 'address' is represented as a string
-  childrenNodes: string[];
-  rootPath: string[];
-  signals: UserSignal[];
-}
+import { NodeState } from '../types/chainData';
 
 interface NodeDetailsProps {
-  node: NodeState | null;
+  node: NodeState;
   chainId: string;
   onNodeSelect?: (nodeId: string) => void;
 }
 
 const NodeDetails: React.FC<NodeDetailsProps> = ({ node, chainId, onNodeSelect }) => {
-  console.log("NodeDetails props:", { node, chainId });
-
   if (!node) {
     return (
       <Box borderWidth="1px" borderRadius="lg" p={4} bg="yellow.50">

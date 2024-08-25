@@ -98,8 +98,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             getCovalentERC20TokenBalancesOf(param1, chainID),
             fetchUserInteractionData(param1, chainID)
           ]);
-          console.log('Balances:', balances);
-          console.log('Nodes:', nodes);
+          console.log('Balances len:', balances.length);
+          console.log('Nodes len:', nodes.length);
           response = {
             balanceItems: balances || [],
             userContext: createUserContext(nodes)

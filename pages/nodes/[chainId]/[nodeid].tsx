@@ -1,45 +1,69 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { Box, Spinner, Text } from '@chakra-ui/react';
-import { NodeState, getNodeData } from '../../../lib/chainData';
-import NodeDetails from '../../../components/NodeDetails';
+import { Spinner, Box, Alert, AlertIcon } from '@chakra-ui/react';
+import { useNodeData } from '../../../hooks/useNodeData';
+import { useCovalentBalances } from '../../../hooks/useCovalentBalances';
+import NodeViewLayout from '../../../components/NodeViewLayout';
+import { usePrivy } from '@privy-io/react-auth';
 
-const NodeDetailsPage: React.FC = () => {
+const NodePage: React.FC = () => {
   const router = useRouter();
+  const { user, ready, authenticated } = usePrivy();
   const { chainId, nodeid } = router.query;
-  const [node, setNode] = useState<NodeState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const { nodeData, isLoading: isNodeLoading, error: nodeError, refetch: refetchNodeData } = useNodeData(
+    chainId as string,
+    nodeid as string
+  );
+
+  const { balances, isLoading: isBalancesLoading, error: balancesError, refetch: refetchBalances } = useCovalentBalances(
+    authenticated ? user?.wallet?.address || '' : '',
+    chainId as string
+  );
 
   useEffect(() => {
-    const fetchNodeData = async () => {
-      if (typeof chainId !== 'string' || typeof nodeid !== 'string') return;
-      
-      try {
-        setIsLoading(true);
-        const nodeData = await getNodeData(chainId, nodeid);
-        setNode(nodeData);
-      } catch (err) {
-        console.error('Error fetching node data:', err);
-        setError('Failed to fetch node data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     if (chainId && nodeid) {
-      fetchNodeData();
+      refetchNodeData();
+      if (authenticated && refetchBalances) {
+        refetchBalances();
+      }
     }
-  }, [chainId, nodeid]);
+  }, [chainId, nodeid, authenticated, refetchNodeData, refetchBalances]);
 
-  if (isLoading) return <Spinner />;
-  if (error) return <Text color="red.500">{error}</Text>;
+  const handleNodeSelect = useCallback((selectedNodeId: string) => {
+    if (chainId) {
+      router.push(`/nodes/${chainId}/${selectedNodeId}`);
+    }
+  }, [chainId, router]);
+
+  if (!router.isReady || !chainId || !nodeid) {
+    return <Spinner size="xl" />;
+  }
+
+  if (typeof chainId !== 'string' || typeof nodeid !== 'string') {
+    return (
+      <Box p={4}>
+        <Alert status="error">
+          <AlertIcon />
+          Invalid chainID or nodeId in URL
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
-    <Box p={4}>
-      <NodeDetails node={node} chainId={chainId as string} />
-    </Box>
+    <NodeViewLayout
+      chainId={chainId}
+      nodeId={nodeid}
+      balances={balances}
+      isBalancesLoading={isBalancesLoading}
+      balancesError={balancesError}
+      nodeData={nodeData}
+      isNodeLoading={isNodeLoading}
+      nodeError={nodeError}
+      onNodeSelect={handleNodeSelect}
+    />
   );
 };
 
-export default NodeDetailsPage;
+export default NodePage;
