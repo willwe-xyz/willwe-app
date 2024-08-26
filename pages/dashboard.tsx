@@ -15,7 +15,10 @@ export default function DashboardPage() {
 
   const { userData, isLoading: isUserDataLoading, error: userDataError } = useFetchUserData(ready, authenticated, user);
   
-  const chainId = user?.wallet?.chainId?.toString() || '';
+  const rawChaindid : string = user?.wallet?.chainId?.toString() || '';
+  const chainId = rawChaindid.includes('eip') ? rawChaindid.replace('eip155:', '') : '';
+  const cleanChainId = chainId.includes('eip') ? chainId.toString().replace('eip155:', '') : chainId
+
   
   const { balances, isLoading: isBalancesLoading, error: balancesError } = useCovalentBalances(
     authenticated ? user?.wallet?.address || '' : '',
