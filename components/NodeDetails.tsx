@@ -1,15 +1,28 @@
 import React from 'react';
 import { Box, Text, VStack, HStack, Badge, Code, Table, Thead, Tbody, Tr, Th, Td } from "@chakra-ui/react";
-import { NodeState } from '../types/chainData';
+import { NodeState, UserSignal } from '../types/chainData';
+import { useNodeData } from '../hooks/useNodeData';
+import router from 'next/router';
 
 interface NodeDetailsProps {
-  node: NodeState;
   chainId: string;
+  nodeId: string;
   onNodeSelect?: (nodeId: string) => void;
 }
 
-const NodeDetails: React.FC<NodeDetailsProps> = ({ node, chainId, onNodeSelect }) => {
-  if (!node) {
+const NodeDetails: React.FC<NodeDetailsProps> = ({  chainId, nodeId, onNodeSelect }) => {
+
+
+   chainId = chainId ? chainId : router.query.chainId as string;
+   nodeId = nodeId ? nodeId : router.query.nodeId as string;
+
+
+  const { data: nodeData, error, isNodeLoading } = useNodeData<NodeState>(chainId, nodeId);
+
+  
+  // We should investigate where this incorrect assignment occurs
+  if (!nodeData) {
+    // TODO: Handle the case where node data is not available
     return (
       <Box borderWidth="1px" borderRadius="lg" p={4} bg="yellow.50">
         <Text fontSize="xl" fontWeight="bold">No Node Data Available</Text>
@@ -18,7 +31,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, chainId, onNodeSelect }
     );
   }
 
-  const [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, currentUserBalance] = node.basicInfo;
+  
 
   return (
     <Box borderWidth="1px" borderRadius="lg" p={4}>
@@ -34,40 +47,40 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, chainId, onNodeSelect }
         </HStack>
         <HStack>
           <Text fontWeight="bold">Inflation:</Text>
-          <Text>{inflation}</Text>
+          <Text>{nodeData.basicInfo[1]}</Text>
         </HStack>
         <HStack>
           <Text fontWeight="bold">Balance Anchor:</Text>
-          <Text>{balanceAnchor}</Text>
+          <Text>{nodeData.basicInfo[2]}</Text>
         </HStack>
         <HStack>
           <Text fontWeight="bold">Balance Budget:</Text>
-          <Text>{balanceBudget}</Text>
+          <Text>{nodeData.basicInfo[3]}</Text>
         </HStack>
         <HStack>
           <Text fontWeight="bold">Value:</Text>
-          <Text>{value}</Text>
+          <Text>{nodeData.basicInfo[4]}</Text>
         </HStack>
         <HStack>
           <Text fontWeight="bold">Membrane ID:</Text>
-          <Text>{membraneId}</Text>
+          <Text>{nodeData.basicInfo[5]}</Text>
         </HStack>
         <HStack>
           <Text fontWeight="bold">Current User Balance:</Text>
-          <Text>{currentUserBalance}</Text>
+          <Text>{nodeData.basicInfo[6]}</Text>
         </HStack>
         <HStack>
           <Text fontWeight="bold">Members:</Text>
-          <Badge colorScheme="green">{node.membersOfNode.length}</Badge>
+          <Badge colorScheme="green">{nodeData.membersOfNode.length}</Badge>
         </HStack>
         <HStack>
           <Text fontWeight="bold">Children:</Text>
-          <Badge colorScheme="blue">{node.childrenNodes.length}</Badge>
+          <Badge colorScheme="blue">{nodeData.childrenNodes.length}</Badge>
         </HStack>
-        <Text fontWeight="bold">Root Path:</Text>
-        <Text fontSize="sm">{node.rootPath.join(' > ')}</Text>
+          <Text fontWeight="bold">Root Path:</Text>
+          <Text fontSize="sm">{nodeData.rootPath.join(' > ')}</Text>
         
-        {node.signals.length > 0 && (
+        {nodeData.signals.length > 0 && (
           <Box>
             <Text fontWeight="bold" mt={4}>Signals:</Text>
             <Table variant="simple" size="sm">
@@ -79,13 +92,13 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, chainId, onNodeSelect }
                 </Tr>
               </Thead>
               <Tbody>
-                {node.signals.map((signal, index) => (
-                  <Tr key={index}>
-                    <Td>{signal.MembraneAndInflation[0].join(', ')}</Td>
-                    <Td>{signal.MembraneAndInflation[1].join(', ')}</Td>
-                    <Td>{signal.lastReidstriSig.join(', ')}</Td>
-                  </Tr>
-                ))}
+              {nodeData.signals.map((signal: UserSignal, index: number) => (
+  <Tr key={index}>
+    <Td>{signal.MembraneAndInflation[0][index].join(', ')}</Td>
+    <Td>{signal.MembraneAndInflation[1][index].join(', ')}</Td>
+    <Td>{signal.lastReidstriSig[index].join(', ')}</Td>
+  </Tr>
+))}
               </Tbody>
             </Table>
           </Box>

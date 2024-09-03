@@ -1,8 +1,8 @@
-import useSWR from 'swr';
+import { useState, useEffect } from 'react';
 import { BalanceItem, ChainID, CovalentClient } from "@covalenthq/client-sdk";
 import { getCovalentApiKey } from '../config/apiKeys';
 
-const fetchBalances = async ([address, chainId]: [string, string]): Promise<BalanceItem[]> => {
+const fetchBalances = async (address: string, chainId: string): Promise<BalanceItem[]> => {
   if (!address || !chainId) return [];
 
   const apiKey = getCovalentApiKey();
@@ -18,14 +18,25 @@ const fetchBalances = async ([address, chainId]: [string, string]): Promise<Bala
 };
 
 export const useCovalentBalances = (address: string, chainId: string) => {
-  const { data, error } = useSWR([address, chainId], fetchBalances, {
-    suspense: true,
-    revalidateOnFocus: false,
-  });
+  const [balances, setBalances] = useState<BalanceItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  return {
-    balances: data || [],
-    isLoading: !error && !data,
-    error: error
-  };
+  useEffect(() => {
+    const loadBalances = async () => {
+      try {
+        const data = await fetchBalances(address, chainId);
+        setBalances(data);
+        setIsLoading(false);
+      } catch (err) {
+        setError(err as Error);
+        setIsLoading(false);
+      }
+    };
+
+    loadBalances();
+  }, [address, chainId]);
+
+  console.log("data in useCovalentBalances", balances);
+  return { balances, isLoading, error };
 };

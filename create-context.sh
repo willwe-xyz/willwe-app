@@ -1,55 +1,30 @@
-mkdir -p context-files && \
-rsync -R \
-  ./pages/dashboard.tsx \
-  ./pages/index.tsx \
-  ./pages/nodes/[chainId]/[nodeid].tsx \
-  ./pages/_app.tsx \
-  ./config/apiKeys.ts \
-  ./config/contracts.ts \
-  ./config/deployments.ts \
-  ./next.config.js \
-  ./README.md \
-  ./lib/localUtils.ts \
-  ./lib/airstackData.ts \
-  ./lib/chainData.ts \
-  ./lib/fonts.ts \
-  ./renovate.json \
-  ./components/navbar.tsx \
-  ./components/AllStacks.tsx \
-  ./components/HeaderButtons.tsx \
-  ./components/RootNodeDetails.tsx \
-  ./components/BalanceList.tsx \
-  ./components/AllStackComponents.tsx \
-  ./components/MainContent.tsx \
-  ./components/TokenBalance.tsx \
-  ./components/ComposePanel.tsx \
-  ./components/DM3.tsx \
-  ./components/formatted-date.tsx \
-  ./components/NodeDetails.tsx \
-  ./components/NodeNavigationGrid.tsx \
-  ./components/GridNavigation.tsx \
-  ./components/logo.tsx \
-  ./utils/chainUtils.ts \
-  ./utils/colors.ts \
-  ./utils/formatters.ts \
-  ./extensions.json \
-  ./postcss.config.js \
-  ./tailwind.config.js \
-  ./hooks/useFetchUserData.ts \
-  ./hooks/useColorManagement.ts \
-  ./hooks/useNodeData.ts \
-  ./hooks/useRootNodes.ts \
-  ./hooks/useAuth.ts \
-  ./hooks/useCovalentBalances.ts \
-  ./const/colors.tsx \
-  ./const/envconst.tsx \
-  ./const/contracts.tsx \
-  ./yarn.lock \
-  ./LICENSE \
-  ./next-env.d.ts \
-  ./tsconfig.json \
-  ./types/chainData.ts \
-  ./package-lock.json \
-  ./package.json \
-  ./styles/globals.css \
-  context-files/
+#!/bin/bash
+
+# Create the context-files directory if it doesn't exist
+mkdir -p context-files
+
+# Remove the existing frontend-context.tsx if it exists
+rm -f context-files/frontend-context.tsx
+
+# Find relevant files and concatenate their contents
+find . \( -path './pages/*' -o -path './config/*' -o -path './lib/*' -o -path './components/*' -o -path './utils/*' -o -path './hooks/*' -o -path './const/*' -o -path './types/*' -o -path './styles/*' \) \
+     -type f \
+     \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.css' \) \
+     -not -path '*/node_modules/*' \
+     -not -path '*/deprecated/*' | \
+while read -r file; do
+    echo "// File: $file" >> context-files/frontend-context.tsx
+    if grep -q "export const ABIs: ABIKP = {" "$file"; then
+        # If the file contains ABI definitions, remove whitespace
+        sed -n '/export const ABIs: ABIKP = {/,/};/p' "$file" | tr -d '[:space:]' >> context-files/frontend-context.tsx
+    else
+        # Otherwise, just append the file content
+        cat "$file" >> context-files/frontend-context.tsx
+    fi
+    echo -e "\n\n" >> context-files/frontend-context.tsx
+done
+
+# Remove all files in context-files except frontend-context.tsx
+find context-files -type f ! -name 'frontend-context.tsx' -delete
+
+echo "Context file created at context-files/frontend-context.tsx"

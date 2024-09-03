@@ -25,10 +25,7 @@ export default function DashboardPage() {
     chainId
   );
 
-  const { nodeData, isLoading: isNodeLoading, error: nodeError } = useNodeData(
-    chainId,
-    selectedNodeId || ''
-  );
+
 
   useEffect(() => {
     if (userData?.userContext?.nodes && userData.userContext.nodes.length > 0) {
@@ -36,10 +33,7 @@ export default function DashboardPage() {
     }
   }, [userData]);
 
-  const handleNodeSelect = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-    router.push(`/nodes/${chainId}/${nodeId}`, undefined, { shallow: true });
-  }, [chainId, router]);
+
 
   if (!ready || isUserDataLoading) {
     return <Spinner size="xl" />;
@@ -63,10 +57,6 @@ export default function DashboardPage() {
       balances={balances}
       isBalancesLoading={isBalancesLoading}
       balancesError={balancesError}
-      nodeData={nodeData as NodeState | null}
-      isNodeLoading={isNodeLoading}
-      nodeError={nodeError}
-      onNodeSelect={handleNodeSelect}
     />
   );
 }
