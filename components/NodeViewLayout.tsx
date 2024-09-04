@@ -1,6 +1,5 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, VStack, HStack, Spinner, Text, Alert, AlertIcon } from '@chakra-ui/react';
+import { Box, Flex, VStack, useBreakpointValue } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
 import HeaderButtons from './HeaderButtons';
 import BalanceList from './BalanceList';
@@ -8,7 +7,6 @@ import NodeDetails from './NodeDetails';
 import RootNodeDetails from './RootNodeDetails';
 import { useColorManagement, PaletteButton, ActivityLogs } from './AllStackComponents';
 import { NodeState } from '../types/chainData';
-import {useNodeData} from '../hooks/useNodeData';
 import { useRouter } from 'next/router';
 
 interface NodeViewLayoutProps {
@@ -31,47 +29,57 @@ const NodeViewLayout: React.FC<NodeViewLayoutProps> = ({
   const router = useRouter();
   const { query } = router;
 
-
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   const handleTokenSelect = useCallback((tokenAddress: string) => {
+    setUrlChainId(null);
     setSelectedToken(tokenAddress);
-    setUrlChainId('');
-    setUrlNodeId('');
     updateColors(tokenAddress);
-  }, []);
+  }, [updateColors]);
 
   const handleNodeSelect = useCallback((nodeId: string) => {
-    setUrlChainId(router.query.chainId as string);
-    setUrlNodeId(router.query.nodeId as string);
+    setSelectedToken(null);
+    setUrlChainId(router.query.chainId as string || '');
+    setUrlNodeId(nodeId);
     router.push(`/nodes/${chainId}/${nodeId}`, undefined, { shallow: true });
   }, [chainId, router]);
 
-
   console.log("rendered NodeViewLayout with selectedToken", selectedToken);
-  const renderContent = () => {
 
- 
-    if (urlNodeId && urlChainId) {
-      return <NodeDetails nodeId={urlNodeId} chainId={urlChainId} onNodeSelect={handleNodeSelect} />
-     } 
+  useEffect(() => {
+    if (chainId && nodeId) {
+      setUrlChainId(chainId);
+      setUrlNodeId(nodeId);
+    }
+  }, [chainId, nodeId]);
+
+  const renderContent = () => {
+    if (chainId && urlChainId) {
+      return <NodeDetails nodeId={urlNodeId || nodeId || ''} chainId={urlChainId || wallet?.chainId || ''} onNodeSelect={handleNodeSelect} />
+    } 
     else if (selectedToken) {
       return (
         <RootNodeDetails
-          chainId={urlChainId || chainId as string}
+          chainId={urlChainId || user?.wallet?.chainId || ''}
           rootToken={selectedToken}
           selectedTokenColor={colorState.contrastingColor}
           onNodeSelect={handleNodeSelect}
         />
       );
     }
-else {
+    else {
       return <ActivityLogs />;
     }
   };
 
   return (
-    <VStack spacing={4} align="stretch" height="100vh">
-      <HStack justify="space-between" p={2}>
+    <Flex direction="column" height="100vh">
+      <Flex 
+        justify="space-between" 
+        p={4} 
+        borderBottom="1px solid" 
+        borderColor="gray.200"
+      >
         <PaletteButton 
           cycleColors={cycleColors} 
           contrastingColor={colorState.contrastingColor} 
@@ -84,23 +92,31 @@ else {
           nodes={[]} 
           onNodeSelect={handleNodeSelect}
         />
-      </HStack>
+      </Flex>
 
-      <HStack align="stretch" spacing={0}>
-        <BalanceList 
-          selectedToken={selectedToken || ''}
-          handleTokenSelect={handleTokenSelect}
-          contrastingColor={colorState.contrastingColor}
-          reverseColor={colorState.reverseColor}
-          hoverColor={colorState.hoverColor}
-          chainId={chainId}
-          userAddress={user?.wallet?.address || ''}
-        />
-        <Box flex={1} p={4}>
+      <Flex flex={1} direction={{ base: 'column', md: 'row' }}>
+        <Box 
+          width={{ base: '100%', md: '12%' }} 
+          maxWidth={{ md: '110px' }}
+          borderRight={{ md: '1px solid' }}
+          borderColor={{ md: 'gray.200' }}
+          overflowY="auto"
+        >
+          <BalanceList 
+            selectedToken={selectedToken || ''}
+            handleTokenSelect={handleTokenSelect}
+            contrastingColor={colorState.contrastingColor}
+            reverseColor={colorState.reverseColor}
+            hoverColor={colorState.hoverColor}
+            chainId={chainId}
+            userAddress={user?.wallet?.address || ''}
+          />
+        </Box>
+        <Box flex={1} p={4} overflowY="auto">
           {renderContent()}
         </Box>
-      </HStack>
-    </VStack>
+      </Flex>
+    </Flex>
   );
 };
 

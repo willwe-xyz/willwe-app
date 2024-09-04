@@ -24,7 +24,8 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({ chainId, rootT
   const { rootNodeStates, isLoading, error } = useRootNodes(chainId, rootToken);
 
   const handleNodeClick = useCallback((nodeId: string) => {
-    router.push(`/nodes/${chainId}/${nodeId}`);
+    onNodeSelect(nodeId);
+    // router.push(`/nodes/${chainId}/${nodeId}`);
   }, [router, chainId]);
 
   const filteredNodes = useMemo(() => {

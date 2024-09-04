@@ -24,13 +24,13 @@ const BalanceList: React.FC<BalanceListProps> = ({
 }) => {
 
   const { balances, isLoading, error } = useCovalentBalances(userAddress, chainId);
-  const { willBalanceItems } = useWillBalances(chainId);
+  const { willBalanceItems, isLoading: willLoading, error: willError } = useWillBalances(chainId);
 
-    if (isLoading) {
+    if (isLoading || willLoading) {
       return <Spinner size="sm" />;
     }
     
-    if (error) {
+    if (error || willError) {
       return <Text color="red.500">Error loading balances</Text>;
     } 
 

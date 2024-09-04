@@ -3,25 +3,21 @@ import { CovalentClient, ChainID, BalanceItem } from '@covalenthq/client-sdk';
 import { getCovalentApiKey } from '../config/apiKeys';
 import { deployments } from '../config/deployments';
 
-
-
 export function useWillBalances(chainId: string) {
-
   const [willBalanceItems, setWillBalanceItems] = useState<BalanceItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  console.log("useWillBalances", deployments["WillWe"][chainId], chainId);
-  if (!deployments.WillWe || !chainId) {
-    return { willBalanceItems: [], isLoading: false, error: new Error('No deployments or chainId provided') };
-  }
-
-  const cleanChainId = chainId.replace('eip155:', '') as string;
-
-  const WILLWE_CONTRACT_ADDRESS = deployments.WillWe[cleanChainId] as string;
-
-
   useEffect(() => {
+    if (!deployments.WillWe || !chainId) {
+      setError(new Error('No deployments or chainId provided'));
+      setIsLoading(false);
+      return;
+    }
+
+    const cleanChainId = chainId.replace('eip155:', '') as string;
+    const WILLWE_CONTRACT_ADDRESS = deployments.WillWe[cleanChainId] as string;
+
     const fetchWillBalances = async () => {
       setIsLoading(true);
       setError(null);

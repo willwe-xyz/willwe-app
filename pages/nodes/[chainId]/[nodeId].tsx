@@ -17,26 +17,21 @@ const NodePageContent: React.FC<{ userAddress: string }> = ({
   const router = useRouter();
   const { chainId, nodeId } = router.query;
 
-  const { balances, isBalancesLoading, balancesError } = userAddress ? useCovalentBalances(userAddress, chainId as string) : { balances: [] };
-  const { nodeData, nodeError, isNodeLoading } = useNodeData(chainId, nodeId);
+  // Always call hooks, even if userAddress is not available
+  // const { balances, isBalancesLoading, balancesError } = useCovalentBalances(userAddress || '', chainId as string);
+  // const { nodeData, nodeError, isNodeLoading } = useNodeData(chainId as string | undefined, nodeId as string | undefined);
 
+  // if (isNodeLoading) {
+  //   return <Spinner size="xl" />;
+  // }
 
-  if ( isNodeLoading ) {
-    return <Spinner size="xl" />;
-  } else {
-    return (
-      <NodeViewLayout 
-        chainId={chainId}
-        nodeId={nodeId}
-        balances={balances}
-        isBalancesLoading={isBalancesLoading}
-        balancesError={balancesError}
-        isNodeLoading={isNodeLoading}
-        nodeError={nodeError}
-        nodeData={nodeData}
-        />
+  return (
+    <NodeViewLayout 
+      chainId={chainId as string}
+      nodeId={nodeId as string}
+
+    />
   );
-}
 };
 
 export default NodePageContent;
