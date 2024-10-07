@@ -30,7 +30,7 @@ export const useRootNodes = (chainID: string, tokenAddress: string) => {
       }
 
       const WW = new ethers.Contract(deployments["WillWe"][actualChainID], ABIs["WillWe"], provider);
-      const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress);
+      const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress, tokenAddress);
 
       const nodesByDepth: { [depth: string]: NodeState[] } = {};
       nodeData.forEach((node) => {
