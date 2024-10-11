@@ -11,17 +11,20 @@ interface TokenBalanceProps {
     reverseColor: string;
 }
 
-export const TokenBalance: React.FC<TokenBalanceProps> = ({ 
-    balanceItem, 
-    protocolDeposit, 
+export const TokenBalance: React.FC<TokenBalanceProps> = ({
+    balanceItem,
+    protocolDeposit,
     isSelected,
     contrastingColor,
     reverseColor
 }) => {
     const nominalBalance = parseFloat(formatEther(balanceItem.balance)).toFixed(4);
-    const protocolBalance = protocolDeposit 
+    const protocolBalance = protocolDeposit
         ? parseFloat(formatEther(protocolDeposit.balance)).toFixed(4)
         : "0.0000";
+
+    const digits = nominalBalance.split(".")[0];
+    const floats = nominalBalance.split(".")[1];
 
     return (
         <Box
@@ -40,14 +43,15 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
                     {balanceItem.contract_ticker_symbol}
                 </Text>
                 <Text fontSize="xs" isTruncated width="100%">{balanceItem.quote}</Text>
-                <Tooltip 
+                <Tooltip
                     label={`Protocol balance: ${protocolBalance} ${balanceItem.contract_ticker_symbol}`}
                     aria-label="Protocol balance"
                     placement="top"
                 >
                     <Text fontSize="xs" isTruncated width="100%">
-                        {nominalBalance}
+                        {digits}.<Text as="span" fontSize="60%">{floats}</Text>
                     </Text>
+
                 </Tooltip>
                 {protocolDeposit && (
                     <>

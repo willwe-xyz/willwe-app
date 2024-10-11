@@ -10,18 +10,19 @@ import { NodePill } from './NodePill';
 interface RootNodeDetailsProps {
   chainId: string;
   rootToken: string;
+  userAddress: string;
   selectedTokenColor: string
   onNodeSelect: (nodeId: string) => void;
 }
 
-export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({ chainId, rootToken, selectedTokenColor, onNodeSelect }) => {
+export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({ chainId, rootToken, userAddress, selectedTokenColor, onNodeSelect }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [zoomLevel, setZoomLevel] = useState(1);
   const [hoveredNodePath, setHoveredNodePath] = useState<string[]>([]);
   const [tokenColor, setTokenColor] = useState(`#${rootToken.slice(-6)}`);
   const router = useRouter();
 
-  const { rootNodeStates, isLoading, error } = useRootNodes(chainId, rootToken);
+  const { rootNodeStates, isLoading, error } = useRootNodes(chainId, rootToken, userAddress);
 
   const handleNodeClick = useCallback((nodeId: string) => {
     onNodeSelect(nodeId);

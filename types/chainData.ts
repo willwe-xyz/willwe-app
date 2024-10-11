@@ -26,7 +26,7 @@ export type FetchedUserData = {
 }
 
 export type UserSignal = {
-  MembraneAndInflation: [string[], string[]],
+  MembraneAndInflation: [string, string][];
   lastReidstriSig: string[]
 }
 
@@ -37,6 +37,21 @@ export type NodeState = {
   rootPath: string[];
   signals: UserSignal[];
 }
+
+
+// struct UserSignal {
+//   string[2][] MembraneInflation;
+//   string[] lastRedistSignal;
+// }
+
+// struct NodeState {
+//   string[9] basicInfo; // [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, balanceOfUser, childParentEligibilityPerSec, lastParentRedistribution ]
+//   address[] membersOfNode;
+//   string[] childrenNodes;
+//   string[] rootPath;
+//   UserSignal[] signals;
+// }
+
 
 export type UserContext = {
   userNodes: NodeState[],

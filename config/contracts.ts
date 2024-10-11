@@ -14,6 +14,12 @@ export const getRPCUrl = (chainId: string): string => {
     case '11155420': // Optimism Sepolia
       url = process.env.NEXT_PUBLIC_RPC_URL_OPTIMISM_SEPOLIA;
       break;
+    case '167009': // Taiko Hekla
+      url = process.env.NEXT_PUBLIC_RPC_URL_TAIKO_HEKLA;
+      break;
+    case '167000': // Taiko
+      url = process.env.NEXT_PUBLIC_RPC_URL_TAIKO;
+      break;
     case '534351': // Scroll Testnet
       url = process.env.NEXT_PUBLIC_RPC_URL_SCROLL_TESTNET;
       break;

@@ -64,6 +64,7 @@ const NodeViewLayout: React.FC<NodeViewLayoutProps> = ({
           rootToken={selectedToken}
           selectedTokenColor={colorState.contrastingColor}
           onNodeSelect={handleNodeSelect}
+          userAddress={user?.wallet?.address || ''}
         />
       );
     }

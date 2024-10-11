@@ -3,7 +3,7 @@ import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
-import { localhost, base, optimismSepolia } from 'viem/chains';
+import { localhost, base, optimismSepolia, optimism, baseSepolia, taikoHekla, taiko } from 'viem/chains';
 import { ChakraProvider } from '@chakra-ui/react';
 import { AirstackProvider } from "@airstack/airstack-react";
 import { useEffect, useState } from 'react';
@@ -35,16 +35,16 @@ function MyApp({ Component, pageProps }: AppProps) {
       <PrivyProvider
         appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
         config={{
-          loginMethods: ['farcaster', 'wallet', 'email'],
-          defaultChain: localhost,
-          supportedChains: [localhost, base, optimismSepolia]
+          loginMethods: ['wallet', 'farcaster', 'email'],
+          defaultChain: taikoHekla,
+          supportedChains: [localhost, baseSepolia, base, taikoHekla, taiko, optimismSepolia, optimism]
         }}
         onSuccess={() => router.push('/dashboard')}
       >
         <ChakraProvider>
-          <AirstackProvider apiKey={process.env.NEXT_PUBLIC_AIRSTACK_API_KEY ?? ""}>
-            {isClient ? <Component {...pageProps} /> : null}
-          </AirstackProvider>
+          {/* <AirstackProvider apiKey={process.env.NEXT_PUBLIC_AIRSTACK_API_KEY ?? ""}> */}
+            {isClient ? <Component {...pageProps} /> : <></>}
+          {/* </AirstackProvider> */}
         </ChakraProvider>
       </PrivyProvider>
     </>

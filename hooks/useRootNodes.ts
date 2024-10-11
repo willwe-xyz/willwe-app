@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import { NodeState, RootNodeState } from '../types/chainData';
 import { deployments, ABIs, getRPCUrl, getChainById } from '../config/contracts';
 
-export const useRootNodes = (chainID: string, tokenAddress: string) => {
+export const useRootNodes = (chainID: string, tokenAddress: string, userAddress: string) => {
   const [rootNodeStates, setRootNodeStates] = useState<RootNodeState[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -21,7 +21,7 @@ export const useRootNodes = (chainID: string, tokenAddress: string) => {
       const rpcUrl = getRPCUrl(actualChainID);
       const provider = new ethers.JsonRpcProvider(rpcUrl);
 
-      if (!deployments["WillWe"][actualChainID]) {
+      if (! deployments["WillWe"][actualChainID]) {
         throw new Error(`No WillWe contract deployment found for chainID: ${actualChainID}`);
       }
 
@@ -29,9 +29,13 @@ export const useRootNodes = (chainID: string, tokenAddress: string) => {
         throw new Error(`Invalid token address: ${tokenAddress}`);
       }
 
+      if ( ! actualChainID) {
+        throw new Error(`Invalid chainID: ${actualChainID}`);
+      }
+      
       const WW = new ethers.Contract(deployments["WillWe"][actualChainID], ABIs["WillWe"], provider);
-      const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress, tokenAddress);
-
+      const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress, userAddress);
+      
       const nodesByDepth: { [depth: string]: NodeState[] } = {};
       nodeData.forEach((node) => {
         const depth = (node.rootPath.length - 1).toString();

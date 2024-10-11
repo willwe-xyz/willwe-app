@@ -25,7 +25,7 @@ export function useWillBalances(chainId: string) {
       try {
         const client = new CovalentClient(getCovalentApiKey());
         const response = await client.BalanceService.getTokenBalancesForWalletAddress(parseInt(cleanChainId) as ChainID, WILLWE_CONTRACT_ADDRESS);
-        
+        console.log(response);
         if (response.data && response.data.items) {
           setWillBalanceItems(response.data.items);
         } else {

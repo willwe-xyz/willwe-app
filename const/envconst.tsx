@@ -2171,7 +2171,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Execution" : [
+    "Execution" :  [
         {
             "type": "constructor",
             "inputs": [
