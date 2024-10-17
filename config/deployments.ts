@@ -1,4 +1,5 @@
-import { Chain, chains } from 'viem';
+import { Chain} from 'viem';
+import * as chains from 'viem/chains';
 import { InterfaceAbi } from 'ethers';
 
 type Deployments = { [key: string]: { [key: string]: string } };
@@ -36,6 +37,7 @@ export const deployments: Deployments = {
  * @returns Viem's chain object.
  */
 export function getChainById(chainId: string): Chain {
+    if (! chainId)   throw new Error(`Unproper provided chain id ${chainId}`);
   for (const chain of Object.values(chains)) {
     if ('id' in chain) {
       if (chain.id === Number(chainId)) {
@@ -43,7 +45,7 @@ export function getChainById(chainId: string): Chain {
       }
     }
   }
-  throw new Error(`Chain with id ${chainId} not found`);
+  throw new Error(`Chain with id ${chainId} not found`); 
 }
 
 export const ABIs: ABIKP = {

@@ -91,6 +91,7 @@ const NodeViewLayout: React.FC<NodeViewLayoutProps> = ({
           login={login}
           userAddress={user?.wallet?.address || ''} 
           nodes={[]} 
+          chainId={chainId || ''}
           onNodeSelect={handleNodeSelect}
         />
       </Flex>

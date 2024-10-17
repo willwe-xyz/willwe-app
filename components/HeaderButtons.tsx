@@ -5,6 +5,7 @@ import { LogOut, Puzzle, LogIn } from 'lucide-react';
 
 interface HeaderButtonsProps {
   userAddress: string;
+  chainId: string;
   logout: () => void;
   login: () => void;
   nodes: any[];
@@ -12,15 +13,15 @@ interface HeaderButtonsProps {
 }
 
 const HeaderButtons: React.FC<HeaderButtonsProps> = ({ 
-  userAddress, 
+  userAddress,
+  chainId,
   logout, 
   login, 
-  nodes,
-  onNodeSelect
+  nodes
 }) => {
   return (
     <HStack spacing={2}>
-      <ComposePanel>
+      <ComposePanel chainId={chainId}>
         {(onOpen) => (
           <Button
             leftIcon={<Puzzle size={18} />}

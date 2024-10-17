@@ -20,13 +20,20 @@ import {
   useDisclosure
 } from '@chakra-ui/react';
 import { FaCoins, FaRegRegistered, FaUserPlus } from 'react-icons/fa';
+import DefineEntity from './DefineEntity';
 
-export const ComposePanel = ({ children }) => {
+export const ComposePanel = ({ children, chainId }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [tabIndex, setTabIndex] = useState(0);
 
   const handleTabsChange = (index) => {
     setTabIndex(index);
+  };
+
+  const handleDefineEntitySubmit = (entityData) => {
+    console.log('Entity defined:', entityData);
+    // Here you would typically update your application state or perform additional actions
+    onClose();
   };
 
   return (
@@ -67,14 +74,7 @@ export const ComposePanel = ({ children }) => {
                   </FormControl>
                 </TabPanel>
                 <TabPanel>
-                  <FormControl>
-                    <FormLabel>Entity Name</FormLabel>
-                    <Input placeholder="Enter entity name" />
-                  </FormControl>
-                  <FormControl mt={4}>
-                    <FormLabel>Entity Type</FormLabel>
-                    <Input placeholder="Enter entity type" />
-                  </FormControl>
+                  <DefineEntity onSubmit={handleDefineEntitySubmit} chainId={chainId} />
                 </TabPanel>
               </TabPanels>
             </Tabs>
@@ -83,7 +83,6 @@ export const ComposePanel = ({ children }) => {
             <Button colorScheme="blue" mr={3} onClick={onClose}>
               Close
             </Button>
-            <Button colorScheme="green">Submit</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

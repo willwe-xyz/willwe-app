@@ -1,4 +1,4 @@
-import { baseSepolia,  } from "viem/chains";
+import { baseSepolia, base, taiko, taikoHekla  } from "viem/chains";
 // import { defineChain, Hex } from "viem";
 import {  InterfaceAbi }  from "ethers";
 import * as chains from 'viem/chains';
@@ -13,65 +13,6 @@ export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 
 
 
-
-// == Logs ==
-//   ###############################
-                                                               
-//      Deploy script started for network :  11155420
-                                                               
-//   ###############################
-//   ##### Deployer :  0x259c1F1FaF930a23D009e85867A6b5206b2a6d44 | expected 0x259c1F1FaF930a23D009e85867A6b5206b2a6d44
-//   #________________________________
-//   ###############################
-   
-//   Fun deployed at :  0x264336ec33fab9CC7859b2C5b431f42020a20E75
-   
-//   ###############################
-//   ###############################
-   
-//   Root Value in Control :  0x9d814170537951fE8eD28A534CDE9F30Fd731A64
-//   Controling Extrmity:  0xDD9e56E94B6166f47D8F597AECeB38e72e274E92
-//   ###############################
-//   Balances: deployer | Agent 
-//   0 10000000
-//   Will Price in ETH: 1000000000
-   
-//   ###############################
-   
-//   ###############################
-//   Foundation Agent Safe at:  0xDD9e56E94B6166f47D8F597AECeB38e72e274E92
-//   Will:  0x9d814170537951fE8eD28A534CDE9F30Fd731A64
-//   Membrane:  0x36C70f035c39e4072822F8C33C4427ae59298451
-//   Execution:  0xEDf98928d9513051D75e72244e0b4DD254DB1462
-//   WillWe:  0x264336ec33fab9CC7859b2C5b431f42020a20E75
-//   ###############################
-
-//   ###############################
-//   ##### Deployer :  0x259c1F1FaF930a23D009e85867A6b5206b2a6d44 | expected 0x259c1F1FaF930a23D009e85867A6b5206b2a6d44
-//   #________________________________
-//   ###############################
-   
-//   Fun deployed at :  0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41
-   
-//   ###############################
-//   ###############################
-   
-//   Root Value in Control :  0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae
-//   Controling Extrmity:  0xc01F390530ca36Ec1871F9E4D74b0B2aaf852A44
-//   ###############################
-//   Balances: deployer | Agent 
-//   0 10000000
-//   Will Price in ETH: 1000000000
-   
-//   ###############################
-   
-//   ###############################
-//   Foundation Agent Safe at:  0xc01F390530ca36Ec1871F9E4D74b0B2aaf852A44
-//   Will:  0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae
-//   Membrane:  0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f
-//   Execution:  0x3D52a3A5D12505B148a46B5D69887320Fc756F96
-//   WillWe:  0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41
-//   ###############################
 
 type Deployments = {
     [key: string]: {
@@ -4290,8 +4231,8 @@ export const ABIs: ABIKP = {
 
 
 export const RPCurl : {[key: string]: string } = {
-    // "84532" : "https://base-sepolia.gateway.tenderly.co/jEm0PDO7ZJVvgOxvBZhg"
     "84532": process.env.BB_BASE_SEPOLIA_RPC || baseSepolia.rpcUrls.default.http[0],
     "11155420": process.env.OPTIMISM_SEPOLIA_RPC || baseSepolia.rpcUrls.default.http[0],
-
+    "167009":  taikoHekla.rpcUrls.default.http[0] || process.env.TAIKO_HEKLA_RPC,
+    "167000":  taiko.rpcUrls.default.http[0] || process.env.TAIKO_RPC
 }
