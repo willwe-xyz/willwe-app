@@ -37,6 +37,5 @@ export const useCovalentBalances = (address: string, chainId: string) => {
     loadBalances();
   }, [address, chainId]);
 
-  console.log("data in useCovalentBalances", balances);
   return { balances, isLoading, error };
 };

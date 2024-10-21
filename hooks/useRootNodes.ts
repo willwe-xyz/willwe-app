@@ -20,7 +20,11 @@ export const useRootNodes = (chainID: string, tokenAddress: string, userAddress:
       const actualChainID = chainID.startsWith('eip155:') ? chainID.split(':')[1] : chainID;
       const rpcUrl = getRPCUrl(actualChainID);
       const provider = new ethers.JsonRpcProvider(rpcUrl);
+      console.log(actualChainID, chainID, rpcUrl, provider);
 
+      if ( ! actualChainID) {
+        throw new Error(`Invalid chainID: ${actualChainID}`);
+      }
       if (! deployments["WillWe"][actualChainID]) {
         throw new Error(`No WillWe contract deployment found for chainID: ${actualChainID}`);
       }
@@ -29,12 +33,14 @@ export const useRootNodes = (chainID: string, tokenAddress: string, userAddress:
         throw new Error(`Invalid token address: ${tokenAddress}`);
       }
 
-      if ( ! actualChainID) {
-        throw new Error(`Invalid chainID: ${actualChainID}`);
-      }
+
       
       const WW = new ethers.Contract(deployments["WillWe"][actualChainID], ABIs["WillWe"], provider);
+
+
+
       const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress, userAddress);
+
       
       const nodesByDepth: { [depth: string]: NodeState[] } = {};
       nodeData.forEach((node) => {

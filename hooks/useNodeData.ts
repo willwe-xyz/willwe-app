@@ -40,6 +40,5 @@ export const useNodeData = (chainId: string, nodeId: string) => {
     fetchData();
   }, [chainId, nodeId]);
 
-  console.log("data that I am fetching in hook", chainId, nodeId, data);
   return { data, error, isNodeLoading };
 };

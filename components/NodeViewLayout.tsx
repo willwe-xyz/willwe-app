@@ -44,7 +44,6 @@ const NodeViewLayout: React.FC<NodeViewLayoutProps> = ({
     router.push(`/nodes/${chainId}/${nodeId}`, undefined, { shallow: true });
   }, [chainId, router]);
 
-  console.log("rendered NodeViewLayout with selectedToken", selectedToken);
 
   useEffect(() => {
     if (chainId && nodeId) {
