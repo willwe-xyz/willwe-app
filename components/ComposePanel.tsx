@@ -1,91 +1,184 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  Button,
-  Icon,
   Modal,
   ModalOverlay,
   ModalContent,
   ModalHeader,
-  ModalFooter,
   ModalBody,
   ModalCloseButton,
+  useDisclosure,
   Tabs,
   TabList,
   TabPanels,
   Tab,
   TabPanel,
-  FormControl,
-  FormLabel,
-  Input,
-  useDisclosure
+  Box,
+  useToast,
+  HStack,
 } from '@chakra-ui/react';
-import { FaCoins, FaRegRegistered, FaUserPlus } from 'react-icons/fa';
-import DefineEntity from './DefineEntity';
+import { Coins, Users } from 'lucide-react';
+import { CreateToken } from './CreateToken';
+import { DefineEntity } from './DefineEntity';
 
-export const ComposePanel = ({ children, chainId }) => {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const [tabIndex, setTabIndex] = useState(0);
+interface ComposePanelProps {
+  children: (onOpen: () => void) => React.ReactNode;
+  chainId: string;
+  userAddress?: string;
+}
 
-  const handleTabsChange = (index) => {
-    setTabIndex(index);
-  };
+interface EntityData {
+  entityName: string;
+  characteristics: {
+    title: string;
+    link: string;
+  }[];
+  membershipConditions: {
+    tokenAddress: string;
+    requiredBalance: string;
+    symbol?: string;
+  }[];
+  membraneId?: string;
+}
 
-  const handleDefineEntitySubmit = (entityData) => {
-    console.log('Entity defined:', entityData);
-    // Here you would typically update your application state or perform additional actions
+export const ComposePanel: React.FC<ComposePanelProps> = ({
+  children,
+  chainId,
+  userAddress
+}) => {
+  const { isOpen, onOpen, onClose: originalOnClose } = useDisclosure();
+  const [activeTab, setActiveTab] = useState(0);
+  const toast = useToast();
+
+  const resetState = useCallback(() => {
+    setActiveTab(0);
+  }, []);
+
+  const onClose = useCallback(() => {
+    originalOnClose();
+    // Small delay to reset state after animation
+    setTimeout(resetState, 300);
+  }, [originalOnClose, resetState]);
+
+  const handleEntitySubmit = useCallback((entityData: EntityData) => {
+    toast({
+      title: "Entity Created",
+      description: `Entity "${entityData.entityName}" has been created successfully`,
+      status: "success",
+      duration: 5000,
+      isClosable: true,
+    });
     onClose();
-  };
+  }, [onClose, toast]);
 
   return (
     <>
       {children(onOpen)}
 
-      <Modal isOpen={isOpen} onClose={onClose} size="xl">
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Compose Panel</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Tabs isFitted variant="enclosed" index={tabIndex} onChange={handleTabsChange}>
+      <Modal 
+        isOpen={isOpen} 
+        onClose={onClose}
+        size="4xl"
+        isCentered
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay 
+          bg="blackAlpha.300"
+          backdropFilter="blur(10px)"
+        />
+        <ModalContent 
+          mx={4}
+          bg="white"
+          rounded="lg"
+          shadow="xl"
+          overflow="hidden"
+        >
+          <ModalHeader 
+            pt={6}
+            px={6}
+            pb={0}
+          >
+            Compose
+          </ModalHeader>
+          <ModalCloseButton 
+            size="lg"
+            top={4}
+            right={4}
+          />
+          
+          <ModalBody p={6}>
+            <Tabs
+              isFitted
+              variant="enclosed"
+              colorScheme="purple"
+              index={activeTab}
+              onChange={setActiveTab}
+            >
               <TabList mb="1em">
-                <Tab color="green.500"><Icon as={FaCoins} mr={2} />Create Token</Tab>
-                <Tab color="blue.500"><Icon as={FaRegRegistered} mr={2} />Register Token</Tab>
-                <Tab color="purple.500"><Icon as={FaUserPlus} mr={2} />Define Entity</Tab>
+                <Tab
+                  py={3}
+                  _selected={{
+                    color: 'purple.600',
+                    borderColor: 'purple.600',
+                    borderBottomColor: 'white'
+                  }}
+                >
+                  <HStack spacing={2}>
+                    <Coins size={18} />
+                    <span>Create Token</span>
+                  </HStack>
+                </Tab>
+                <Tab
+                  py={3}
+                  _selected={{
+                    color: 'purple.600',
+                    borderColor: 'purple.600',
+                    borderBottomColor: 'white'
+                  }}
+                >
+                  <HStack spacing={2}>
+                    <Users size={18} />
+                    <span>Define Entity</span>
+                  </HStack>
+                </Tab>
               </TabList>
+
               <TabPanels>
-                <TabPanel>
-                  <FormControl>
-                    <FormLabel>Token Name</FormLabel>
-                    <Input placeholder="Enter token name" />
-                  </FormControl>
-                  <FormControl mt={4}>
-                    <FormLabel>Token Symbol</FormLabel>
-                    <Input placeholder="Enter token symbol" />
-                  </FormControl>
+                <TabPanel px={0}>
+                  <CreateToken
+                    chainId={chainId}
+                    userAddress={userAddress}
+                  />
                 </TabPanel>
-                <TabPanel>
-                  <FormControl>
-                    <FormLabel>Token Address</FormLabel>
-                    <Input placeholder="Enter token address" />
-                  </FormControl>
-                  <FormControl mt={4}>
-                    <FormLabel>Token Name</FormLabel>
-                    <Input placeholder="Enter token name" />
-                  </FormControl>
-                </TabPanel>
-                <TabPanel>
-                  <DefineEntity onSubmit={handleDefineEntitySubmit} chainId={chainId} />
+                <TabPanel px={0}>
+                  <DefineEntity
+                    chainId={chainId}
+                    onSubmit={handleEntitySubmit}
+                  />
                 </TabPanel>
               </TabPanels>
             </Tabs>
           </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={onClose}>
-              Close
-            </Button>
-          </ModalFooter>
         </ModalContent>
       </Modal>
     </>
   );
 };
+
+// Utility function to inject modals into components
+export const withComposePanel = (
+  WrappedComponent: React.ComponentType<any>,
+  props: Omit<ComposePanelProps, 'children'>
+) => {
+  return function WithComposePanelComponent(componentProps: any) {
+    const composePanelProps = {
+      ...props,
+      children: (onOpen: () => void) => (
+        <WrappedComponent {...componentProps} openComposePanel={onOpen} />
+      ),
+    };
+    
+    return <ComposePanel {...composePanelProps} />;
+  };
+};
+
+export default ComposePanel;
