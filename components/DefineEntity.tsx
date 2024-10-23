@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { ethers, TransactionResponse, Contract, Signer } from 'ethers';
-import { TransactionReceipt, parseEther } from 'viem';
+import { ethers } from 'ethers';
 import {
   VStack,
   HStack,
@@ -21,9 +20,9 @@ import {
   Progress,
   Box,
 } from '@chakra-ui/react';
-import { deployments, getChainById } from '../config/deployments';
-import { Chain } from 'viem';
+import { deployments, ABIs } from '../config/deployments';
 import { usePrivy } from '@privy-io/react-auth';
+import { getRPCUrl } from '../config/contracts';
 
 const IERC20_ABI = [
   "function symbol() view returns (string)",
@@ -32,10 +31,6 @@ const IERC20_ABI = [
 
 const IERC721_ABI = [
   "function symbol() view returns (string)",
-];
-
-const MEMBRANE_ABI = [
-  "function createMembrane(address[] memory tokens_, uint256[] memory balances_, string memory meta_) external returns (uint256)"
 ];
 
 interface Characteristic {
@@ -71,20 +66,19 @@ const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
   const [membershipConditions, setMembershipConditions] = useState<MembershipCondition[]>([]);
   const [tokenSymbol, setTokenSymbol] = useState<string>('');
   const [tokenWarning, setTokenWarning] = useState<string>('');
-  const [submissionState, setSubmissionState] = useState<'idle' | 'ipfs' | 'transaction' | 'complete'>('idle');
+  const [submissionState, setSubmissionState] = useState<'idle' | 'ipfs' | 'transaction' | 'confirming' | 'complete'>('idle');
   const [ipfsCid, setIpfsCid] = useState<string>('');
   const [membraneId, setMembraneId] = useState<string>('');
 
-  const { getEthersProvider } = usePrivy();
+  const { user, getEthersProvider } = usePrivy();
   const toast = useToast();
-
-  const chain: Chain = getChainById(chainId);
-  const provider = new ethers.JsonRpcProvider(chain.rpcUrls.default.http[0]);
 
   const validateToken = useCallback(async (address: string) => {
     if (ethers.isAddress(address)) {
       try {
-        const contract: Contract = new ethers.Contract(address, [...IERC20_ABI, ...IERC721_ABI], provider);
+        const rpcUrl = getRPCUrl(chainId);
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const contract = new ethers.Contract(address, [...IERC20_ABI, ...IERC721_ABI], provider);
         const symbol: string = await contract.symbol();
         setTokenSymbol(symbol);
         setTokenWarning('');
@@ -97,7 +91,7 @@ const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
       setTokenSymbol('');
       setTokenWarning(address ? 'Invalid token address' : '');
     }
-  }, [provider]);
+  }, [chainId]);
 
   const addCharacteristic = () => {
     if (characteristicTitle && characteristicLink) {
@@ -122,7 +116,7 @@ const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
       const response = await fetch('/api/upload-to-ipfs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data, chainName: chain.name }),
+        body: JSON.stringify({ data }),
       });
 
       if (!response.ok) {
@@ -141,35 +135,72 @@ const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
   };
 
   const handleSubmit = async () => {
+    if (!user?.wallet?.address) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet to perform this action.",
+        status: "warning",
+        duration: 5000,
+        isClosable: true,
+      });
+      return;
+    }
+
     setSubmissionState('ipfs');
     try {
       const ipfsCid = await submitToIPFS({ entityName, characteristics });
-  
+
       setSubmissionState('transaction');
-      const ethersProvider = await getEthersProvider();
-      const signer = await ethersProvider.getSigner();
-  
-      const membraneAddress = deployments.Membrane[chainId] as string;
-      const membraneContract = new ethers.Contract(membraneAddress, MEMBRANE_ABI, signer);
-  
+      const membraneAddress = deployments.Membrane[chainId];
+      if (!membraneAddress) {
+        throw new Error(`No Membrane contract address found for chainId ${chainId}`);
+      }
+
       const tokens = membershipConditions.map(condition => condition.tokenAddress);
-      const balances = membershipConditions.map(condition => ethers.parseUnits(condition.requiredBalance, 18));
-      console.log(`IPFS CID:  ${ipfsCid}`);
-  
+      const balances = membershipConditions.map(condition => 
+        ethers.parseUnits(condition.requiredBalance, 18)
+      );
+
+      // Calculate expected membrane ID
+      const M = {
+        tokens: tokens,
+        balances: balances,
+        meta: ipfsCid
+      };
+      const packedData = ethers.AbiCoder.defaultAbiCoder().encode(
+        ['tuple(address[] tokens, uint256[] balances, string meta)'],
+        [M]
+      );
+      const expectedMembraneId = ethers.keccak256(packedData);
+      console.log('Expected Membrane ID:', expectedMembraneId);
+
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const membraneContract = new ethers.Contract(membraneAddress, ABIs["Membrane"], signer);
+
       const tx = await membraneContract.createMembrane(tokens, balances, ipfsCid);
-      
-      // Wait for the transaction to be mined
-      const receipt = await tx.wait();
-      
-      if (receipt.status === 1) { // 1 indicates success
-        const newMembraneId = receipt.logs[0].topics[1]; // Assuming the membrane ID is emitted in the first event
-        setMembraneId(newMembraneId);
-        onSubmit({ entityName, characteristics, membershipConditions, membraneId: newMembraneId });
-      
+      setSubmissionState('confirming');
+
+      const receipt = await provider.waitForTransaction(tx.hash, 1, 150000);
+
+      if (receipt && receipt.status === 1) {
+        const actualMembraneId = expectedMembraneId;
+        console.log('Membrane ID:', actualMembraneId);
+
+        setMembraneId(actualMembraneId);
+        localStorage.setItem('lastMembraneCreated', actualMembraneId);
+
+        onSubmit({ 
+          entityName, 
+          characteristics, 
+          membershipConditions, 
+          membraneId: actualMembraneId 
+        });
+    
         setSubmissionState('complete');
         toast({
           title: "Entity Created",
-          description: "Your entity has been successfully created and registered on-chain.",
+          description: `Entity created successfully with membrane ID: ${actualMembraneId}`,
           status: "success",
           duration: 5000,
           isClosable: true,
@@ -177,7 +208,7 @@ const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
       } else {
         throw new Error("Transaction failed");
       }
-  
+
     } catch (error) {
       console.error('Error creating membrane:', error);
       let errorMessage = "Failed to create the entity. Please try again.";
@@ -292,7 +323,7 @@ const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
       <Button
         onClick={handleSubmit}
         colorScheme="blue"
-        isDisabled={submissionState !== 'idle'}
+        isDisabled={submissionState !== 'idle' || !user?.wallet?.address}
       >
         {submissionState === 'idle' ? 'Define Entity' : 'Processing...'}
       </Button>
@@ -301,17 +332,19 @@ const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
         <Box>
           <Progress
             value={
-              submissionState === 'ipfs' ? 33 :
-                submissionState === 'transaction' ? 66 :
-                  submissionState === 'complete' ? 100 : 0
+              submissionState === 'ipfs' ? 25 :
+              submissionState === 'transaction' ? 50 :
+              submissionState === 'confirming' ? 75 :
+              submissionState === 'complete' ? 100 : 0
             }
             size="sm"
             colorScheme="blue"
           />
           <Text mt={2} textAlign="center">
             {submissionState === 'ipfs' ? 'Uploading to IPFS...' :
-              submissionState === 'transaction' ? 'Creating on-chain transaction...' :
-                submissionState === 'complete' ? 'Entity created successfully!' : ''}
+             submissionState === 'transaction' ? 'Initiating on-chain transaction...' :
+             submissionState === 'confirming' ? 'Confirming transaction...' :
+             submissionState === 'complete' ? 'Entity created successfully!' : ''}
           </Text>
         </Box>
       )}

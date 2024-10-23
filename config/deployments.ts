@@ -5,29 +5,36 @@ import { InterfaceAbi } from 'ethers';
 type Deployments = { [key: string]: { [key: string]: string } };
 type ABIKP = { [key: string]: InterfaceAbi };
 
+
+//   ###############################
+//   Foundation Agent Safe at:  0xF33c1682a9C68cd3982666612279aE8a2E55AbA3
+//   Will:  0xC27A26bDF3dCA8A7e18AAE061EeE1b38183562F2
+//   Membrane:  0x8E448f0568A47359a0077494B032eb9D588cB9d1
+//   Execution:  0x5F7147439f991722e95296BA10B3E34b2Ea75C55
+//   WillWe:  0x573879054B44b10a33f77f74EB70084F303bcb11
+//   ###############################
+
+
 export const deployments: Deployments = {
   "WillWe": {
     "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
     "11155420": "0x264336ec33fab9CC7859b2C5b431f42020a20E75",
-    "167009" : "0x1F0966dC854F6911F1Ab38752130F3158293fdCE"
+    "167009" : "0x573879054B44b10a33f77f74EB70084F303bcb11"
   },
   "Membrane": {
     "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
     "11155420": "0x36C70f035c39e4072822F8C33C4427ae59298451",
-    "167009" : "0x7DA446815C1dcB9D0A009C96CE28Ed1Fcfe751ed"
-
+    "167009" : "0x8E448f0568A47359a0077494B032eb9D588cB9d1"
   },
   "Execution": {
     "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
     "11155420": "0xEDf98928d9513051D75e72244e0b4DD254DB1462",
-    "167009" : "0x9ac6503f163A5053259740fd15933a230aB2d59c"
-
+    "167009" : "0x5F7147439f991722e95296BA10B3E34b2Ea75C55"
   },
   "RVI": {
     "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
     "11155420": "0x9d814170537951fE8eD28A534CDE9F30Fd731A64",
-    "167009" : "0xe432f1B9463Db4500CBa0CA4101938D4548d9c88"
-
+    "167009" : "0xC27A26bDF3dCA8A7e18AAE061EeE1b38183562F2"
   }
 };
 
@@ -1578,6 +1585,25 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
+            "name": "ConfigSignal",
+            "inputs": [
+                {
+                    "name": "nodeId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "expressedOption",
+                    "type": "bytes32",
+                    "indexed": false,
+                    "internalType": "bytes32"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
             "name": "InflationMinted",
             "inputs": [
                 {
@@ -1723,6 +1749,31 @@ export const ABIs: ABIKP = {
                     "type": "uint256[]",
                     "indexed": false,
                     "internalType": "uint256[]"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "Signaled",
+            "inputs": [
+                {
+                    "name": "nodeId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "sender",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                },
+                {
+                    "name": "origin",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
                 }
             ],
             "anonymous": false
@@ -2996,7 +3047,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Membrane" : [
+    "Membrane" :  [
         {
             "type": "function",
             "name": "createMembrane",
@@ -3087,8 +3138,65 @@ export const ABIs: ABIKP = {
             "stateMutability": "view"
         },
         {
+            "type": "function",
+            "name": "setInitWillWe",
+            "inputs": [],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "willWe",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "address",
+                    "internalType": "contract IFun"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "event",
+            "name": "MembraneCreated",
+            "inputs": [
+                {
+                    "name": "membraneId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "CID",
+                    "type": "string",
+                    "indexed": false,
+                    "internalType": "string"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "WillWeSet",
+            "inputs": [
+                {
+                    "name": "willWeAddress",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                }
+            ],
+            "anonymous": false
+        },
+        {
             "type": "error",
             "name": "Membrane__EmptyFieldOnMembraneCreation",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "Membrane__UnauthorizedWillWeSet",
             "inputs": []
         },
         {
