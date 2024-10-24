@@ -6,6 +6,16 @@ mkdir -p context-files
 # Remove the existing frontend-context.tsx if it exists
 rm -f context-files/frontend-context.tsx
 
+# First add package.json contents to the context file
+echo "// File: package.json" >> context-files/frontend-context.tsx
+if [ -f "package.json" ]; then
+    cat package.json >> context-files/frontend-context.tsx
+    echo -e "\n\n" >> context-files/frontend-context.tsx
+else
+    echo "// Warning: package.json not found" >> context-files/frontend-context.tsx
+    echo -e "\n\n" >> context-files/frontend-context.tsx
+fi
+
 # Find relevant files and concatenate their contents
 find . \( -path './pages/*' -o -path './config/*' -o -path './lib/*' -o -path './components/*' -o -path './utils/*' -o -path './hooks/*' -o -path './const/*' -o -path './types/*' -o -path './styles/*' \) \
      -type f \

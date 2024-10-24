@@ -19,12 +19,20 @@ import {
   Text,
   Heading,
   useToast,
-  Link
+  Link,
+  InputGroup,
+  InputRightElement
 } from '@chakra-ui/react';
-import { ethers, Contract } from 'ethers';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy } from "@privy-io/react-auth";
 import { Trash2, Plus, ExternalLink, Copy, Check, Link as LinkIcon } from 'lucide-react';
-import { deployments, ABIs } from '../config/contracts';
+import { 
+  createPublicClient, 
+  http,
+  parseAbi,
+  isAddress,
+} from 'viem';
+import { Contract } from 'ethers';
+import { deployments, getChainById, ABIs } from '../config/deployments';
 
 interface EntityData {
   entityName: string;
@@ -41,17 +49,11 @@ interface EntityData {
 }
 
 interface DefineEntityProps {
-  onSubmit: (data: EntityData) => void;
   chainId: string;
+  onSubmit?: (data: EntityData) => void;
 }
 
-interface TokenMetadata {
-  address: string;
-  symbol: string | null;
-  decimals: number;
-}
-
-export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId }) => {
+export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
   const [entityName, setEntityName] = useState('');
   const [characteristicTitle, setCharacteristicTitle] = useState('');
   const [characteristicLink, setCharacteristicLink] = useState('');
@@ -73,6 +75,34 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
   const { user, getEthersProvider } = usePrivy();
   const toast = useToast();
 
+  const cleanChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
+  const chain = getChainById(cleanChainId);
+  const membraneAbi = ABIs["Membrane"];
+  
+  const publicClient = createPublicClient({
+    chain,
+    transport: http()
+  });
+
+
+  const waitForTransaction = async (provider: any, txHash: string): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const checkReceipt = async () => {
+        try {
+          const receipt = await provider.getTransactionReceipt(txHash);
+          if (receipt) {
+            resolve(receipt);
+          } else {
+            setTimeout(checkReceipt, 2000); 
+          }
+        } catch (error) {
+          reject(error);
+        }
+      };
+      checkReceipt();
+    });
+  };
+
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -93,39 +123,38 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
     }
   };
 
-  const validateTokenAddress = useCallback(async (address: string): Promise<TokenMetadata | null> => {
-    if (!ethers.isAddress(address)) return null;
+  const validateTokenAddress = useCallback(async (address: string) => {
+    if (!isAddress(address)) return null;
 
     try {
-      const provider = await getEthersProvider();
-      const tokenContract = new Contract(
-        address,
-        [
-          'function symbol() view returns (string)',
-          'function decimals() view returns (uint8)'
-        ],
-        provider
-      );
-
-      const [symbol, decimals] = await Promise.all([
-        tokenContract.symbol(),
-        tokenContract.decimals()
+      const tokenAbi = parseAbi([
+        'function symbol() view returns (string)',
+        'function decimals() view returns (uint8)'
       ]);
 
-      return {
-        address,
-        symbol,
-        decimals
-      };
+      const [symbol, decimals] = await Promise.all([
+        publicClient.readContract({
+          address: address as `0x${string}`,
+          abi: tokenAbi,
+          functionName: 'symbol'
+        }),
+        publicClient.readContract({
+          address: address as `0x${string}`,
+          abi: tokenAbi,
+          functionName: 'decimals'
+        })
+      ]);
+
+      return { address, symbol, decimals };
     } catch (error) {
       console.error('Error validating token:', error);
       return null;
     }
-  }, [getEthersProvider]);
+  }, [publicClient]);
 
   const handleTokenAddressChange = useCallback(async (address: string) => {
     setTokenAddress(address);
-    if (!ethers.isAddress(address)) return;
+    if (!isAddress(address)) return;
 
     setIsValidatingToken(true);
     try {
@@ -174,7 +203,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
     setMembershipConditions(prev => [...prev, {
       tokenAddress,
       requiredBalance,
-      symbol: tokenMetadata.symbol || undefined
+      symbol: tokenMetadata.symbol as string || undefined
     }]);
     setTokenAddress('');
     setRequiredBalance('');
@@ -192,10 +221,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
         body: JSON.stringify({ data }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to upload to IPFS');
-      }
-
+      if (!response.ok) throw new Error('Failed to upload to IPFS');
       const result = await response.json();
       return result.cid;
     } catch (error) {
@@ -226,88 +252,73 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
           requiredBalance
         }))
       };
-
+  
       const cid = await submitToIPFS(entityData);
       setIpfsCid(cid);
-
       setSubmissionState('transaction');
-      const membraneAddress = deployments.Membrane[chainId];
-      if (!membraneAddress) {
-        throw new Error(`No Membrane contract address found for chainId ${chainId}`);
-      }
-
+  
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-      
-      const membraneContract = new Contract(
-        membraneAddress,
-        ABIs.Membrane,
-        signer
-      );
-
+  
       const tokens = membershipConditions.map(c => c.tokenAddress);
       const balances = membershipConditions.map(c => 
-        ethers.parseUnits(c.requiredBalance, 18)
+        BigInt(c.requiredBalance) * BigInt(10 ** 18)
       );
-
-      const tx = await membraneContract.createMembrane(tokens, balances, cid);
+  
+      console.log('Sending transaction with args:', { tokens, balances, cid });
+  
+      const contract = new Contract(
+        deployments.Membrane[cleanChainId],
+        membraneAbi,
+        signer
+      );
+  
       setSubmissionState('confirming');
-
-      const receipt = await provider.waitForTransaction(tx.hash);
       
-      if (receipt && receipt.status === 1) {
-        const logs = receipt.logs;
-        const contractInterface = new ethers.Interface(ABIs.Membrane);
-        const event = logs.find(log => {
-          try {
-            const parsedLog = contractInterface.parseLog({
-              topics: log.topics as string[],
-              data: log.data
-            });
-            return parsedLog?.name === 'MembraneCreated';
-          } catch {
-            return false;
-          }
-        });
-
-        if (event) {
-          const parsedEvent = contractInterface.parseLog({
-            topics: event.topics as string[],
-            data: event.data
-          });
-
-          const newMembraneId = parsedEvent?.args?.membraneId?.toString();
-          if (newMembraneId) {
-            setMembraneId(newMembraneId);
-            setSubmissionState('complete');
-
-            // Store in localStorage
+      const tx = await contract.createMembrane(tokens, balances, cid);
+      console.log('Transaction sent:', tx.hash);
+  
+      const receipt = await waitForTransaction(provider, tx.hash);
+      console.log('Transaction receipt:', receipt);
+  
+      if (receipt && (receipt.status === 1 || receipt.status === true)) {
+        const membraneAddress = deployments.Membrane[cleanChainId];
+        const relevantLogs = receipt.logs.filter(log => 
+          log.address.toLowerCase() === membraneAddress.toLowerCase()
+        );
+  
+        console.log('Relevant logs:', relevantLogs);
+  
+        if (relevantLogs.length > 0) {
+          for (const log of relevantLogs) {
             try {
-              localStorage.setItem('lastMembraneId', newMembraneId);
-            } catch (err) {
-              console.error('Failed to store membrane ID:', err);
+              const parsedLog = contract.interface.parseLog(log);
+              console.log('Parsed log:', parsedLog);
+  
+              if (parsedLog && parsedLog.name === 'MembraneCreated') {
+                const membraneId = parsedLog.args[0].toString();
+                console.log('Found membrane ID:', membraneId);
+  
+                setMembraneId(membraneId);
+                setSubmissionState('complete');
+
+                
+                toast({
+                  title: "Entity Created",
+                  description: "Your entity has been successfully created",
+                  status: "success",
+                  duration: 5000,
+                  isClosable: true,
+                });
+                return;
+              }
+            } catch (parseError) {
+              console.warn('Error parsing log:', parseError);
+              continue;
             }
-
-            toast({
-              title: "Entity Created",
-              description: "Your entity has been successfully created",
-              status: "success",
-              duration: 5000,
-              isClosable: true,
-            });
-
-            onSubmit({
-              entityName,
-              characteristics,
-              membershipConditions,
-              membraneId: newMembraneId
-            });
-          } else {
-            throw new Error('Could not parse membrane ID from event');
           }
-        } else {
-          throw new Error('Membrane creation event not found in transaction receipt');
         }
+  
       } else {
         throw new Error('Transaction failed');
       }
@@ -315,7 +326,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
       console.error('Error creating entity:', error);
       setError(error.message || 'Transaction failed');
       setSubmissionState('idle');
-
+      
       toast({
         title: "Error",
         description: error.message || "Failed to create entity",
@@ -411,7 +422,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
         </Box>
 
         <Box p={4} bg="gray.50" borderRadius="md">
-          <FormLabel>Membership Conditions</FormLabel>
+          <FormLabel>Membership Conditions (Optional)</FormLabel>
           <VStack spacing={4}>
             <HStack width="full">
               <Input
@@ -476,6 +487,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
             )}
           </VStack>
         </Box>
+
         {error && (
           <Alert status="error">
             <AlertIcon />
@@ -486,12 +498,12 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
         <Button
           colorScheme="purple"
           onClick={handleSubmit}
-          isLoading={submissionState !== 'idle'}
+          isLoading={submissionState === 'transaction' }
           loadingText={
             submissionState === 'ipfs' ? 'Uploading to IPFS...' :
             submissionState === 'transaction' ? 'Creating Membrane...' :
             submissionState === 'confirming' ? 'Confirming Transaction...' :
-            'Processing...'
+            submissionState === 'complete' ? 'Create Another Entity' : 'Create Entity'
           }
           isDisabled={
             !entityName ||
@@ -539,49 +551,65 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ onSubmit, chainId })
                 <Text fontWeight="bold">Entity created successfully!</Text>
               </HStack>
               
+              {membraneId && (
+                <Box bg="gray.50" p={4} borderRadius="md" w="100%">
+                  <FormControl>
+                    <FormLabel>Membrane ID</FormLabel>
+                    <InputGroup>
+                      <Input
+                        value={membraneId}
+                        isReadOnly
+                        pr="4.5rem"
+                        fontFamily="mono"
+                        bg="white"
+                      />
+                      <InputRightElement width="4.5rem">
+                        <Button
+                          h="1.75rem"
+                          size="sm"
+                          onClick={() => copyToClipboard(membraneId)}
+                          leftIcon={hasCopied ? <Check size={16} /> : <Copy size={16} />}
+                        >
+                          {hasCopied ? 'Copied!' : 'Copy'}
+                        </Button>
+                      </InputRightElement>
+                    </InputGroup>
+                  </FormControl>
+                </Box>
+              )}
+
               <Box bg="gray.50" p={4} borderRadius="md" w="100%">
-                <FormControl>
-                  <FormLabel>Membrane ID</FormLabel>
-                  <HStack>
-                    <Input
-                      value={membraneId}
-                      isReadOnly
-                      bg="white"
-                      fontFamily="mono"
-                    />
-                    <Button
-                      onClick={() => copyToClipboard(membraneId)}
-                      variant="ghost"
-                      colorScheme="purple"
-                      size="md"
-                      leftIcon={hasCopied ? <Check size={16} /> : <Copy size={16} />}
-                    >
-                      {hasCopied ? 'Copied!' : 'Copy'}
-                    </Button>
-                  </HStack>
-                </FormControl>
+                <Text fontSize="sm" fontWeight="medium" mb={2}>
+                  Entity Summary:
+                </Text>
+                <VStack align="start" spacing={1}>
+                  <Text fontSize="sm">• Name: {entityName}</Text>
+                  <Text fontSize="sm">• Characteristics: {characteristics.length}</Text>
+                  <Text fontSize="sm">• Membership Conditions: {membershipConditions.length}</Text>
+                </VStack>
 
                 <Box mt={4}>
                   <Text fontSize="sm" fontWeight="medium" mb={2}>
-                    Entity Summary:
+                    Usage Instructions:
                   </Text>
                   <VStack align="start" spacing={1}>
-                    <Text fontSize="sm">• Name: {entityName}</Text>
-                    <Text fontSize="sm">• Characteristics: {characteristics.length}</Text>
-                    <Text fontSize="sm">• Membership Conditions: {membershipConditions.length}</Text>
+                    <Text fontSize="sm">• Use this Membrane ID with spawnBranchWithMembrane</Text>
+                    <Text fontSize="sm">• Or set as membrane via signal</Text>
                   </VStack>
                 </Box>
 
-                <Button
-                  size="sm"
-                  variant="link"
-                  colorScheme="blue"
-                  onClick={() => window.open(`https://ipfs.io/ipfs/${ipfsCid}`)}
-                  leftIcon={<ExternalLink size={14} />}
-                  mt={4}
-                >
-                  View on IPFS
-                </Button>
+                {ipfsCid && (
+                  <Button
+                    size="sm"
+                    variant="link"
+                    colorScheme="blue"
+                    onClick={() => window.open(`https://underlying-tomato-locust.myfilebase.com/ipfs/${ipfsCid}`)}
+                    leftIcon={<ExternalLink size={14} />}
+                    mt={4}
+                  >
+                    View on IPFS
+                  </Button>
+                )}
               </Box>
             </VStack>
           </Alert>
