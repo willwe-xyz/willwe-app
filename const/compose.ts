@@ -1,67 +1,354 @@
-export const SUPPORTED_CHAINS = {
-    ETHEREUM: '1',
-    POLYGON: '137',
-    ARBITRUM: '42161',
-    OPTIMISM: '10',
-    BASE: '8453',
-  } as const;
+import { ethers } from 'ethers';
+import { deployments, ABIs } from '../config/deployments';
+import { NodeData } from '../types';
+import { UseToastOptions } from '@chakra-ui/react';
+import { BrowserProvider } from 'ethers';
+
+// Contract Instance Management
+export const getWillWeContract = async (
+  chainId: string,
+  provider: BrowserProvider
+): Promise<ethers.Contract> => {
+  const cleanChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
+  const signer = await provider.getSigner();
   
-  export const GAS_PRICE_ENDPOINTS = {
-    [SUPPORTED_CHAINS.ETHEREUM]: 'https://api.etherscan.io/api?module=gastracker&action=gasoracle',
-    [SUPPORTED_CHAINS.POLYGON]: 'https://api.polygonscan.com/api?module=gastracker&action=gasoracle',
-    [SUPPORTED_CHAINS.ARBITRUM]: 'https://api.arbiscan.io/api?module=gastracker&action=gasoracle',
-    [SUPPORTED_CHAINS.OPTIMISM]: 'https://api-optimistic.etherscan.io/api?module=gastracker&action=gasoracle',
-    [SUPPORTED_CHAINS.BASE]: 'https://api.basescan.org/api?module=gastracker&action=gasoracle',
-  };
+  return new ethers.Contract(
+    deployments["WillWe"][cleanChainId],
+    ABIs.WillWe,
+    signer
+  );
+};
+
+// Transaction Management
+export const handleTransaction = async (
+  txPromise: Promise<ethers.ContractTransactionResponse>,
+  successMessage: string,
+  setIsTransacting: (isTransacting: boolean) => void,
+  toast: (options: UseToastOptions) => void,
+  onSuccess?: () => void
+): Promise<void> => {
+  setIsTransacting(true);
+  try {
+    const tx = await txPromise;
+    await tx.wait();
+    toast({
+      title: 'Success',
+      description: successMessage,
+      status: 'success',
+      duration: 5000,
+    });
+    if (onSuccess) {
+      onSuccess();
+    }
+  } catch (error: any) {
+    console.error('Transaction failed:', error);
+    toast({
+      title: 'Transaction Failed',
+      description: error.message,
+      status: 'error',
+      duration: 5000,
+    });
+  } finally {
+    setIsTransacting(false);
+  }
+};
+
+// Node Data Read Operations
+export const getInUseMembraneOf = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<bigint> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.getInUseMembraneOf(tokenId);
+  } catch (error) {
+    throw new Error(`Failed to get in-use membrane: ${error.message}`);
+  }
+};
+
+export const getMembraneContract = async (
+  chainId: string,
+  provider: BrowserProvider
+): Promise<ethers.Contract> => {
+  const cleanChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
+  const signer = await provider.getSigner();
   
-  export const DEFAULT_TOKENS = {
-    [SUPPORTED_CHAINS.ETHEREUM]: [
-      {
-        address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-        symbol: 'WETH',
-        name: 'Wrapped Ether',
-        decimals: 18,
-      },
-      {
-        address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-        symbol: 'USDC',
-        name: 'USD Coin',
-        decimals: 6,
-      },
-    ],
-  };
-  
-  export const ERROR_MESSAGES = {
-    INVALID_ADDRESS: 'Invalid Ethereum address',
-    INVALID_AMOUNT: 'Invalid amount',
-    INSUFFICIENT_BALANCE: 'Insufficient balance',
-    NETWORK_ERROR: 'Network error occurred',
-    TRANSACTION_FAILED: 'Transaction failed',
-    USER_REJECTED: 'User rejected the transaction',
-    IPFS_UPLOAD_FAILED: 'Failed to upload to IPFS',
-  } as const;
-  
-  export const IPFS_GATEWAY_URLS = [
-    'https://ipfs.io/ipfs/',
-    'https://gateway.pinata.cloud/ipfs/',
-    'https://cloudflare-ipfs.com/ipfs/',
-  ];
-  
-  export const TRANSACTION_TYPES = {
-    TOKEN_DEPLOYMENT: 'token_deployment',
-    ENTITY_CREATION: 'entity_creation',
-    MEMBRANE_UPDATE: 'membrane_update',
-  } as const;
-  
-  export const UI_CONSTANTS = {
-    MODAL_SIZES: {
-      sm: '400px',
-      md: '600px',
-      lg: '800px',
-      xl: '1000px',
-    },
-    ANIMATION_DURATION: 200,
-    TOAST_DURATION: 5000,
-    MAX_RETRIES: 3,
-    DEBOUNCE_DELAY: 500,
-  } as const;
+  return new ethers.Contract(
+    deployments["Membrane"][cleanChainId],
+    ABIs.Membrane,
+    signer
+  );
+};
+
+export const allMembersOf = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<string[]> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.allMembersOf(tokenId);
+  } catch (error) {
+    throw new Error(`Failed to get members: ${error.message}`);
+  }
+};
+
+export const asRootValuation = async (
+  chainId: string,
+  provider: BrowserProvider,
+  amount: string
+): Promise<bigint> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.asRootValuation(amount);
+  } catch (error) {
+    throw new Error(`Failed to get root valuation: ${error.message}`);
+  }
+};
+
+export const balanceOf = async (
+  chainId: string,
+  provider: BrowserProvider,
+  account: string,
+  id: string
+): Promise<bigint> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.balanceOf(account, id);
+  } catch (error) {
+    throw new Error(`Failed to get balance: ${error.message}`);
+  }
+};
+
+export const balanceOfBatch = async (
+  chainId: string,
+  provider: BrowserProvider,
+  accounts: string[],
+  ids: string[]
+): Promise<bigint[]> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.balanceOfBatch(accounts, ids);
+  } catch (error) {
+    throw new Error(`Failed to get batch balance: ${error.message}`);
+  }
+};
+
+export const getUserNodeSignals = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string,
+  user: string
+): Promise<[bigint, bigint][]> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.getUserNodeSignals(tokenId, user);
+  } catch (error) {
+    throw new Error(`Failed to get user signals: ${error.message}`);
+  }
+};
+
+export const getNodeData = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<NodeData> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.getNodeData(tokenId);
+  } catch (error) {
+    throw new Error(`Failed to get node data: ${error.message}`);
+  }
+};
+
+export const getNodeDataWithUserSignals = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string,
+  user: string
+): Promise<NodeData> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.getNodeDataWithUserSignals(tokenId, user);
+  } catch (error) {
+    throw new Error(`Failed to get node data with signals: ${error.message}`);
+  }
+};
+
+export const getAllNodesForRoot = async (
+  chainId: string,
+  provider: BrowserProvider,
+  rootToken: string,
+  userAddress: string
+): Promise<NodeData[]> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.getAllNodesForRoot(rootToken, userAddress);
+  } catch (error) {
+    throw new Error(`Failed to get all nodes: ${error.message}`);
+  }
+};
+
+// Write Operations
+export const spawnBranch = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string,
+  setIsTransacting: (isTransacting: boolean) => void,
+  toast: (options: UseToastOptions) => void,
+  onSuccess?: () => void
+) => {
+  try {
+    setIsTransacting(true);
+    const contract = await getWillWeContract(chainId, provider);
+    const tx = await contract.spawnBranch(tokenId);
+    await tx.wait();
+    
+    toast({
+      title: 'Success',
+      description: 'Branch spawned successfully',
+      status: 'success',
+      duration: 5000,
+    });
+    
+    if (onSuccess) {
+      onSuccess();
+    }
+  } catch (error: any) {
+    console.error('Failed to spawn branch:', error);
+    toast({
+      title: 'Error',
+      description: error.message,
+      status: 'error',
+      duration: 5000,
+    });
+  } finally {
+    setIsTransacting(false);
+  }
+};
+
+export const mintMembership = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string,
+  setIsTransacting: (isTransacting: boolean) => void,
+  toast: (options: UseToastOptions) => void,
+  onSuccess?: () => void
+) => {
+  try {
+    setIsTransacting(true);
+    const contract = await getWillWeContract(chainId, provider);
+    const tx = await contract.mintMembership(tokenId);
+    await tx.wait();
+    
+    toast({
+      title: 'Success',
+      description: 'Membership minted successfully',
+      status: 'success',
+      duration: 5000,
+    });
+    
+    if (onSuccess) {
+      onSuccess();
+    }
+  } catch (error: any) {
+    console.error('Failed to mint membership:', error);
+    toast({
+      title: 'Error',
+      description: error.message,
+      status: 'error',
+      duration: 5000,
+    });
+  } finally {
+    setIsTransacting(false);
+  }
+};
+
+export const redistributePath = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string,
+  setIsTransacting: (isTransacting: boolean) => void,
+  toast: (options: UseToastOptions) => void,
+  onSuccess?: () => void
+) => {
+  try {
+    setIsTransacting(true);
+    const contract = await getWillWeContract(chainId, provider);
+    const tx = await contract.redistributePath(tokenId);
+    await tx.wait();
+    
+    toast({
+      title: 'Success',
+      description: 'Redistribution completed successfully',
+      status: 'success',
+      duration: 5000,
+    });
+    
+    if (onSuccess) {
+      onSuccess();
+    }
+  } catch (error: any) {
+    console.error('Failed to redistribute:', error);
+    toast({
+      title: 'Error',
+      description: error.message,
+      status: 'error',
+      duration: 5000,
+    });
+  } finally {
+    setIsTransacting(false);
+  }
+};
+
+export const isRoot = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<boolean> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    const parentId = await contract.getParentOf(tokenId);
+    return parentId === '0';
+  } catch (error) {
+    throw new Error(`Failed to check if root: ${error.message}`);
+  }
+};
+
+export const getNodeHierarchy = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<string[]> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    const path = await contract.getFidPath(tokenId);
+    return path.reverse(); // Return from root to leaf
+  } catch (error) {
+    throw new Error(`Failed to get node hierarchy: ${error.message}`);
+  }
+};
+
+export const getParentOf = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<string> => {
+  try {
+    const contract = await getWillWeContract(chainId, provider);
+    return await contract.getParentOf(tokenId);
+  } catch (error) {
+    throw new Error(`Failed to get parent: ${error.message}`);
+  }
+};
+
+export default {
+  getWillWeContract,
+  spawnBranch,
+  mintMembership,
+  redistributePath,
+  getNodeData,
+  getAllNodesForRoot,
+  getUserNodeSignals
+};

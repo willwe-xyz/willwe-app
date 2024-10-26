@@ -1,10 +1,9 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text, HStack, Tooltip, Button } from "@chakra-ui/react";
 import { Users, Info, UserPlus, GitBranch, Droplet } from 'lucide-react';
 import { NodeState } from '../types/chainData';
 
-interface NodePillProps {
+export interface NodePillProps {
   node: NodeState;
   totalValue: number;
   color: string;
@@ -29,7 +28,7 @@ export const NodePill: React.FC<NodePillProps> = ({
   textColor,
   borderColor
 }) => {
-  const [isHovered, setIsHovered] = React.useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const valuePercentage = (parseInt(node.basicInfo[4]) / totalValue * 100).toFixed(2);
 
   return (
@@ -79,24 +78,66 @@ export const NodePill: React.FC<NodePillProps> = ({
           border="1px solid"
           borderColor={borderColor}
           p={1}
+          zIndex={1}
+          boxShadow="sm"
         >
           <Tooltip label="Node Info">
-            <Button size="xs" borderRadius="full" onClick={() => {}} bg="white" color={color}>
+            <Button 
+              size="xs" 
+              borderRadius="full" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onNodeClick(node.basicInfo[0]);
+              }}
+              bg="white" 
+              color={color}
+              _hover={{ bg: backgroundColor }}
+            >
               <Info size={12} />
             </Button>
           </Tooltip>
           <Tooltip label="Mint Membership">
-            <Button size="xs" borderRadius="full" onClick={() => onMintMembership(node.basicInfo[0])} bg="white" color={color}>
+            <Button 
+              size="xs" 
+              borderRadius="full" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onMintMembership(node.basicInfo[0]);
+              }}
+              bg="white" 
+              color={color}
+              _hover={{ bg: backgroundColor }}
+            >
               <UserPlus size={12} />
             </Button>
           </Tooltip>
           <Tooltip label="Spawn Node">
-            <Button size="xs" borderRadius="full" onClick={() => onSpawnNode(node.basicInfo[0])} bg="white" color={color}>
+            <Button 
+              size="xs" 
+              borderRadius="full" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onSpawnNode(node.basicInfo[0]);
+              }}
+              bg="white" 
+              color={color}
+              _hover={{ bg: backgroundColor }}
+            >
               <GitBranch size={12} />
             </Button>
           </Tooltip>
           <Tooltip label="Trickle/Redistribute">
-            <Button size="xs" borderRadius="full" onClick={() => onTrickle(node.basicInfo[0])} bg="white" color={color}>
+            <Button 
+              size="xs" 
+              borderRadius="full" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onTrickle(node.basicInfo[0]);
+              }}
+              bg="white" 
+              color={color}
+              _hover={{ bg: backgroundColor }}
+            >
               <Droplet size={12} />
             </Button>
           </Tooltip>
@@ -105,3 +146,5 @@ export const NodePill: React.FC<NodePillProps> = ({
     </Box>
   );
 };
+
+export default NodePill;
