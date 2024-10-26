@@ -230,6 +230,20 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
     }
   };
 
+  const resetForm = useCallback(() => {
+    setEntityName('');
+    setCharacteristics([]);
+    setMembershipConditions([]);
+    setCharacteristicTitle('');
+    setCharacteristicLink('');
+    setTokenAddress('');
+    setRequiredBalance('');
+    setError(null);
+    setSubmissionState('idle');
+    setIpfsCid('');
+    setMembraneId('');
+  }, []);
+  
   const handleSubmit = async () => {
     if (!user?.wallet?.address) {
       toast({
@@ -241,7 +255,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
       });
       return;
     }
-
+  
     try {
       setSubmissionState('ipfs');
       const entityData = {
@@ -265,8 +279,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
         BigInt(c.requiredBalance) * BigInt(10 ** 18)
       );
   
-      console.log('Sending transaction with args:', { tokens, balances, cid });
-  
       const contract = new Contract(
         deployments.Membrane[cleanChainId],
         membraneAbi,
@@ -276,10 +288,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
       setSubmissionState('confirming');
       
       const tx = await contract.createMembrane(tokens, balances, cid);
-      console.log('Transaction sent:', tx.hash);
-  
       const receipt = await waitForTransaction(provider, tx.hash);
-      console.log('Transaction receipt:', receipt);
   
       if (receipt && (receipt.status === 1 || receipt.status === true)) {
         const membraneAddress = deployments.Membrane[cleanChainId];
@@ -287,21 +296,14 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
           log.address.toLowerCase() === membraneAddress.toLowerCase()
         );
   
-        console.log('Relevant logs:', relevantLogs);
-  
         if (relevantLogs.length > 0) {
           for (const log of relevantLogs) {
             try {
               const parsedLog = contract.interface.parseLog(log);
-              console.log('Parsed log:', parsedLog);
-  
               if (parsedLog && parsedLog.name === 'MembraneCreated') {
                 const membraneId = parsedLog.args[0].toString();
-                console.log('Found membrane ID:', membraneId);
-  
                 setMembraneId(membraneId);
                 setSubmissionState('complete');
-
                 
                 toast({
                   title: "Entity Created",
@@ -310,6 +312,9 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
                   duration: 5000,
                   isClosable: true,
                 });
+  
+                // Reset form after a short delay to allow user to see success state
+                setTimeout(resetForm, 5000);
                 return;
               }
             } catch (parseError) {
@@ -318,9 +323,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
             }
           }
         }
-  
-      } else {
-        throw new Error('Transaction failed');
       }
     } catch (error: any) {
       console.error('Error creating entity:', error);
@@ -495,24 +497,25 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
           </Alert>
         )}
 
-        <Button
-          colorScheme="purple"
-          onClick={handleSubmit}
-          isLoading={submissionState === 'transaction' }
-          loadingText={
-            submissionState === 'ipfs' ? 'Uploading to IPFS...' :
-            submissionState === 'transaction' ? 'Creating Membrane...' :
-            submissionState === 'confirming' ? 'Confirming Transaction...' :
-            submissionState === 'complete' ? 'Create Another Entity' : 'Create Entity'
-          }
-          isDisabled={
-            !entityName ||
-            characteristics.length === 0 ||
-            submissionState !== 'idle'
-          }
-        >
-          Create Entity
-        </Button>
+<Button
+  colorScheme="purple"
+  onClick={handleSubmit}
+  isLoading={submissionState === 'transaction'}
+  loadingText={
+    submissionState === 'ipfs' ? 'Uploading to IPFS...' :
+    submissionState === 'transaction' ? 'Creating Membrane...' :
+    submissionState === 'confirming' ? 'Confirming Transaction...' :
+    'Create Entity'
+  }
+  isDisabled={
+    !entityName ||
+    characteristics.length === 0 ||
+    submissionState === 'transaction' ||
+    submissionState === 'confirming'
+  }
+>
+  Create Entity
+</Button>
 
         {submissionState !== 'idle' && submissionState !== 'complete' && (
           <Box>

@@ -1,131 +1,197 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Box, Text, Flex, Input, IconButton, Spinner } from "@chakra-ui/react";
-import { Search, ZoomIn, ZoomOut } from 'lucide-react';
-import { NodeState, RootNodeState } from "../types/chainData";
-import { useColorManagement } from './AllStackComponents';
-import { useRootNodes } from '../hooks/useRootNodes';
-import { useRouter } from 'next/router';
+import { Box, Text, Input, VStack, HStack, Button, useToast } from '@chakra-ui/react';
+import { Search, Plus } from 'lucide-react';
 import { NodePill } from './NodePill';
+import { useRootNodes } from '../hooks/useRootNodes';
+import { spawnBranch, mintMembership, redistributePath } from '../utils/compose';
 
-interface RootNodeDetailsProps {
-  chainId: string;
-  rootToken: string;
-  userAddress: string;
-  selectedTokenColor: string
-  onNodeSelect: (nodeId: string) => void;
-}
-
-export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({ chainId, rootToken, userAddress, selectedTokenColor, onNodeSelect }) => {
+const RootNodeDetails = ({ 
+  chainId, 
+  rootToken, 
+  userAddress, 
+  tokenColor,
+  onNodeSelect 
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [hoveredNodePath, setHoveredNodePath] = useState<string[]>([]);
-  const [tokenColor, setTokenColor] = useState(`#${rootToken.slice(-6)}`);
-  const router = useRouter();
+  const [isTransacting, setIsTransacting] = useState(false);
+  const toast = useToast();
+  
+  const { rootNodeStates, isLoading, error, refetch } = useRootNodes(chainId, rootToken, userAddress);
 
-  const { rootNodeStates, isLoading, error } = useRootNodes(chainId, rootToken, userAddress);
+  const handleMintMembership = useCallback(async (nodeId) => {
+    try {
+      await mintMembership(chainId, window.ethereum, nodeId, setIsTransacting, toast, refetch);
+    } catch (error) {
+      console.error('Membership action failed:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+      });
+    }
+  }, [chainId, toast, refetch]);
 
-  const handleNodeClick = useCallback((nodeId: string) => {
-    onNodeSelect(nodeId);
-    // router.push(`/nodes/${chainId}/${nodeId}`);
-  }, [router, chainId]);
+  const handleSpawnNode = useCallback(async (parentNodeId) => {
+    try {
+      await spawnBranch(chainId, window.ethereum, parentNodeId, setIsTransacting, toast, refetch);
+    } catch (error) {
+      console.error('Failed to spawn node:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+      });
+    }
+  }, [chainId, toast, refetch]);
 
+  const handleTrickle = useCallback(async (nodeId) => {
+    try {
+      await redistributePath(chainId, window.ethereum, nodeId, setIsTransacting, toast, refetch);
+    } catch (error) {
+      console.error('Failed to redistribute:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+      });
+    }
+  }, [chainId, toast, refetch]);
+
+  // Build node hierarchy using childrenNodes array
+  const { rootNodes, nodeHierarchy, allNodes } = useMemo(() => {
+    if (!rootNodeStates?.length) {
+      return { rootNodes: [], nodeHierarchy: {}, allNodes: [] };
+    }
+
+    const allNodes = rootNodeStates.flatMap(state => state.nodes);
+    
+    // Create a map of nodes for quick lookup
+    const nodesMap = new Map(allNodes.map(node => [node.basicInfo[0], node]));
+
+    // Build hierarchy using childrenNodes
+    const hierarchy = {};
+    allNodes.forEach(node => {
+      const nodeId = node.basicInfo[0];
+      const childrenIds = node.childrenNodes;
+      hierarchy[nodeId] = childrenIds
+        .map(childId => nodesMap.get(childId))
+        .filter(Boolean); // Remove any undefined values
+    });
+
+    // Find root nodes (nodes with rootPath.length === 1)
+    const roots = allNodes.filter(node => node.rootPath.length === 1);
+
+    console.log('Hierarchy:', hierarchy);
+    console.log('Root nodes:', roots);
+
+    return {
+      rootNodes: roots,
+      nodeHierarchy: hierarchy,
+      allNodes
+    };
+  }, [rootNodeStates]);
+
+  // Filter nodes based on search
   const filteredNodes = useMemo(() => {
-    return rootNodeStates.flatMap(state => state.nodes.filter(node => 
-      node.basicInfo[0].toLowerCase().includes(searchTerm.toLowerCase()) ||
-      node.basicInfo[4].toLowerCase().includes(searchTerm.toLowerCase())
-    ));
-  }, [rootNodeStates, searchTerm]);
-
-  const getNodeColor = useCallback((value: string, maxValue: number) => {
-    const normalizedValue = Math.min(parseInt(value) / maxValue, 1);
-    return `rgba(${parseInt(tokenColor.slice(1, 3), 16)}, ${parseInt(tokenColor.slice(3, 5), 16)}, ${parseInt(tokenColor.slice(5, 7), 16)}, ${normalizedValue})`;
-  }, [tokenColor]);
+    if (!searchTerm) return allNodes;
+    return allNodes.filter(node =>
+      node.basicInfo[0].toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [allNodes, searchTerm]);
 
   const totalValue = useMemo(() => {
     return filteredNodes.reduce((sum, node) => sum + parseInt(node.basicInfo[4]), 0);
   }, [filteredNodes]);
 
-  const maxValue = useMemo(() => {
-    return Math.max(...filteredNodes.map(node => parseInt(node.basicInfo[4])));
-  }, [filteredNodes]);
-
-  const handleNodeHover = useCallback((node: NodeState) => {
-    setHoveredNodePath(node.rootPath);
-  }, []);
-
-  const renderNode = (node: NodeState, depth: number) => {
-    const nodeColor = getNodeColor(node.basicInfo[4], maxValue);
-    const isHighlighted = hoveredNodePath.includes(node.basicInfo[0]);
+  // Render node hierarchy recursively
+  const renderNodeHierarchy = useCallback((node) => {
+    const children = nodeHierarchy[node.basicInfo[0]] || [];
+    
+    if (children.length === 0) return null;
 
     return (
-      <Box 
-        key={node.basicInfo[0]} 
-        ml={depth * 20} 
-        mb={1}
-        opacity={isHighlighted ? 1 : hoveredNodePath.length > 0 ? 0.5 : 1}
-        transition="opacity 0.2s"
-        backgroundColor={`${selectedTokenColor}`}
-      >
-        <Flex alignItems="center">
-          <Box width={depth > 0 ? "20px" : "0"} borderTop="1px solid" borderColor={tokenColor} backgroundColor={`${selectedTokenColor}`} mr={2} />
-          <NodePill
-            node={node}
-            totalValue={totalValue}
-            backgroundColor={`${selectedTokenColor}99`}
-            borderColor={selectedTokenColor}
-            textColor={tokenColor}
-            onNodeClick={handleNodeClick}
-            onMintMembership={(nodeId) => console.log(`Mint membership for ${nodeId}`)}
-            onSpawnNode={(nodeId) => console.log(`Spawn node from ${nodeId}`)}
-            onTrickle={(nodeId) => console.log(`Trickle/redistribute for ${nodeId}`)}
-          />
-        </Flex>
-        <Box ml={4}>
-          {node.childrenNodes.map(childId => {
-            const childNode = filteredNodes.find(n => n.basicInfo[0] === childId);
-            return childNode ? renderNode(childNode, depth + 1) : null;
-          })}
-        </Box>
+      <VStack align="stretch" spacing={1} ml={4}>
+        {children.map(childNode => (
+          <Box key={childNode.basicInfo[0]}>
+            <NodePill
+              node={childNode}
+              totalValue={totalValue}
+              color={tokenColor}
+              onNodeClick={onNodeSelect}
+              onMintMembership={handleMintMembership}
+              onSpawnNode={handleSpawnNode}
+              onTrickle={handleTrickle}
+              backgroundColor={`${tokenColor}15`}
+              textColor={tokenColor}
+              borderColor={tokenColor}
+            />
+            {renderNodeHierarchy(childNode)}
+          </Box>
+        ))}
+      </VStack>
+    );
+  }, [nodeHierarchy, totalValue, tokenColor, onNodeSelect, handleMintMembership, handleSpawnNode, handleTrickle]);
+
+  if (isLoading) {
+    return (
+      <Box p={4} textAlign="center">
+        <Text>Loading nodes...</Text>
       </Box>
     );
-  };
+  }
 
-  if (isLoading) return <Spinner size="xl" />;
-  if (error) return <Text color="red.500">Error: {error.message}</Text>;
-
-  const rootNode = filteredNodes.find(node => node.rootPath.length === 1);
+  if (error) {
+    return (
+      <Box p={4} textAlign="center">
+        <Text color="red.500">Error: {error.message}</Text>
+      </Box>
+    );
+  }
 
   return (
-    <Box p={4} position="relative" height="100%" overflowY="auto" bg={tokenColor}>
-      <Flex justify="space-between" align="center" mb={4}>
+    <Box p={4}>
+      <HStack spacing={4} mb={4}>
+        <Button
+          leftIcon={<Plus size={14} />}
+          onClick={() => handleSpawnNode(rootToken)}
+          size="sm"
+          colorScheme="gray"
+          variant="outline"
+          isLoading={isTransacting}
+        >
+          New Root Node
+        </Button>
         <Input
           placeholder="Search nodes..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          width="200px"
-          bg="white"
+          size="sm"
+          maxW="300px"
         />
-        <Flex>
-          <IconButton
-            aria-label="Zoom out"
-            icon={<ZoomOut size={20} />}
-            onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
-            mr={2}
-          />
-          <IconButton
-            aria-label="Zoom in"
-            icon={<ZoomIn size={20} />}
-            onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}
-          />
-        </Flex>
-      </Flex>
-      <Box 
-        transform={`scale(${zoomLevel})`} 
-        transformOrigin="top left"
-        onMouseLeave={() => setHoveredNodePath([])}
-      >
-        {rootNode && renderNode(rootNode, 0)}
-      </Box>
+      </HStack>
+
+      <VStack align="stretch" spacing={2}>
+        {rootNodes.map(node => (
+          <Box key={node.basicInfo[0]}>
+            <NodePill
+              node={node}
+              totalValue={totalValue}
+              color={tokenColor}
+              onNodeClick={onNodeSelect}
+              onMintMembership={handleMintMembership}
+              onSpawnNode={handleSpawnNode}
+              onTrickle={handleTrickle}
+              backgroundColor={`${tokenColor}15`}
+              textColor={tokenColor}
+              borderColor={tokenColor}
+            />
+            {renderNodeHierarchy(node)}
+          </Box>
+        ))}
+      </VStack>
     </Box>
   );
 };

@@ -26,20 +26,6 @@ interface ComposePanelProps {
   userAddress?: string;
 }
 
-interface EntityData {
-  entityName: string;
-  characteristics: {
-    title: string;
-    link: string;
-  }[];
-  membershipConditions: {
-    tokenAddress: string;
-    requiredBalance: string;
-    symbol?: string;
-  }[];
-  membraneId?: string;
-}
-
 export const ComposePanel: React.FC<ComposePanelProps> = ({
   children,
   chainId,
@@ -55,20 +41,16 @@ export const ComposePanel: React.FC<ComposePanelProps> = ({
 
   const onClose = useCallback(() => {
     originalOnClose();
-    // Small delay to reset state after animation
     setTimeout(resetState, 300);
   }, [originalOnClose, resetState]);
 
-  const handleEntitySubmit = useCallback((entityData: EntityData) => {
-    toast({
-      title: "Entity Created",
-      description: `Entity "${entityData.entityName}" has been created successfully`,
-      status: "success",
-      duration: 5000,
-      isClosable: true,
-    });
-    onClose();
-  }, [onClose, toast]);
+  // Common styles for tab content
+  const tabContentStyles = {
+    height: '600px', // Fixed height for content area
+    overflowY: 'auto',
+    px: '6',
+    py: '4',
+  };
 
   return (
     <>
@@ -86,40 +68,61 @@ export const ComposePanel: React.FC<ComposePanelProps> = ({
           backdropFilter="blur(10px)"
         />
         <ModalContent 
-          mx={4}
+          w="1000px" // Fixed width
+          h="700px"  // Fixed height
+          maxW="90vw"
+          maxH="90vh"
           bg="white"
           rounded="lg"
           shadow="xl"
           overflow="hidden"
+          position="relative"
         >
           <ModalHeader 
             pt={6}
             px={6}
-            pb={0}
+            borderBottom="1px solid"
+            borderColor="gray.100"
+            bg="white"
+            position="absolute"
+            top={0}
+            left={0}
+            right={0}
+            zIndex={1}
           >
             Compose
+            <ModalCloseButton 
+              top={6}
+              right={4}
+            />
           </ModalHeader>
-          <ModalCloseButton 
-            size="lg"
-            top={4}
-            right={4}
-          />
-          
-          <ModalBody p={6}>
+
+          <Box pt="60px" h="full"> {/* Add padding top to account for header */}
             <Tabs
               isFitted
               variant="enclosed"
               colorScheme="purple"
               index={activeTab}
               onChange={setActiveTab}
+              display="flex"
+              flexDirection="column"
+              h="full"
             >
-              <TabList mb="1em">
+              <TabList 
+                borderBottomWidth="1px" 
+                borderColor="gray.100"
+                bg="gray.50"
+                position="sticky"
+                top={0}
+                zIndex={1}
+              >
                 <Tab
-                  py={3}
+                  py={4}
                   _selected={{
                     color: 'purple.600',
-                    borderColor: 'purple.600',
-                    borderBottomColor: 'white'
+                    bg: 'white',
+                    borderColor: 'gray.100',
+                    borderBottom: 'none'
                   }}
                 >
                   <HStack spacing={2}>
@@ -128,11 +131,12 @@ export const ComposePanel: React.FC<ComposePanelProps> = ({
                   </HStack>
                 </Tab>
                 <Tab
-                  py={3}
+                  py={4}
                   _selected={{
                     color: 'purple.600',
-                    borderColor: 'purple.600',
-                    borderBottomColor: 'white'
+                    bg: 'white',
+                    borderColor: 'gray.100',
+                    borderBottom: 'none'
                   }}
                 >
                   <HStack spacing={2}>
@@ -142,43 +146,37 @@ export const ComposePanel: React.FC<ComposePanelProps> = ({
                 </Tab>
               </TabList>
 
-              <TabPanels>
-                <TabPanel px={0}>
-                  <CreateToken
-                    chainId={chainId}
-                    userAddress={userAddress}
-                  />
+              <TabPanels flex="1" overflowY="hidden">
+                <TabPanel p={0} h="full">
+                  <Box {...tabContentStyles} bg="white">
+                    <CreateToken
+                      chainId={chainId}
+                      userAddress={userAddress}
+                    />
+                  </Box>
                 </TabPanel>
-                <TabPanel px={0}>
-                  <DefineEntity
-                    chainId={chainId}
-                    onSubmit={handleEntitySubmit}
-                  />
+                <TabPanel p={0} h="full">
+                  <Box {...tabContentStyles} bg="white">
+                    <DefineEntity
+                      chainId={chainId}
+                      onSubmit={() => {
+                        toast({
+                          title: "Entity Created",
+                          status: "success",
+                          duration: 5000,
+                        });
+                        onClose();
+                      }}
+                    />
+                  </Box>
                 </TabPanel>
               </TabPanels>
             </Tabs>
-          </ModalBody>
+          </Box>
         </ModalContent>
       </Modal>
     </>
   );
-};
-
-// Utility function to inject modals into components
-export const withComposePanel = (
-  WrappedComponent: React.ComponentType<any>,
-  props: Omit<ComposePanelProps, 'children'>
-) => {
-  return function WithComposePanelComponent(componentProps: any) {
-    const composePanelProps = {
-      ...props,
-      children: (onOpen: () => void) => (
-        <WrappedComponent {...componentProps} openComposePanel={onOpen} />
-      ),
-    };
-    
-    return <ComposePanel {...composePanelProps} />;
-  };
 };
 
 export default ComposePanel;
