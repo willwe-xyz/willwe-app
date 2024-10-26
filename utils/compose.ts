@@ -1,16 +1,15 @@
-import { ethers, JsonRpcProvider, ContractTransactionResponse } from 'ethers';
-import { getRPCUrl } from '../config/contracts';
-import { deployments, ABIs, getChainById } from '../config/deployments';
-import { NodeData, UserNodeSignals, SigQueue } from '../types';
+import { ethers, ContractTransactionResponse, BrowserProvider } from 'ethers';
 import { UseToastOptions } from '@chakra-ui/react';
+import { deployments, ABIs } from '../config/contracts';
+import { NodeState } from '../types/chainData';
 
 // Contract Instance Management
 export const getWillWeContract = async (
-  provider: JsonRpcProvider,
-  chainId: string
+  chainId: string,
+  provider: BrowserProvider
 ): Promise<ethers.Contract> => {
-  const signer = await provider.getSigner();
   const cleanChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
+  const signer = await provider.getSigner();
   
   return new ethers.Contract(
     deployments["WillWe"][cleanChainId],
@@ -19,289 +18,205 @@ export const getWillWeContract = async (
   );
 };
 
-
-// Transaction Management
-export const handleTransaction = async (
+// Transaction Handler with fixed receipt handling
+const handleTransaction = async (
   txPromise: Promise<ContractTransactionResponse>,
-  successMessage: string,
-  setIsTransacting: (isTransacting: boolean) => void,
-  toast: (options: UseToastOptions) => void,
-  onSuccess?: () => void
-): Promise<void> => {
-  setIsTransacting(true);
+  config: {
+    setIsTransacting: (isTransacting: boolean) => void;
+    toast: (options: UseToastOptions) => void;
+    onSuccess?: () => void;
+  },
+  successMessage: string
+) => {
+  const { setIsTransacting, toast, onSuccess } = config;
+  
   try {
-    const tx = await txPromise;
-    await tx.wait();
+    setIsTransacting(true);
+    
+    // Get initial transaction response
+    const response = await txPromise;
+    const hash = response.hash;
+    
+    // Get the transaction and then wait for confirmation
+    const tx = await response.getTransaction();
+    const receipt = await tx.wait();
+    
+    if (!receipt || receipt.status === 0) {
+      throw new Error('Transaction failed');
+    }
+    
     toast({
       title: 'Success',
       description: successMessage,
       status: 'success',
       duration: 5000,
     });
+    
     if (onSuccess) {
       onSuccess();
     }
-  } catch (error) {
+    
+  } catch (error: any) {
     console.error('Transaction failed:', error);
+    
+    let errorMessage = 'Transaction failed';
+    
+    switch (error.code) {
+      case 'ACTION_REJECTED':
+        errorMessage = 'Transaction rejected by user';
+        break;
+      case 'INSUFFICIENT_FUNDS':
+        errorMessage = 'Insufficient funds to complete transaction';
+        break;
+      case 'UNPREDICTABLE_GAS_LIMIT':
+        errorMessage = 'Transaction would fail - please check your inputs';
+        break;
+      case 'NETWORK_ERROR':
+        errorMessage = 'Network error - please check your connection';
+        break;
+      default:
+        errorMessage = error.message || 'Transaction failed';
+    }
+    
     toast({
-      title: 'Transaction Failed',
-      description: error.message,
+      title: 'Error',
+      description: errorMessage,
       status: 'error',
       duration: 5000,
     });
+    
+    throw error;
   } finally {
     setIsTransacting(false);
   }
 };
 
-// Node Data Read Operations
-export const getInUseMembraneOf = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  tokenId: string
-): Promise<bigint> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.getInUseMembraneOf(tokenId);
-  } catch (error) {
-    throw new Error(`Failed to get in-use membrane: ${error.message}`);
-  }
-};
-
-  
-  export const getMembraneContract = async (
-    provider: JsonRpcProvider,
-    chainId: string
-  ): Promise<ethers.Contract> => {
-    const signer = await provider.getSigner();
-    const cleanChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
-    
-    return new ethers.Contract(
-      deployments["Membrane"][cleanChainId],
-      ABIs.WillWe,
-      signer
-    );
-  };
-  
-  
-
-
-
-export const allMembersOf = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  tokenId: string
-): Promise<string[]> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.allMembersOf(tokenId);
-  } catch (error) {
-    throw new Error(`Failed to get members: ${error.message}`);
-  }
-};
-
-export const asRootValuation = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  amount: string
-): Promise<bigint> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.asRootValuation(amount);
-  } catch (error) {
-    throw new Error(`Failed to get root valuation: ${error.message}`);
-  }
-};
-
-export const balanceOf = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  account: string,
-  id: string
-): Promise<bigint> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.balanceOf(account, id);
-  } catch (error) {
-    throw new Error(`Failed to get balance: ${error.message}`);
-  }
-};
-
-export const balanceOfBatch = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  accounts: string[],
-  ids: string[]
-): Promise<bigint[]> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.balanceOfBatch(accounts, ids);
-  } catch (error) {
-    throw new Error(`Failed to get batch balance: ${error.message}`);
-  }
-};
-
-export const getUserNodeSignals = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  tokenId: string,
-  user: string
-): Promise<[bigint, bigint][]> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.getUserNodeSignals(tokenId, user);
-  } catch (error) {
-    throw new Error(`Failed to get user signals: ${error.message}`);
-  }
-};
-
-export const getNodeData = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  tokenId: string
-): Promise<NodeData> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.getNodeData(tokenId);
-  } catch (error) {
-    throw new Error(`Failed to get node data: ${error.message}`);
-  }
-};
-
-export const getNodeDataWithUserSignals = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  tokenId: string,
-  user: string
-): Promise<NodeData> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.getNodeDataWithUserSignals(tokenId, user);
-  } catch (error) {
-    throw new Error(`Failed to get node data with signals: ${error.message}`);
-  }
-};
-
-export const getAllNodesForRoot = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  rootToken: string,
-  userAddress: string
-): Promise<NodeData[]> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.getAllNodesForRoot(rootToken, userAddress);
-  } catch (error) {
-    throw new Error(`Failed to get all nodes: ${error.message}`);
-  }
-};
-
-export const getChildParentEligibilityPerSec = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  parentId: string,
-  childId: string
-): Promise<bigint> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.getChildParentEligibilityPerSec(parentId, childId);
-  } catch (error) {
-    throw new Error(`Failed to get eligibility per second: ${error.message}`);
-  }
-};
-
-export const getParentOf = async (
-  chainId: string,
-  provider: JsonRpcProvider,
-  tokenId: string
-): Promise<string> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    return await contract.getParentOf(tokenId);
-  } catch (error) {
-    throw new Error(`Failed to get parent: ${error.message}`);
-  }
-};
-
-// Write Operations
+// Write Operations with fixed transaction handling
 export const spawnBranch = async (
   chainId: string,
-  provider: JsonRpcProvider,
+  provider: BrowserProvider,
   tokenId: string,
   setIsTransacting: (isTransacting: boolean) => void,
   toast: (options: UseToastOptions) => void,
   onSuccess?: () => void
 ) => {
-  const contract = await getWillWeContract(provider, chainId);
+  const contract = await getWillWeContract(chainId, provider);
   await handleTransaction(
     contract.spawnBranch(tokenId),
-    'Branch spawned successfully',
-    setIsTransacting,
-    toast,
-    onSuccess
+    { setIsTransacting, toast, onSuccess },
+    'Branch spawned successfully'
   );
 };
 
 export const mintMembership = async (
   chainId: string,
-  provider: JsonRpcProvider,
+  provider: BrowserProvider,
   tokenId: string,
   setIsTransacting: (isTransacting: boolean) => void,
   toast: (options: UseToastOptions) => void,
   onSuccess?: () => void
 ) => {
-  const contract = await getWillWeContract(provider, chainId);
+  const contract = await getWillWeContract(chainId, provider);
   await handleTransaction(
     contract.mintMembership(tokenId),
-    'Membership minted successfully',
-    setIsTransacting,
-    toast,
-    onSuccess
+    { setIsTransacting, toast, onSuccess },
+    'Membership minted successfully'
   );
 };
 
 export const redistributePath = async (
   chainId: string,
-  provider: JsonRpcProvider,
+  provider: BrowserProvider,
   tokenId: string,
   setIsTransacting: (isTransacting: boolean) => void,
   toast: (options: UseToastOptions) => void,
   onSuccess?: () => void
 ) => {
-  const contract = await getWillWeContract(provider, chainId);
+  const contract = await getWillWeContract(chainId, provider);
   await handleTransaction(
     contract.redistributePath(tokenId),
-    'Redistribution completed successfully',
-    setIsTransacting,
-    toast,
-    onSuccess
+    { setIsTransacting, toast, onSuccess },
+    'Redistribution completed successfully'
   );
 };
 
-// Helper functions
+// Read Operations (these don't need transaction handling)
+export const getNodeData = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<NodeState> => {
+  const contract = await getWillWeContract(chainId, provider);
+  return contract.getNodeData(tokenId);
+};
+
+export const getAllNodesForRoot = async (
+  chainId: string,
+  provider: BrowserProvider,
+  rootToken: string,
+  userAddress: string
+): Promise<NodeState[]> => {
+  const contract = await getWillWeContract(chainId, provider);
+  return contract.getAllNodesForRoot(rootToken, userAddress);
+};
+
+export const getUserNodeSignals = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string,
+  user: string
+): Promise<[bigint, bigint][]> => {
+  const contract = await getWillWeContract(chainId, provider);
+  return contract.getUserNodeSignals(tokenId, user);
+};
+
+export const getInUseMembraneOf = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<bigint> => {
+  const contract = await getWillWeContract(chainId, provider);
+  return contract.getInUseMembraneOf(tokenId);
+};
+
+export const getParentOf = async (
+  chainId: string,
+  provider: BrowserProvider,
+  tokenId: string
+): Promise<string> => {
+  const contract = await getWillWeContract(chainId, provider);
+  return contract.getParentOf(tokenId);
+};
+
 export const isRoot = async (
   chainId: string,
-  provider: JsonRpcProvider,
+  provider: BrowserProvider,
   tokenId: string
 ): Promise<boolean> => {
-  try {
-    const parentId = await getParentOf(chainId, provider, tokenId);
-    return parentId === '0';
-  } catch (error) {
-    throw new Error(`Failed to check if root: ${error.message}`);
-  }
+  const parentId = await getParentOf(chainId, provider, tokenId);
+  return parentId === '0';
 };
 
 export const getNodeHierarchy = async (
   chainId: string,
-  provider: JsonRpcProvider,
+  provider: BrowserProvider,
   tokenId: string
 ): Promise<string[]> => {
-  try {
-    const contract = await getWillWeContract(provider, chainId);
-    const path = await contract.getFidPath(tokenId);
-    return path.reverse(); // Return from root to leaf
-  } catch (error) {
-    throw new Error(`Failed to get node hierarchy: ${error.message}`);
-  }
+  const contract = await getWillWeContract(chainId, provider);
+  const path = await contract.getFidPath(tokenId);
+  return path.reverse();
+};
+
+export default {
+  getWillWeContract,
+  spawnBranch,
+  mintMembership,
+  redistributePath,
+  getNodeData,
+  getAllNodesForRoot,
+  getUserNodeSignals,
+  getInUseMembraneOf,
+  getParentOf,
+  isRoot,
+  getNodeHierarchy,
 };
