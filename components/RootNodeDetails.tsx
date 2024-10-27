@@ -1,12 +1,25 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Box, Text, VStack, HStack, Button, useToast, Input, InputGroup, InputRightElement } from '@chakra-ui/react';
-import { Search, Plus } from 'lucide-react';
+import { 
+  Box, 
+  VStack, 
+  HStack, 
+  Button, 
+  InputGroup,
+  Input, 
+  InputRightElement,
+  Text,
+  useColorModeValue,
+  Portal,
+  Tooltip
+} from '@chakra-ui/react';
+import { Search, Plus, AlertTriangle } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { NodePill } from './NodePill';
+import { useTransaction } from '../contexts/TransactionContext';
+import { useNode } from '../contexts/NodeContext';
 import { useRootNodes } from '../hooks/useRootNodes';
-import { spawnBranch, mintMembership, redistributePath } from '../utils/compose';
 import { NodeState } from '../types/chainData';
-import { BrowserProvider } from 'ethers';
+import { formatBalance } from '../hooks/useBalances';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -16,184 +29,133 @@ interface RootNodeDetailsProps {
   onNodeSelect: (nodeId: string) => void;
 }
 
-const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({ 
-  chainId, 
-  rootToken, 
-  userAddress, 
+const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
+  chainId,
+  rootToken,
+  userAddress,
   selectedTokenColor,
-  onNodeSelect 
+  onNodeSelect
 }) => {
+  // State
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [isTransacting, setIsTransacting] = useState<boolean>(false);
-  const toast = useToast();
-  const { user, getEthersProvider } = usePrivy();
   
-  const { rootNodeStates, isLoading, error, refetch } = useRootNodes(chainId, rootToken, userAddress);
+  // Hooks
+  const { user } = usePrivy();
+  const { executeTransaction } = useTransaction();
+  const { 
+    rootNodeStates, 
+    isLoading, 
+    error, 
+    refetch 
+  } = useRootNodes(chainId, rootToken, userAddress);
 
-  const verifyNetworkAndGetProvider = useCallback(async () => {
-    if (!user?.wallet?.address) {
-      throw new Error('Please connect your wallet');
-    }
+  // Styling
+  const searchBorderColor = useColorModeValue('gray.200', 'gray.600');
+  const searchHoverBorderColor = useColorModeValue('gray.300', 'gray.500');
+  const buttonHoverBg = useColorModeValue(`${selectedTokenColor}15`, `${selectedTokenColor}30`);
 
-    const provider = await getEthersProvider();
-    if (!provider) {
-      throw new Error('Provider not available');
-    }
-
-    const currentNetwork = await provider.getNetwork();
-    const targetChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
-    
-    if (currentNetwork.chainId.toString() !== targetChainId) {
-      throw new Error(`Please switch to chain ID ${targetChainId}`);
-    }
-
-    return provider;
-  }, [chainId, user?.wallet?.address, getEthersProvider]);
-
-  const handleSpawnNode = useCallback(async (parentNodeId: string) => {
-    try {
-      const provider = await verifyNetworkAndGetProvider();
-      await spawnBranch(
-        chainId,
-        provider,
-        parentNodeId,
-        setIsTransacting,
-        toast,
-        refetch
+  // Compute total value across all nodes
+  const totalValue = useMemo(() => {
+    return rootNodeStates.reduce((sum, state) => {
+      return sum + state.nodes.reduce((nodeSum, node) => 
+        nodeSum + BigInt(node.basicInfo[4]), BigInt(0)
       );
-    } catch (error: any) {
-      console.error('Failed to spawn node:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to spawn node',
-        status: 'error',
-        duration: 5000,
-      });
-    }
-  }, [chainId, verifyNetworkAndGetProvider, toast, refetch]);
-
-  const handleMintMembership = useCallback(async (nodeId: string) => {
-    try {
-      const provider = await verifyNetworkAndGetProvider();
-      await mintMembership(
-        chainId,
-        provider,
-        nodeId,
-        setIsTransacting,
-        toast,
-        refetch
-      );
-    } catch (error: any) {
-      console.error('Failed to mint membership:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to mint membership',
-        status: 'error',
-        duration: 5000,
-      });
-    }
-  }, [chainId, verifyNetworkAndGetProvider, toast, refetch]);
-
-  const handleTrickle = useCallback(async (nodeId: string) => {
-    try {
-      const provider = await verifyNetworkAndGetProvider();
-      await redistributePath(
-        chainId,
-        provider,
-        nodeId,
-        setIsTransacting,
-        toast,
-        refetch
-      );
-    } catch (error: any) {
-      console.error('Failed to redistribute:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to redistribute',
-        status: 'error',
-        duration: 5000,
-      });
-    }
-  }, [chainId, verifyNetworkAndGetProvider, toast, refetch]);
-
-  // Build node hierarchy using childrenNodes array
-  const { rootNodes, nodeHierarchy, allNodes } = useMemo(() => {
-    if (!rootNodeStates?.length) {
-      return { rootNodes: [], nodeHierarchy: {}, allNodes: [] };
-    }
-
-    const allNodes = rootNodeStates.flatMap(state => state.nodes);
-    
-    // Create a map of nodes for quick lookup
-    const nodesMap = new Map(allNodes.map(node => [node.basicInfo[0], node]));
-
-    // Build hierarchy using childrenNodes
-    const hierarchy: { [key: string]: NodeState[] } = {};
-    allNodes.forEach(node => {
-      const nodeId = node.basicInfo[0];
-      const childrenIds = node.childrenNodes;
-      hierarchy[nodeId] = childrenIds
-        .map(childId => nodesMap.get(childId))
-        .filter((node): node is NodeState => node !== undefined);
-    });
-
-    // Find root nodes (nodes with rootPath.length === 1)
-    const roots = allNodes.filter(node => node.rootPath.length === 1);
-
-    console.log('Hierarchy built:', {
-      rootsCount: roots.length,
-      allNodesCount: allNodes.length,
-      hierarchyDepth: Object.keys(hierarchy).length
-    });
-
-    return {
-      rootNodes: roots,
-      nodeHierarchy: hierarchy,
-      allNodes
-    };
+    }, BigInt(0));
   }, [rootNodeStates]);
 
   // Filter nodes based on search
   const filteredNodes = useMemo(() => {
-    if (!searchTerm) return allNodes;
-    return allNodes.filter(node =>
-      node.basicInfo[0].toLowerCase().includes(searchTerm.toLowerCase())
+    if (!searchTerm) return rootNodeStates;
+
+    return rootNodeStates.map(state => ({
+      ...state,
+      nodes: state.nodes.filter(node => 
+        node.basicInfo[0].toLowerCase().includes(searchTerm.toLowerCase()) ||
+        node.membersOfNode.some(member => 
+          member.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      )
+    })).filter(state => state.nodes.length > 0);
+  }, [rootNodeStates, searchTerm]);
+
+  // Transaction handlers
+  const handleSpawnNode = useCallback(async (parentNodeId: string) => {
+    if (!user?.wallet?.address) {
+      throw new Error('Please connect your wallet');
+    }
+
+    await executeTransaction(
+      chainId,
+      async (contract) => {
+        return contract.spawnBranch(parentNodeId);
+      },
+      {
+        successMessage: 'Node spawned successfully',
+        onSuccess: refetch
+      }
     );
-  }, [allNodes, searchTerm]);
+  }, [chainId, user?.wallet?.address, executeTransaction, refetch]);
 
-  const totalValue = useMemo(() => {
-    return filteredNodes.reduce((sum, node) => sum + parseInt(node.basicInfo[4]), 0);
-  }, [filteredNodes]);
+  const handleMintMembership = useCallback(async (nodeId: string) => {
+    await executeTransaction(
+      chainId,
+      async (contract) => {
+        return contract.mintMembership(nodeId);
+      },
+      {
+        successMessage: 'Membership minted successfully',
+        onSuccess: refetch
+      }
+    );
+  }, [chainId, executeTransaction, refetch]);
 
-  // Render node hierarchy recursively
-  const renderNodeHierarchy = useCallback((node: NodeState) => {
-    const children = nodeHierarchy[node.basicInfo[0]] || [];
-    
-    if (children.length === 0) return null;
+  const handleTrickle = useCallback(async (nodeId: string) => {
+    await executeTransaction(
+      chainId,
+      async (contract) => {
+        return contract.redistributePath(nodeId);
+      },
+      {
+        successMessage: 'Redistribution completed successfully',
+        onSuccess: refetch
+      }
+    );
+  }, [chainId, executeTransaction, refetch]);
+
+  // Recursive node rendering
+  const renderNodeHierarchy = useCallback((nodeState: NodeState, depth: number = 0) => {
+    const childNodes = nodeState.childrenNodes
+      .map(childId => 
+        rootNodeStates
+          .flatMap(state => state.nodes)
+          .find(node => node.basicInfo[0] === childId)
+      )
+      .filter((node): node is NodeState => node !== undefined);
 
     return (
-      <VStack align="stretch" spacing={1} ml={4}>
-        {children.map(childNode => (
-          <Box key={childNode.basicInfo[0]}>
-            <NodePill
-              node={childNode}
-              totalValue={totalValue}
-              color={selectedTokenColor}
-              onNodeClick={onNodeSelect}
-              onMintMembership={handleMintMembership}
-              onSpawnNode={handleSpawnNode}
-              onTrickle={handleTrickle}
-              backgroundColor={`${selectedTokenColor}15`}
-              textColor={selectedTokenColor}
-              borderColor={selectedTokenColor}
-            />
-            {renderNodeHierarchy(childNode)}
-          </Box>
-        ))}
-      </VStack>
+      <Box key={nodeState.basicInfo[0]} ml={depth * 4}>
+        <NodePill
+          node={nodeState}
+          totalValue={Number(totalValue)}
+          color={selectedTokenColor}
+          onNodeClick={onNodeSelect}
+          onMintMembership={handleMintMembership}
+          onSpawnNode={handleSpawnNode}
+          onTrickle={handleTrickle}
+          backgroundColor={`${selectedTokenColor}15`}
+          textColor={selectedTokenColor}
+          borderColor={selectedTokenColor}
+        />
+        {childNodes.length > 0 && (
+          <VStack align="stretch" spacing={1} mt={1}>
+            {childNodes.map(childNode => renderNodeHierarchy(childNode, depth + 1))}
+          </VStack>
+        )}
+      </Box>
     );
-  }, [nodeHierarchy, totalValue, selectedTokenColor, onNodeSelect, handleMintMembership, handleSpawnNode, handleTrickle]);
+  }, [rootNodeStates, totalValue, selectedTokenColor, onNodeSelect, handleMintMembership, handleSpawnNode, handleTrickle]);
 
+  // Loading state
   if (isLoading) {
     return (
       <Box p={4} textAlign="center">
@@ -202,16 +164,21 @@ const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <Box p={4} textAlign="center">
-        <Text color="red.500">Error: {error.message}</Text>
+      <Box p={4}>
+        <HStack spacing={2} color="red.500">
+          <AlertTriangle size={20} />
+          <Text>Error: {error.message}</Text>
+        </HStack>
       </Box>
     );
   }
 
   return (
     <Box p={4}>
+      {/* Header Controls */}
       <HStack spacing={4} mb={4}>
         <Button
           leftIcon={<Plus size={14} />}
@@ -219,9 +186,8 @@ const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           size="sm"
           colorScheme="gray"
           variant="outline"
-          isLoading={isTransacting}
           isDisabled={!user?.wallet?.address}
-          _hover={{ bg: `${selectedTokenColor}15` }}
+          _hover={{ bg: buttonHoverBg }}
         >
           New Root Node
         </Button>
@@ -230,9 +196,9 @@ const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             placeholder="Search nodes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            pr="2.5rem"
-            borderColor={selectedTokenColor}
-            _focus={{ 
+            borderColor={searchBorderColor}
+            _hover={{ borderColor: searchHoverBorderColor }}
+            _focus={{
               borderColor: selectedTokenColor,
               boxShadow: `0 0 0 1px ${selectedTokenColor}`
             }}
@@ -243,7 +209,8 @@ const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         </InputGroup>
       </HStack>
 
-      {rootNodes.length === 0 ? (
+      {/* Node List */}
+      {rootNodeStates.length === 0 ? (
         <Box 
           p={8} 
           textAlign="center" 
@@ -259,26 +226,15 @@ const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         </Box>
       ) : (
         <VStack align="stretch" spacing={2}>
-          {rootNodes.map(node => (
-            <Box key={node.basicInfo[0]}>
-              <NodePill
-                node={node}
-                totalValue={totalValue}
-                color={selectedTokenColor}
-                onNodeClick={onNodeSelect}
-                onMintMembership={handleMintMembership}
-                onSpawnNode={handleSpawnNode}
-                onTrickle={handleTrickle}
-                backgroundColor={`${selectedTokenColor}15`}
-                textColor={selectedTokenColor}
-                borderColor={selectedTokenColor}
-              />
-              {renderNodeHierarchy(node)}
-            </Box>
-          ))}
+          {filteredNodes.map(state => 
+            state.nodes
+              .filter(node => node.rootPath.length === 1)
+              .map(rootNode => renderNodeHierarchy(rootNode))
+          )}
         </VStack>
       )}
 
+      {/* Search Results */}
       {filteredNodes.length === 0 && searchTerm && (
         <Box p={4} textAlign="center">
           <Text color="gray.500">
@@ -286,8 +242,27 @@ const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           </Text>
         </Box>
       )}
+
+      {/* Transaction Status Indicator */}
+      <Portal>
+        <Box
+          position="fixed"
+          bottom={4}
+          right={4}
+          zIndex={1000}
+        >
+          {/* Transaction notifications would go here */}
+        </Box>
+      </Portal>
     </Box>
   );
 };
 
-export default RootNodeDetails;
+export default React.memo(RootNodeDetails, (prevProps, nextProps) => {
+  return (
+    prevProps.chainId === nextProps.chainId &&
+    prevProps.rootToken === nextProps.rootToken &&
+    prevProps.userAddress === nextProps.userAddress &&
+    prevProps.selectedTokenColor === nextProps.selectedTokenColor
+  );
+});

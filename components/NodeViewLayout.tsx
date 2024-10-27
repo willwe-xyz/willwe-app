@@ -1,84 +1,117 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Flex, VStack, useBreakpointValue } from '@chakra-ui/react';
+import React from 'react';
+import { Box, Flex, useBreakpointValue, useToast } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
 import HeaderButtons from './HeaderButtons';
 import BalanceList from './BalanceList';
 import NodeDetails from './NodeDetails';
 import RootNodeDetails from './RootNodeDetails';
-import { useColorManagement, PaletteButton, ActivityLogs } from './AllStackComponents';
-import { NodeState } from '../types/chainData';
-import { useRouter } from 'next/router';
+import ActivityLogs from './ActivityLogs';
+import { useColorManagement, PaletteButton } from '../components/AllStackComponents';
+import { useNode } from '../contexts/NodeContext';
+import { useTransaction } from '../contexts/TransactionContext';
+import { useBalances } from '../hooks/useBalances';
 
 interface NodeViewLayoutProps {
   chainId?: string;
   nodeId?: string;
-  nodeError: Error | null;
-  nodeData: NodeState | null;
 }
 
 const NodeViewLayout: React.FC<NodeViewLayoutProps> = ({
-  chainId,
-  nodeId,
+  chainId: initialChainId,
+  nodeId: initialNodeId,
 }) => {
   const { user, authenticated, logout, login } = usePrivy();
   const { colorState, cycleColors, updateColors } = useColorManagement();
-  const [selectedToken, setSelectedToken] = useState<string | null>(null);
-  const [urlChainId, setUrlChainId] = useState<string | null>(chainId || '');
-  const [urlNodeId, setUrlNodeId] = useState<string | null>(nodeId || '');
-
+  const toast = useToast();
   const router = useRouter();
-  const { query } = router;
-
   const isMobile = useBreakpointValue({ base: true, md: false });
 
-  const handleTokenSelect = useCallback((tokenAddress: string) => {
-    setUrlChainId(null);
-    setSelectedToken(tokenAddress);
+  // Context hooks
+  const { 
+    selectedNodeId,
+    selectedToken,
+    selectNode,
+    selectToken,
+    clearNodeSelection 
+  } = useNode();
+
+  const { isTransacting } = useTransaction();
+
+  // Get chain ID from router or props
+  const chainId = (router.query.chainId as string) || initialChainId || user?.wallet?.chainId;
+  const userAddress = user?.wallet?.address;
+
+  // Fetch balances
+  const { 
+    balances, 
+    protocolBalances,
+    isLoading: isBalancesLoading,
+    error: balancesError 
+  } = useBalances(userAddress, chainId);
+
+  // Handle token selection
+  const handleTokenSelect = async (tokenAddress: string) => {
+    if (isTransacting) return;
+    
     updateColors(tokenAddress);
-  }, [updateColors]);
+    selectToken(tokenAddress);
+    router.push('/dashboard', undefined, { shallow: true });
+  };
 
-  const handleNodeSelect = useCallback((nodeId: string) => {
-    setSelectedToken(null);
-    setUrlChainId(router.query.chainId as string || '');
-    setUrlNodeId(nodeId);
-    router.push(`/nodes/${chainId}/${nodeId}`, undefined, { shallow: true });
-  }, [chainId, router]);
+  // Handle node selection
+  const handleNodeSelect = async (nodeId: string) => {
+    if (isTransacting) return;
+    
+    selectNode(nodeId, chainId || '');
+  };
 
-
-  useEffect(() => {
-    if (chainId && nodeId) {
-      setUrlChainId(chainId);
-      setUrlNodeId(nodeId);
-    }
-  }, [chainId, nodeId]);
-
+  // Render the main content based on selection state
   const renderContent = () => {
-    if (chainId && urlChainId) {
-      return <NodeDetails nodeId={urlNodeId || nodeId || ''} chainId={urlChainId || wallet?.chainId || ''} onNodeSelect={handleNodeSelect} />
-    } 
-    else if (selectedToken) {
+    if (selectedNodeId) {
       return (
-        <RootNodeDetails
-          chainId={urlChainId || user?.wallet?.chainId || ''}
-          rootToken={selectedToken}
-          selectedTokenColor={colorState.contrastingColor}
+        <NodeDetails 
+          nodeId={selectedNodeId} 
+          chainId={chainId || ''} 
           onNodeSelect={handleNodeSelect}
-          userAddress={user?.wallet?.address || ''}
         />
       );
     }
-    else {
-      return <ActivityLogs />;
+    
+    if (selectedToken) {
+      return (
+        <RootNodeDetails
+          chainId={chainId || ''}
+          rootToken={selectedToken}
+          userAddress={userAddress || ''}
+          selectedTokenColor={colorState.contrastingColor}
+          onNodeSelect={handleNodeSelect}
+        />
+      );
     }
+
+    return <ActivityLogs />;
   };
+
+  if (balancesError) {
+    toast({
+      title: "Error loading balances",
+      description: balancesError.message,
+      status: "error",
+      duration: 5000,
+      isClosable: true,
+    });
+  }
 
   return (
     <Flex direction="column" height="100vh">
+      {/* Header */}
       <Flex 
         justify="space-between" 
         p={4} 
         borderBottom="1px solid" 
         borderColor="gray.200"
+        bg="white"
       >
         <PaletteButton 
           cycleColors={cycleColors} 
@@ -88,20 +121,24 @@ const NodeViewLayout: React.FC<NodeViewLayoutProps> = ({
         <HeaderButtons 
           logout={logout} 
           login={login}
-          userAddress={user?.wallet?.address || ''} 
-          nodes={[]} 
+          userAddress={userAddress || ''} 
           chainId={chainId || ''}
+          selectedNodeId={selectedNodeId}
           onNodeSelect={handleNodeSelect}
+          isTransacting={isTransacting}
         />
       </Flex>
 
+      {/* Main Content */}
       <Flex flex={1} direction={{ base: 'column', md: 'row' }}>
+        {/* Balance List Sidebar */}
         <Box 
           width={{ base: '100%', md: '12%' }} 
           maxWidth={{ md: '110px' }}
           borderRight={{ md: '1px solid' }}
           borderColor={{ md: 'gray.200' }}
           overflowY="auto"
+          bg="white"
         >
           <BalanceList 
             selectedToken={selectedToken || ''}
@@ -109,11 +146,21 @@ const NodeViewLayout: React.FC<NodeViewLayoutProps> = ({
             contrastingColor={colorState.contrastingColor}
             reverseColor={colorState.reverseColor}
             hoverColor={colorState.hoverColor}
-            chainId={chainId}
-            userAddress={user?.wallet?.address || ''}
+            userAddress={userAddress || ''}
+            chainId={chainId || ''}
+            balances={balances}
+            protocolBalances={protocolBalances}
+            isLoading={isBalancesLoading}
           />
         </Box>
-        <Box flex={1} p={4} overflowY="auto">
+
+        {/* Main Content Area */}
+        <Box 
+          flex={1} 
+          p={4} 
+          overflowY="auto"
+          bg="gray.50"
+        >
           {renderContent()}
         </Box>
       </Flex>

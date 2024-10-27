@@ -3,18 +3,38 @@ import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
-import { localhost, base, optimismSepolia, optimism, baseSepolia, taikoHekla, taiko } from 'viem/chains';
-import { ChakraProvider } from '@chakra-ui/react';
-import { AirstackProvider } from "@airstack/airstack-react";
-import { useEffect, useState } from 'react';
+import { ChakraProvider, useToast } from '@chakra-ui/react';
+import { 
+  localhost, 
+  base, 
+  optimismSepolia, 
+  optimism, 
+  baseSepolia, 
+  taikoHekla, 
+  taiko 
+} from 'viem/chains';
+import { TransactionProvider } from '../contexts/TransactionContext';
+import { NodeProvider } from '../contexts/NodeContext';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
-function MyApp({ Component, pageProps }: AppProps) {
+// App wrapper to provide toast context
+function AppContent({ Component, pageProps }: AppProps) {
   const router = useRouter();
-  const [isClient, setIsClient] = useState(false);
+  const toast = useToast();
 
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  return (
+    <TransactionProvider toast={toast}>
+      <NodeProvider>
+        <ErrorBoundary>
+          <Component {...pageProps} />
+        </ErrorBoundary>
+      </NodeProvider>
+    </TransactionProvider>
+  );
+}
+
+function MyApp(props: AppProps) {
+  const router = useRouter();
 
   return (
     <>
@@ -30,21 +50,28 @@ function MyApp({ Component, pageProps }: AppProps) {
         <link rel="manifest" href="/favicons/manifest.json" />
 
         <title>WillWe</title>
-        <meta name="description" content="Privy Auth Starter" />
+        <meta name="description" content="Token Coordination Protocol" />
       </Head>
+      
       <PrivyProvider
         appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
         config={{
           loginMethods: ['wallet', 'farcaster', 'email'],
           defaultChain: taikoHekla,
-          supportedChains: [localhost, baseSepolia, base, taikoHekla, taiko, optimismSepolia, optimism]
+          supportedChains: [
+            localhost,
+            baseSepolia,
+            base,
+            taikoHekla,
+            taiko,
+            optimismSepolia,
+            optimism
+          ]
         }}
         onSuccess={() => router.push('/dashboard')}
       >
         <ChakraProvider>
-          {/* <AirstackProvider apiKey={process.env.NEXT_PUBLIC_AIRSTACK_API_KEY ?? ""}> */}
-            {isClient ? <Component {...pageProps} /> : <></>}
-          {/* </AirstackProvider> */}
+          <AppContent {...props} />
         </ChakraProvider>
       </PrivyProvider>
     </>
