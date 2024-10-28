@@ -23,8 +23,8 @@ const BalanceList: React.FC<BalanceListProps> = ({
   contrastingColor,
   reverseColor,
   hoverColor,
-  balances,
-  protocolBalances,
+  balances = [], // Provide default empty array
+  protocolBalances = [], // Provide default empty array
   isLoading
 }) => {
   const scrollbarBg = useColorModeValue('gray.100', 'gray.700');
@@ -34,6 +34,15 @@ const BalanceList: React.FC<BalanceListProps> = ({
     return (
       <Box p={4} textAlign="center">
         <Spinner size="sm" color={contrastingColor} />
+      </Box>
+    );
+  }
+
+  // Early return if no balances
+  if (!balances || balances.length === 0) {
+    return (
+      <Box p={4} textAlign="center">
+        <Text color={contrastingColor}>No balances found</Text>
       </Box>
     );
   }
@@ -65,9 +74,10 @@ const BalanceList: React.FC<BalanceListProps> = ({
         'scrollbarColor': `${scrollbarBg} transparent`,
       }}
     >
-      {balances.length > 0 ? balances.map((balance) => {
-        const protocolBalance = protocolBalances.find(
-          p => p.contract_address === balance.contract_address
+      {balances.map((balance) => {
+        // Safely find protocol balance
+        const protocolBalance = protocolBalances?.find(
+          p => p?.contract_address === balance?.contract_address
         );
         
         return (
@@ -95,11 +105,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
             />
           </Box>
         );
-      }) : (
-        <Box p={4} textAlign="center">
-          <Text color={contrastingColor}>No balances found</Text>
-        </Box>
-      )}
+      })}
     </VStack>
   );
 };

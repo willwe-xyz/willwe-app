@@ -3,8 +3,6 @@ import {IconButton, Box, Text } from "@chakra-ui/react";
 import { getDistinguishableColor, getReverseColor } from "../const/colors";
 import { Palette } from 'lucide-react';
 
-export { GridNavigation } from './GridNavigation';
-export { RootNodeDetails } from './RootNodeDetails';
 
 interface ColorState {
     contrastingColor: string;

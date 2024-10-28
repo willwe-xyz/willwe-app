@@ -1,11 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   Box,
   VStack,
   HStack,
   Text,
   Badge,
-  Divider,
   Table,
   Thead,
   Tbody,
@@ -15,21 +14,23 @@ import {
   Button,
   useColorModeValue,
   Tooltip,
-  Skeleton
+  Skeleton,
+  Alert,
+  AlertIcon,
 } from "@chakra-ui/react";
 import { 
   Users, 
   GitBranch, 
   ArrowUpRight, 
-  ArrowDownRight,
   Activity,
   Signal,
   Clock
 } from 'lucide-react';
+import { usePrivy } from '@privy-io/react-auth';
 import { useNodeData } from '../hooks/useNodeData';
-import { useTransaction } from '../contexts/TransactionContext';
-import { NodeState, UserSignal } from '../types/chainData';
+import { useNodeOperations } from '../hooks/useNodeOperations';
 import { formatBalance } from '../hooks/useBalances';
+import { NodeState } from '../types/chainData';
 
 interface NodeDetailsProps {
   chainId: string;
@@ -37,75 +38,144 @@ interface NodeDetailsProps {
   onNodeSelect?: (nodeId: string) => void;
 }
 
+const safeFormatBalance = (value: any): string => {
+  if (!value) return '0';
+  try {
+    return formatBalance(value.toString());
+  } catch (e) {
+    console.error('Error in safeFormatBalance:', e);
+    return '0';
+  }
+};
+
 const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
   onNodeSelect
 }) => {
-  // Hooks
-  const { data: nodeData, error, isLoading } = useNodeData(chainId, nodeId);
-  const { executeTransaction } = useTransaction();
+  const { user } = usePrivy();
+  
+  const cleanChainId = useMemo(() => 
+    chainId?.includes('eip155:') ? chainId.replace('eip155:', '') : chainId,
+    [chainId]
+  );
 
-  // Color modes
+  // Style hooks
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const bgColor = useColorModeValue('white', 'gray.800');
   const textColor = useColorModeValue('gray.600', 'gray.400');
+  const permissionsBg = useColorModeValue('gray.50', 'gray.900');
 
-  // Memoized calculations
+  const { data: nodeData, error, isLoading } = useNodeData(cleanChainId, nodeId);
+
+  const { permissions, transactions, isProcessing } = useNodeOperations(
+    cleanChainId,
+    nodeData,
+    user?.wallet?.address
+  );
+
   const stats = useMemo(() => {
-    if (!nodeData) return null;
+    if (!nodeData?.basicInfo) {
+      return {
+        totalValue: '0',
+        dailyGrowth: '0',
+        memberCount: 0,
+        childCount: 0,
+        pathDepth: 0
+      };
+    }
 
-    const totalValue = BigInt(nodeData.basicInfo[4]);
-    const inflation = BigInt(nodeData.basicInfo[1]);
-    const dailyGrowth = (inflation * BigInt(86400)); // seconds in a day
+    try {
+      const totalValue = nodeData.basicInfo[4] ? BigInt(nodeData.basicInfo[4]) : BigInt(0);
+      const inflation = nodeData.basicInfo[1] ? BigInt(nodeData.basicInfo[1]) : BigInt(0);
+      const dailyGrowth = inflation * BigInt(86400);
 
-    return {
-      totalValue: formatBalance(totalValue.toString()),
-      dailyGrowth: formatBalance(dailyGrowth.toString()),
-      memberCount: nodeData.membersOfNode.length,
-      childCount: nodeData.childrenNodes.length,
-      pathDepth: nodeData.rootPath.length
-    };
+      return {
+        totalValue: safeFormatBalance(totalValue),
+        dailyGrowth: safeFormatBalance(dailyGrowth),
+        memberCount: Array.isArray(nodeData.membersOfNode) ? nodeData.membersOfNode.length : 0,
+        childCount: Array.isArray(nodeData.childrenNodes) ? nodeData.childrenNodes.length : 0,
+        pathDepth: Array.isArray(nodeData.rootPath) ? nodeData.rootPath.length : 0
+      };
+    } catch (err) {
+      console.error('Error calculating stats:', err);
+      return {
+        totalValue: '0',
+        dailyGrowth: '0',
+        memberCount: 0,
+        childCount: 0,
+        pathDepth: 0
+      };
+    }
   }, [nodeData]);
 
-  const formattedSignals = useMemo(() => {
-    if (!nodeData?.signals) return [];
+  const signalData = useMemo(() => {
+    if (!nodeData?.signals || !Array.isArray(nodeData.signals)) {
+      return {
+        recentSignals: [],
+        hasActiveSignals: false,
+        lastSignalTime: 0
+      };
+    }
 
-    return nodeData.signals.map((signal: UserSignal) => ({
-      membrane: signal.MembraneAndInflation.map(([m]) => m).join(', '),
-      inflation: signal.MembraneAndInflation.map(([, i]) => i).join(', '),
-      lastRedistribution: signal.lastReidstriSig.join(', ')
-    }));
+    try {
+      const processedSignals = nodeData.signals
+        .filter(signal => signal && Array.isArray(signal.MembraneInflation))
+        .flatMap(signal => {
+          if (!Array.isArray(signal.MembraneInflation)) return [];
+          
+          return signal.MembraneInflation.map(([membrane, inflation], index) => {
+            const safeValue = inflation?.toString() || '0';
+            return {
+              membrane: String(membrane || ''),
+              inflation: safeValue,
+              timestamp: signal.lastRedistSignal && Array.isArray(signal.lastRedistSignal) 
+                ? Number(signal.lastRedistSignal[index]) || Date.now()
+                : Date.now(),
+              value: safeValue
+            };
+          });
+        })
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+      return {
+        recentSignals: processedSignals.slice(0, 10),
+        hasActiveSignals: processedSignals.length > 0,
+        lastSignalTime: processedSignals[0]?.timestamp || Date.now()
+      };
+    } catch (err) {
+      console.error('Error processing signals:', err);
+      return {
+        recentSignals: [],
+        hasActiveSignals: false,
+        lastSignalTime: 0
+      };
+    }
   }, [nodeData]);
 
-  // Transaction Handlers
-  const handleRedistribute = async () => {
-    if (!nodeData) return;
+  const handleRedistribute = useCallback(async () => {
+    if (!permissions.canRedistribute) return;
+    try {
+      await transactions.redistribute();
+    } catch (err) {
+      console.error('Redistribution failed:', err);
+    }
+  }, [permissions.canRedistribute, transactions]);
 
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.redistributePath(nodeId);
-      },
-      {
-        successMessage: 'Path redistributed successfully',
-      }
-    );
-  };
+  const handleSignal = useCallback(async () => {
+    if (!permissions.canSignal) return;
+    try {
+      await transactions.signal([]);
+    } catch (err) {
+      console.error('Signal failed:', err);
+    }
+  }, [permissions.canSignal, transactions]);
 
-  const handleSignal = async () => {
-    if (!nodeData) return;
-
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.sendSignal(nodeId, []); // Add signal params as needed
-      },
-      {
-        successMessage: 'Signal sent successfully',
-      }
-    );
-  };
+  const handlePathNodeClick = useCallback((pathNodeId: string) => {
+    if (onNodeSelect && pathNodeId) {
+      onNodeSelect(pathNodeId);
+    }
+  }, [onNodeSelect]);
 
   if (isLoading) {
     return (
@@ -117,11 +187,21 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
-  if (error || !nodeData) {
+  if (error) {
     return (
-      <Box p={6} textAlign="center" color="red.500">
-        <Text>Error loading node data: {error?.message || 'Node not found'}</Text>
-      </Box>
+      <Alert status="error">
+        <AlertIcon />
+        <Text>Error loading node data: {error.message || 'Unknown error'}</Text>
+      </Alert>
+    );
+  }
+
+  if (!nodeData?.basicInfo) {
+    return (
+      <Alert status="warning">
+        <AlertIcon />
+        <Text>No data available for this node</Text>
+      </Alert>
     );
   }
 
@@ -133,16 +213,19 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       borderColor={borderColor}
       overflow="hidden"
     >
-      {/* Header */}
       <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
         <HStack justify="space-between" mb={4}>
           <VStack align="start" spacing={1}>
             <HStack>
-              <Text fontSize="lg" fontWeight="bold">Node {nodeId.slice(-6)}</Text>
-              <Badge colorScheme="purple">Depth {nodeData.rootPath.length}</Badge>
+              <Text fontSize="lg" fontWeight="bold">
+                Node {nodeId ? nodeId.slice(-6) : 'Unknown'}
+              </Text>
+              <Badge colorScheme="purple">
+                Depth {stats.pathDepth}
+              </Badge>
             </HStack>
             <Text fontSize="sm" color={textColor}>
-              {nodeData.basicInfo[0]}
+              {nodeData.basicInfo[0] || 'Unknown ID'}
             </Text>
           </VStack>
           <HStack>
@@ -152,6 +235,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               onClick={handleRedistribute}
               colorScheme="purple"
               variant="outline"
+              isDisabled={!permissions.canRedistribute || isProcessing}
+              isLoading={isProcessing}
             >
               Redistribute
             </Button>
@@ -161,25 +246,28 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               onClick={handleSignal}
               colorScheme="purple"
               variant="outline"
+              isDisabled={!permissions.canSignal || isProcessing}
+              isLoading={isProcessing}
             >
               Signal
             </Button>
           </HStack>
         </HStack>
 
-        {/* Stats */}
         <HStack spacing={8} wrap="wrap">
           <Tooltip label="Total Value">
             <VStack align="start">
               <Text fontSize="sm" color={textColor}>Total Value</Text>
-              <Text fontSize="lg" fontWeight="semibold">{stats?.totalValue}</Text>
+              <Text fontSize="lg" fontWeight="semibold">
+                {stats.totalValue}
+              </Text>
             </VStack>
           </Tooltip>
           <Tooltip label="Daily Growth">
             <VStack align="start">
               <Text fontSize="sm" color={textColor}>Daily Growth</Text>
               <Text fontSize="lg" fontWeight="semibold" color="green.500">
-                +{stats?.dailyGrowth}
+                +{stats.dailyGrowth}
               </Text>
             </VStack>
           </Tooltip>
@@ -188,7 +276,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               <Text fontSize="sm" color={textColor}>Members</Text>
               <HStack>
                 <Users size={16} />
-                <Text fontSize="lg" fontWeight="semibold">{stats?.memberCount}</Text>
+                <Text fontSize="lg" fontWeight="semibold">
+                  {stats.memberCount}
+                </Text>
               </HStack>
             </VStack>
           </Tooltip>
@@ -197,54 +287,82 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               <Text fontSize="sm" color={textColor}>Child Nodes</Text>
               <HStack>
                 <GitBranch size={16} />
-                <Text fontSize="lg" fontWeight="semibold">{stats?.childCount}</Text>
+                <Text fontSize="lg" fontWeight="semibold">
+                  {stats.childCount}
+                </Text>
               </HStack>
             </VStack>
           </Tooltip>
         </HStack>
       </Box>
 
-      {/* Path */}
-      <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
-        <Text fontWeight="medium" mb={2}>Path</Text>
-        <HStack spacing={2}>
-          {nodeData.rootPath.map((nodeId, index) => (
-            <React.Fragment key={nodeId}>
-              {index > 0 && <ArrowUpRight size={14} />}
-              <Badge
-                cursor="pointer"
-                onClick={() => onNodeSelect?.(nodeId)}
-                _hover={{ bg: 'purple.100' }}
-              >
-                {nodeId.slice(-6)}
-              </Badge>
-            </React.Fragment>
-          ))}
-        </HStack>
-      </Box>
+      {Array.isArray(nodeData.rootPath) && nodeData.rootPath.length > 0 && (
+        <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+          <Text fontWeight="medium" mb={2}>Path</Text>
+          <HStack spacing={2}>
+            {nodeData.rootPath.map((pathNodeId, index) => (
+              <React.Fragment key={pathNodeId}>
+                {index > 0 && <ArrowUpRight size={14} />}
+                <Badge
+                  cursor="pointer"
+                  onClick={() => handlePathNodeClick(pathNodeId)}
+                  _hover={{ bg: 'purple.100' }}
+                >
+                  {pathNodeId ? pathNodeId.slice(-6) : 'Unknown'}
+                </Badge>
+              </React.Fragment>
+            ))}
+          </HStack>
+        </Box>
+      )}
 
-      {/* Signals */}
-      {formattedSignals.length > 0 && (
-        <Box p={6}>
-          <Text fontWeight="medium" mb={4}>Recent Signals</Text>
+      {signalData.recentSignals.length > 0 && (
+        <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+          <HStack justify="space-between" mb={4}>
+            <Text fontWeight="medium">Recent Signals</Text>
+            {signalData.hasActiveSignals && (
+              <Text fontSize="sm" color={textColor}>
+                Last activity: {new Date(signalData.lastSignalTime).toLocaleString()}
+              </Text>
+            )}
+          </HStack>
           <Table size="sm">
             <Thead>
               <Tr>
                 <Th>Membrane</Th>
                 <Th>Inflation</Th>
-                <Th>Last Redistribution</Th>
+                <Th>Timestamp</Th>
+                <Th isNumeric>Value</Th>
               </Tr>
             </Thead>
             <Tbody>
-              {formattedSignals.map((signal, index) => (
+              {signalData.recentSignals.map((signal, index) => (
                 <Tr key={index}>
-                  <Td>{signal.membrane}</Td>
-                  <Td>{signal.inflation}</Td>
-                  <Td>{signal.lastRedistribution}</Td>
+                  <Td>{signal.membrane || 'Unknown'}</Td>
+                  <Td>{signal.inflation || '0'}</Td>
+                  <Td>{new Date(signal.timestamp).toLocaleString()}</Td>
+                  <Td isNumeric>{safeFormatBalance(signal.value)}</Td>
                 </Tr>
               ))}
             </Tbody>
           </Table>
+        </Box>
+      )}
+
+      {user?.wallet?.address && (
+        <Box p={6} bg={permissionsBg}>
+          <Text fontWeight="medium" mb={2}>Permissions</Text>
+          <HStack spacing={4} wrap="wrap">
+            {Object.entries(permissions).map(([permission, isAllowed]) => (
+              <Badge
+                key={permission}
+                colorScheme={isAllowed ? 'green' : 'gray'}
+                variant="subtle"
+              >
+                {permission.replace('can', '')}
+              </Badge>
+            ))}
+          </HStack>
         </Box>
       )}
     </Box>

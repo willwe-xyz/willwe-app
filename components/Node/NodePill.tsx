@@ -1,3 +1,4 @@
+// File: ./components/Node/NodePill.tsx
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   Box, 
@@ -19,8 +20,8 @@ import {
   Activity,
   RefreshCw
 } from 'lucide-react';
-import { NodeState } from '../types/chainData';
-import { formatBalance } from '../hooks/useBalances';
+import { NodeState } from '../../types/chainData';
+import { formatBalance } from '../../hooks/useBalances';
 import { createPortal } from 'react-dom';
 
 interface NodePillProps {
@@ -38,7 +39,7 @@ interface NodePillProps {
   isProcessing?: boolean;
 }
 
-export const NodePill: React.FC<NodePillProps> = ({
+const NodePill: React.FC<NodePillProps> = ({
   node,
   totalValue,
   color,

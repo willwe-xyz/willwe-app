@@ -1,27 +1,44 @@
+// File: ./hooks/useNodeHierarchy.ts
 import { useMemo } from 'react';
 import { NodeState } from '../types/chainData';
 
 interface NodeHierarchyResult {
   rootNodes: NodeState[];
   descendantNodes: Map<string, NodeState[]>;
-  pathToNode: (nodeId: string) => NodeState[];
-  getNodeDepth: (nodeId: string) => number;
   totalValue: bigint;
-  getNodePercentage: (nodeId: string) => number;
+  nodeValues: Record<string, number>;
 }
 
 export function useNodeHierarchy(nodes: NodeState[]): NodeHierarchyResult {
   return useMemo(() => {
+    // Safely handle empty or undefined nodes array
+    if (!nodes || nodes.length === 0) {
+      return {
+        rootNodes: [],
+        descendantNodes: new Map(),
+        totalValue: BigInt(0),
+        nodeValues: {},
+      };
+    }
+
     // Create a map for quick node lookup
     const nodeMap = new Map<string, NodeState>();
-    nodes.forEach(node => nodeMap.set(node.basicInfo[0], node));
+    nodes.forEach(node => {
+      if (node?.basicInfo?.[0]) {
+        nodeMap.set(node.basicInfo[0], node);
+      }
+    });
 
     // Find root nodes (nodes with rootPath.length === 1)
-    const rootNodes = nodes.filter(node => node.rootPath.length === 1);
+    const rootNodes = nodes.filter(node => 
+      node?.rootPath?.length === 1 && node?.basicInfo?.[0]
+    );
 
     // Create descendant map
     const descendantNodes = new Map<string, NodeState[]>();
     nodes.forEach(node => {
+      if (!node?.rootPath || !node?.basicInfo?.[0]) return;
+      
       const parentId = node.rootPath[node.rootPath.length - 2];
       if (parentId) {
         const currentChildren = descendantNodes.get(parentId) || [];
@@ -29,42 +46,36 @@ export function useNodeHierarchy(nodes: NodeState[]): NodeHierarchyResult {
       }
     });
 
-    // Calculate total value
-    const totalValue = nodes.reduce(
-      (sum, node) => sum + BigInt(node.basicInfo[4]), 
-      BigInt(0)
-    );
+    // Calculate total value safely
+    const totalValue = nodes.reduce((sum, node) => {
+      if (!node?.basicInfo?.[4]) return sum;
+      try {
+        return sum + BigInt(node.basicInfo[4]);
+      } catch {
+        return sum;
+      }
+    }, BigInt(0));
 
-    // Helper function to get path to node
-    const pathToNode = (nodeId: string): NodeState[] => {
-      const node = nodeMap.get(nodeId);
-      if (!node) return [];
-
-      return node.rootPath.map(id => nodeMap.get(id)!)
-        .filter(Boolean);
-    };
-
-    // Helper function to get node depth
-    const getNodeDepth = (nodeId: string): number => {
-      const node = nodeMap.get(nodeId);
-      return node ? node.rootPath.length - 1 : 0;
-    };
-
-    // Helper function to get node value percentage
-    const getNodePercentage = (nodeId: string): number => {
-      const node = nodeMap.get(nodeId);
-      if (!node || totalValue === BigInt(0)) return 0;
+    // Calculate node values as percentages with safety checks
+    const nodeValues: Record<string, number> = {};
+    nodes.forEach(node => {
+      if (!node?.basicInfo?.[0] || !node?.basicInfo?.[4]) return;
       
-      return Number((BigInt(node.basicInfo[4]) * BigInt(100)) / totalValue);
-    };
+      try {
+        const nodeValue = BigInt(node.basicInfo[4]);
+        nodeValues[node.basicInfo[0]] = totalValue > 0 
+          ? Number((nodeValue * BigInt(10000)) / totalValue) / 100
+          : 0;
+      } catch {
+        nodeValues[node.basicInfo[0]] = 0;
+      }
+    });
 
     return {
       rootNodes,
       descendantNodes,
-      pathToNode,
-      getNodeDepth,
       totalValue,
-      getNodePercentage,
+      nodeValues,
     };
   }, [nodes]);
 }

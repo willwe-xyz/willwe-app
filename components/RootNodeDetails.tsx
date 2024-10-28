@@ -1,25 +1,45 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   Box, 
-  VStack, 
-  HStack, 
-  Button, 
+  useColorModeValue, 
+  Text, 
+  VStack,
+  HStack,
+  Button,
   InputGroup,
-  Input, 
+  Input,
   InputRightElement,
-  Text,
-  useColorModeValue,
-  Portal,
-  Tooltip
+  Tooltip,
 } from '@chakra-ui/react';
-import { Search, Plus, AlertTriangle } from 'lucide-react';
+import { 
+  Search, 
+  Plus, 
+  Filter, 
+  ArrowUpDown,
+} from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { NodePill } from './NodePill';
-import { useTransaction } from '../contexts/TransactionContext';
-import { useNode } from '../contexts/NodeContext';
+import debounce from 'lodash/debounce';
+import NodeList from './Node/NodeList';
 import { useRootNodes } from '../hooks/useRootNodes';
-import { NodeState } from '../types/chainData';
+import { useNodeOperations } from '../hooks/useNodeOperations';
+import { useNodeHierarchy } from '../hooks/useNodeHierarchy';
+import NotificationToast from './NotificationToast';
 import { formatBalance } from '../hooks/useBalances';
+import { createPortal } from 'react-dom';
+
+const CONSTANTS = {
+  SCROLL_BAR_WIDTH: '4px',
+  NODE_INDENT: 6,
+  CONNECTOR_WIDTH: '24px',
+  PORTAL_Z_INDEX: 1000,
+  MIN_SEARCH_LENGTH: 2,
+  DEFAULT_TOAST_DURATION: 5000,
+  SEARCH_DEBOUNCE_MS: 300,
+  LOADING_SKELETONS: 3,
+} as const;
+
+type SortTypes = 'value' | 'members' | 'depth';
+const SORT_OPTIONS: SortTypes[] = ['value', 'members', 'depth'];
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -36,233 +56,328 @@ const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   selectedTokenColor,
   onNodeSelect
 }) => {
-  // State
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  
+  // State management
+  const [searchValue, setSearchValue] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<SortTypes>('value');
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const [containerHeight, setContainerHeight] = useState(0);
+  const [localErrors, setLocalErrors] = useState<{[key: string]: Error}>({});
+
   // Hooks
   const { user } = usePrivy();
-  const { executeTransaction } = useTransaction();
-  const { 
-    rootNodeStates, 
-    isLoading, 
-    error, 
-    refetch 
-  } = useRootNodes(chainId, rootToken, userAddress);
+  const { rootNodeStates, isLoading, error, refetch } = useRootNodes(chainId, rootToken, userAddress);
 
-  // Styling
+  // Process all nodes
+  const allNodes = React.useMemo(() => {
+    return rootNodeStates?.flatMap(state => state?.nodes || [])
+      .filter(node => node?.basicInfo?.[0]) || [];
+  }, [rootNodeStates]);
+
+  // Use node hierarchy
+  const { rootNodes, nodeValues, totalValue } = useNodeHierarchy(allNodes);
+
+  // Node operations
+  const { transactions, isProcessing, error: txError } = useNodeOperations(
+    chainId,
+    rootNodes && rootNodes.length > 0 ? rootNodes[0] : null,
+    user?.wallet?.address
+  );
+
+  // Styles
+  const bgColor = useColorModeValue('white', 'gray.800');
   const searchBorderColor = useColorModeValue('gray.200', 'gray.600');
   const searchHoverBorderColor = useColorModeValue('gray.300', 'gray.500');
   const buttonHoverBg = useColorModeValue(`${selectedTokenColor}15`, `${selectedTokenColor}30`);
 
-  // Compute total value across all nodes
-  const totalValue = useMemo(() => {
-    return rootNodeStates.reduce((sum, state) => {
-      return sum + state.nodes.reduce((nodeSum, node) => 
-        nodeSum + BigInt(node.basicInfo[4]), BigInt(0)
-      );
-    }, BigInt(0));
-  }, [rootNodeStates]);
+  // Search debouncing
+  const debouncedSearch = useCallback(
+    debounce((value: string) => setSearchTerm(value), CONSTANTS.SEARCH_DEBOUNCE_MS),
+    []
+  );
 
-  // Filter nodes based on search
-  const filteredNodes = useMemo(() => {
-    if (!searchTerm) return rootNodeStates;
+  // Effects
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPortalContainer(document.body);
+    }
+  }, []);
 
-    return rootNodeStates.map(state => ({
-      ...state,
-      nodes: state.nodes.filter(node => 
-        node.basicInfo[0].toLowerCase().includes(searchTerm.toLowerCase()) ||
-        node.membersOfNode.some(member => 
-          member.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      )
-    })).filter(state => state.nodes.length > 0);
-  }, [rootNodeStates, searchTerm]);
+  useEffect(() => {
+    const updateHeight = () => {
+      setContainerHeight(window.innerHeight - 250);
+    };
+    
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+    return () => window.removeEventListener('resize', updateHeight);
+  }, []);
 
-  // Transaction handlers
-  const handleSpawnNode = useCallback(async (parentNodeId: string) => {
-    if (!user?.wallet?.address) {
-      throw new Error('Please connect your wallet');
+  // Error handling for transaction context errors
+  useEffect(() => {
+    if (txError) {
+      const errorId = Date.now().toString();
+      setLocalErrors(prev => ({
+        ...prev,
+        [errorId]: txError
+      }));
+    }
+  }, [txError]);
+
+  // Filter and sort nodes
+  const filteredNodes = React.useMemo(() => {
+    if (!allNodes.length) return [];
+    
+    let filtered = [...allNodes];
+
+    if (searchTerm && searchTerm.length >= CONSTANTS.MIN_SEARCH_LENGTH) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(node => {
+        if (!node?.basicInfo?.[0] || !node?.membersOfNode) return false;
+        
+        return (
+          node.basicInfo[0].toLowerCase().includes(searchLower) ||
+          node.membersOfNode.some(member => 
+            member?.toLowerCase?.()?.includes?.(searchLower)
+          )
+        );
+      });
     }
 
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.spawnBranch(parentNodeId);
-      },
-      {
-        successMessage: 'Node spawned successfully',
-        onSuccess: refetch
+    return filtered.sort((a, b) => {
+      if (!a?.basicInfo || !b?.basicInfo) return 0;
+      
+      let comparison = 0;
+      switch (sortBy) {
+        case 'value':
+          try {
+            comparison = Number(
+              BigInt(b.basicInfo[4] || '0') - BigInt(a.basicInfo[4] || '0')
+            );
+          } catch {
+            comparison = 0;
+          }
+          break;
+        case 'members':
+          comparison = (b.membersOfNode?.length || 0) - (a.membersOfNode?.length || 0);
+          break;
+        case 'depth':
+          comparison = (b.rootPath?.length || 0) - (a.rootPath?.length || 0);
+          break;
       }
-    );
-  }, [chainId, user?.wallet?.address, executeTransaction, refetch]);
+      return sortDirection === 'desc' ? comparison : -comparison;
+    });
+  }, [allNodes, searchTerm, sortBy, sortDirection]);
+
+  // Action handlers
+  const handleSpawnNode = useCallback(async () => {
+    try {
+      await transactions.spawn();
+      await refetch();
+    } catch (error) {
+      const errorId = Date.now().toString();
+      setLocalErrors(prev => ({
+        ...prev,
+        [errorId]: error as Error
+      }));
+    }
+  }, [transactions, refetch]);
 
   const handleMintMembership = useCallback(async (nodeId: string) => {
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.mintMembership(nodeId);
-      },
-      {
-        successMessage: 'Membership minted successfully',
-        onSuccess: refetch
-      }
-    );
-  }, [chainId, executeTransaction, refetch]);
+    try {
+      await transactions.mintMembership();
+      await refetch();
+    } catch (error) {
+      const errorId = Date.now().toString();
+      setLocalErrors(prev => ({
+        ...prev,
+        [errorId]: error as Error
+      }));
+    }
+  }, [transactions, refetch]);
 
   const handleTrickle = useCallback(async (nodeId: string) => {
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.redistributePath(nodeId);
-      },
-      {
-        successMessage: 'Redistribution completed successfully',
-        onSuccess: refetch
-      }
-    );
-  }, [chainId, executeTransaction, refetch]);
+    try {
+      await transactions.redistribute();
+      await refetch();
+    } catch (error) {
+      const errorId = Date.now().toString();
+      setLocalErrors(prev => ({
+        ...prev,
+        [errorId]: error as Error
+      }));
+    }
+  }, [transactions, refetch]);
 
-  // Recursive node rendering
-  const renderNodeHierarchy = useCallback((nodeState: NodeState, depth: number = 0) => {
-    const childNodes = nodeState.childrenNodes
-      .map(childId => 
-        rootNodeStates
-          .flatMap(state => state.nodes)
-          .find(node => node.basicInfo[0] === childId)
-      )
-      .filter((node): node is NodeState => node !== undefined);
+  const handleRemoveError = useCallback((errorId: string) => {
+    setLocalErrors(prev => {
+      const next = { ...prev };
+      delete next[errorId];
+      return next;
+    });
+  }, []);
 
-    return (
-      <Box key={nodeState.basicInfo[0]} ml={depth * 4}>
-        <NodePill
-          node={nodeState}
-          totalValue={Number(totalValue)}
-          color={selectedTokenColor}
-          onNodeClick={onNodeSelect}
-          onMintMembership={handleMintMembership}
-          onSpawnNode={handleSpawnNode}
-          onTrickle={handleTrickle}
-          backgroundColor={`${selectedTokenColor}15`}
-          textColor={selectedTokenColor}
-          borderColor={selectedTokenColor}
-        />
-        {childNodes.length > 0 && (
-          <VStack align="stretch" spacing={1} mt={1}>
-            {childNodes.map(childNode => renderNodeHierarchy(childNode, depth + 1))}
-          </VStack>
-        )}
-      </Box>
-    );
-  }, [rootNodeStates, totalValue, selectedTokenColor, onNodeSelect, handleMintMembership, handleSpawnNode, handleTrickle]);
-
-  // Loading state
-  if (isLoading) {
-    return (
-      <Box p={4} textAlign="center">
-        <Text>Loading nodes...</Text>
-      </Box>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <Box p={4}>
-        <HStack spacing={2} color="red.500">
-          <AlertTriangle size={20} />
-          <Text>Error: {error.message}</Text>
-        </HStack>
-      </Box>
-    );
+  if (isLoading || !rootToken) {
+    return null;
   }
 
   return (
-    <Box p={4}>
-      {/* Header Controls */}
-      <HStack spacing={4} mb={4}>
-        <Button
-          leftIcon={<Plus size={14} />}
-          onClick={() => handleSpawnNode(rootToken)}
-          size="sm"
-          colorScheme="gray"
-          variant="outline"
-          isDisabled={!user?.wallet?.address}
-          _hover={{ bg: buttonHoverBg }}
-        >
-          New Root Node
-        </Button>
-        <InputGroup size="sm" maxW="300px">
-          <Input
-            placeholder="Search nodes..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            borderColor={searchBorderColor}
-            _hover={{ borderColor: searchHoverBorderColor }}
-            _focus={{
-              borderColor: selectedTokenColor,
-              boxShadow: `0 0 0 1px ${selectedTokenColor}`
-            }}
-          />
-          <InputRightElement>
-            <Search size={14} color={selectedTokenColor} />
-          </InputRightElement>
-        </InputGroup>
-      </HStack>
+    <Box p={4} bg={bgColor} borderRadius="lg">
+      <VStack spacing={6} align="stretch">
+        <HStack spacing={4} wrap="wrap">
+          <Button
+            leftIcon={<Plus size={14} />}
+            onClick={handleSpawnNode}
+            size="sm"
+            colorScheme="gray"
+            variant="outline"
+            isDisabled={!user?.wallet?.address || isProcessing}
+            isLoading={isProcessing}
+            _hover={{ bg: buttonHoverBg }}
+          >
+            New Root Node
+          </Button>
 
-      {/* Node List */}
-      {rootNodeStates.length === 0 ? (
+          <InputGroup size="sm" maxW="300px">
+            <Input
+              aria-label="Search nodes"
+              placeholder="Search nodes..."
+              value={searchValue}
+              onChange={(e) => {
+                setSearchValue(e.target.value);
+                debouncedSearch(e.target.value);
+              }}
+              borderColor={searchBorderColor}
+              _hover={{ borderColor: searchHoverBorderColor }}
+              _focus={{
+                borderColor: selectedTokenColor,
+                boxShadow: `0 0 0 1px ${selectedTokenColor}`
+              }}
+            />
+            <InputRightElement>
+              <Search size={14} color={selectedTokenColor} aria-hidden="true" />
+            </InputRightElement>
+          </InputGroup>
+
+          <HStack>
+            <Tooltip label="Sort by">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSortBy(current => {
+                  const currentIndex = SORT_OPTIONS.indexOf(current);
+                  return SORT_OPTIONS[(currentIndex + 1) % SORT_OPTIONS.length];
+                })}
+                leftIcon={<Filter size={14} />}
+              >
+                {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}
+              </Button>
+            </Tooltip>
+
+            <Tooltip label="Toggle sort direction">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                leftIcon={<ArrowUpDown size={14} />}
+              >
+                {sortDirection.toUpperCase()}
+              </Button>
+            </Tooltip>
+          </HStack>
+        </HStack>
+
+        <Box p={4} borderRadius="md" bg={`${selectedTokenColor}10`}>
+          <Text fontSize="sm" color="gray.600" mb={1}>
+            Total Value Locked
+          </Text>
+          <Text fontSize="xl" fontWeight="bold">
+            {formatBalance(totalValue.toString())}
+          </Text>
+        </Box>
+
         <Box 
-          p={8} 
-          textAlign="center" 
-          border="1px dashed" 
-          borderColor={selectedTokenColor}
-          borderRadius="md"
+          overflowX="auto"
+          overflowY="auto"
+          maxHeight={`${containerHeight}px`}
+          css={{
+            '&::-webkit-scrollbar': {
+              width: CONSTANTS.SCROLL_BAR_WIDTH,
+              height: CONSTANTS.SCROLL_BAR_WIDTH,
+            },
+            '&::-webkit-scrollbar-track': {
+              width: '6px',
+              background: 'transparent',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: selectedTokenColor,
+              borderRadius: '24px',
+            },
+          }}
         >
-          <Text color="gray.500">
-            {user?.wallet?.address 
-              ? 'No nodes found. Create a new root node to get started.'
-              : 'Please connect your wallet to view or create nodes.'}
-          </Text>
-        </Box>
-      ) : (
-        <VStack align="stretch" spacing={2}>
-          {filteredNodes.map(state => 
-            state.nodes
-              .filter(node => node.rootPath.length === 1)
-              .map(rootNode => renderNodeHierarchy(rootNode))
+          {filteredNodes.length === 0 ? (
+            <Box 
+              p={8} 
+              textAlign="center" 
+              border="1px dashed"
+              borderColor={selectedTokenColor}
+              borderRadius="md"
+            >
+              <Text color="gray.500">
+                {user?.wallet?.address 
+                  ? searchTerm 
+                    ? `No nodes found matching "${searchTerm}"`
+                    : 'No nodes found. Create a new root node to get started.'
+                  : 'Please connect your wallet to view or create nodes.'}
+              </Text>
+            </Box>
+          ) : (
+            <NodeList
+              nodes={filteredNodes}
+              totalValue={totalValue}
+              selectedTokenColor={selectedTokenColor}
+              onNodeSelect={onNodeSelect}
+              onMintMembership={handleMintMembership}
+              onSpawnNode={handleSpawnNode}
+              onTrickle={handleTrickle}
+              nodeValues={nodeValues}
+              isProcessing={isProcessing}
+            />
           )}
-        </VStack>
-      )}
-
-      {/* Search Results */}
-      {filteredNodes.length === 0 && searchTerm && (
-        <Box p={4} textAlign="center">
-          <Text color="gray.500">
-            No nodes found matching "{searchTerm}"
-          </Text>
         </Box>
-      )}
+      </VStack>
 
-      {/* Transaction Status Indicator */}
-      <Portal>
+      {portalContainer && createPortal(
         <Box
           position="fixed"
           bottom={4}
           right={4}
-          zIndex={1000}
+          zIndex={CONSTANTS.PORTAL_Z_INDEX}
         >
-          {/* Transaction notifications would go here */}
-        </Box>
-      </Portal>
+          {isProcessing && (
+            <NotificationToast
+              status="pending"
+              title="Transaction Pending"
+              description="Your transaction is being processed"
+              onClose={() => {}}
+            />
+          )}
+          {Object.entries(localErrors).map(([id, error]) => (
+            <NotificationToast
+              key={id}
+              id={id}
+              status="error"
+              title="Transaction Failed"
+              description={error.message}
+              onClose={() => handleRemoveError(id)}
+            />
+          ))}
+        </Box>,
+        portalContainer
+      )}
     </Box>
   );
 };
 
-export default React.memo(RootNodeDetails, (prevProps, nextProps) => {
-  return (
-    prevProps.chainId === nextProps.chainId &&
-    prevProps.rootToken === nextProps.rootToken &&
-    prevProps.userAddress === nextProps.userAddress &&
-    prevProps.selectedTokenColor === nextProps.selectedTokenColor
-  );
-});
+export default RootNodeDetails;

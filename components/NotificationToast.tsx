@@ -16,6 +16,7 @@ interface NotificationToastProps {
   description?: string;
   hash?: string;
   onClose: () => void;
+  id?: string; // Add id prop for unique identification
 }
 
 const NotificationToast: React.FC<NotificationToastProps> = ({
@@ -23,7 +24,8 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
   title,
   description,
   hash,
-  onClose
+  onClose,
+  id
 }) => {
   const bg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -34,15 +36,13 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
         return {
           icon: CheckCircle,
           color: 'green.500',
-          text: 'Success',
-          animation: undefined
+          text: 'Success'
         };
       case 'error':
         return {
           icon: XCircle,
           color: 'red.500',
-          text: 'Error',
-          animation: undefined
+          text: 'Error'
         };
       case 'pending':
       case 'confirming':
@@ -56,8 +56,7 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
         return {
           icon: AlertCircle,
           color: 'gray.500',
-          text: 'Info',
-          animation: undefined
+          text: 'Info'
         };
     }
   };
@@ -70,6 +69,11 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
     }
   };
 
+  // Handle close with id
+  const handleClose = () => {
+    onClose();
+  };
+
   return (
     <Box
       bg={bg}
@@ -80,13 +84,15 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
       boxShadow="lg"
       maxW="sm"
       position="relative"
+      data-toast-id={id} // Add data attribute for identification
     >
       <CloseButton
         size="sm"
         position="absolute"
         right={2}
         top={2}
-        onClick={onClose}
+        onClick={handleClose}
+        aria-label="Close notification"
       />
       
       <HStack spacing={3} align="start">

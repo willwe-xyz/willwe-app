@@ -33,7 +33,7 @@ export function useNodeSignals(node: NodeState): NodeSignalsResult {
 
     // Calculate total signal value
     const totalSignalValue = allSignals.reduce(
-      (sum, signal) => sum + BigInt(signal.value),
+      (sum, signal) => sum + BigInt(signal.value || "0"),
       BigInt(0)
     );
 

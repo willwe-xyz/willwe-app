@@ -12,37 +12,26 @@ interface NodePermissions {
   isMember: boolean;
 }
 
-interface NodeOperationsResult {
-  permissions: NodePermissions;
-  transactions: {
-    mint: (amount: string) => Promise<void>;
-    burn: (amount: string) => Promise<void>;
-    signal: (signals: number[]) => Promise<void>;
-    redistribute: () => Promise<void>;
-    spawn: () => Promise<void>;
-    mintMembership: () => Promise<void>;
-  };
-  isProcessing: boolean;
-  error: Error | null;
-}
+const defaultPermissions: NodePermissions = {
+  canMint: false,
+  canBurn: false,
+  canSignal: false,
+  canRedistribute: false,
+  canSpawn: true, // Allow spawn by default
+  isMember: false
+};
 
 export function useNodeOperations(
   chainId: string,
-  node: NodeState,
+  node: NodeState | null | undefined,
   userAddress?: string
-): NodeOperationsResult {
+) {
   const { executeTransaction, isTransacting, error } = useTransaction();
 
   // Calculate permissions
   const permissions = useMemo((): NodePermissions => {
-    if (!userAddress) return {
-      canMint: false,
-      canBurn: false,
-      canSignal: false,
-      canRedistribute: false,
-      canSpawn: false,
-      isMember: false
-    };
+    if (!userAddress) return defaultPermissions;
+    if (!node) return { ...defaultPermissions, canSpawn: true }; // Allow spawn when no node exists
 
     const isMember = node.membersOfNode.includes(userAddress.toLowerCase());
     
@@ -51,13 +40,71 @@ export function useNodeOperations(
       canBurn: isMember,
       canSignal: isMember,
       canRedistribute: isMember,
-      canSpawn: isMember,
+      canSpawn: true, // Always allow spawn
       isMember
     };
-  }, [node.membersOfNode, userAddress]);
+  }, [node?.membersOfNode, userAddress]);
 
-  // Transaction handlers
+  const spawn = useCallback(async () => {
+    if (!chainId) throw new Error('Chain ID is required');
+
+    await executeTransaction(
+      chainId,
+      async (contract) => {
+        return contract.spawnBranch(node?.basicInfo[0] || '0');
+      },
+      {
+        successMessage: 'Node spawned successfully',
+      }
+    );
+  }, [chainId, node, executeTransaction]);
+
+  const mintMembership = useCallback(async () => {
+    if (!chainId || !node) throw new Error('Chain ID and node are required');
+
+    await executeTransaction(
+      chainId,
+      async (contract) => {
+        return contract.mintMembership(node.basicInfo[0]);
+      },
+      {
+        successMessage: 'Membership minted successfully',
+      }
+    );
+  }, [chainId, node, executeTransaction]);
+
+  const redistribute = useCallback(async () => {
+    if (!chainId || !node) throw new Error('Chain ID and node are required');
+    if (!permissions.canRedistribute) throw new Error('No permission to redistribute');
+
+    await executeTransaction(
+      chainId,
+      async (contract) => {
+        return contract.redistributePath(node.basicInfo[0]);
+      },
+      {
+        successMessage: 'Redistribution completed successfully',
+      }
+    );
+  }, [chainId, node, permissions.canRedistribute, executeTransaction]);
+
+  const signal = useCallback(async (signals: number[]) => {
+    if (!chainId || !node) throw new Error('Chain ID and node are required');
+    if (!permissions.canSignal) throw new Error('No permission to signal');
+
+    await executeTransaction(
+      chainId,
+      async (contract) => {
+        return contract.sendSignal(node.basicInfo[0], signals);
+      },
+      {
+        successMessage: 'Signal sent successfully',
+      }
+    );
+  }, [chainId, node, permissions.canSignal, executeTransaction]);
+
   const mint = useCallback(async (amount: string) => {
+    if (!chainId || !node) throw new Error('Chain ID and node are required');
     if (!permissions.canMint) throw new Error('No permission to mint');
 
     await executeTransaction(
@@ -70,9 +117,10 @@ export function useNodeOperations(
         successMessage: 'Tokens minted successfully',
       }
     );
-  }, [chainId, node.basicInfo, permissions.canMint, executeTransaction]);
+  }, [chainId, node, permissions.canMint, executeTransaction]);
 
   const burn = useCallback(async (amount: string) => {
+    if (!chainId || !node) throw new Error('Chain ID and node are required');
     if (!permissions.canBurn) throw new Error('No permission to burn');
 
     await executeTransaction(
@@ -85,71 +133,17 @@ export function useNodeOperations(
         successMessage: 'Tokens burned successfully',
       }
     );
-  }, [chainId, node.basicInfo, permissions.canBurn, executeTransaction]);
-
-  const signal = useCallback(async (signals: number[]) => {
-    if (!permissions.canSignal) throw new Error('No permission to signal');
-
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.sendSignal(node.basicInfo[0], signals);
-      },
-      {
-        successMessage: 'Signal sent successfully',
-      }
-    );
-  }, [chainId, node.basicInfo, permissions.canSignal, executeTransaction]);
-
-  const redistribute = useCallback(async () => {
-    if (!permissions.canRedistribute) throw new Error('No permission to redistribute');
-
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.redistributePath(node.basicInfo[0]);
-      },
-      {
-        successMessage: 'Redistribution completed successfully',
-      }
-    );
-  }, [chainId, node.basicInfo, permissions.canRedistribute, executeTransaction]);
-
-  const spawn = useCallback(async () => {
-    if (!permissions.canSpawn) throw new Error('No permission to spawn');
-
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.spawnBranch(node.basicInfo[0]);
-      },
-      {
-        successMessage: 'Node spawned successfully',
-      }
-    );
-  }, [chainId, node.basicInfo, permissions.canSpawn, executeTransaction]);
-
-  const mintMembership = useCallback(async () => {
-    await executeTransaction(
-      chainId,
-      async (contract) => {
-        return contract.mintMembership(node.basicInfo[0]);
-      },
-      {
-        successMessage: 'Membership minted successfully',
-      }
-    );
-  }, [chainId, node.basicInfo, executeTransaction]);
+  }, [chainId, node, permissions.canBurn, executeTransaction]);
 
   return {
     permissions,
     transactions: {
-      mint,
-      burn,
-      signal,
-      redistribute,
       spawn,
-      mintMembership
+      mintMembership,
+      redistribute,
+      signal,
+      mint,
+      burn
     },
     isProcessing: isTransacting,
     error
