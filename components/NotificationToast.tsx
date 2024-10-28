@@ -1,81 +1,61 @@
-import React from 'react';
-import {
+import React, { useEffect, useState } from 'react';
+import { 
   Box,
-  HStack,
+  Flex,
   Text,
-  Icon,
+  IconButton,
   useColorModeValue,
   CloseButton
 } from '@chakra-ui/react';
-import { CheckCircle, AlertCircle, Loader, XCircle } from 'lucide-react';
-import { TransactionStatus } from '../types/chain';
+import { AlertCircle, XCircle, Loader, CheckCircle } from 'lucide-react';
 
-interface NotificationToastProps {
-  status: TransactionStatus;
-  title: string;
-  description?: string;
-  hash?: string;
-  onClose: () => void;
-  id?: string; // Add id prop for unique identification
-}
+const ANIMATION_DURATION = 200;
 
-const NotificationToast: React.FC<NotificationToastProps> = ({
-  status,
-  title,
+export default function NotificationToast({ 
+  status, 
+  title, 
   description,
-  hash,
   onClose,
-  id
-}) => {
+  id,
+  duration = 5000,
+  isCloseable = true
+}) {
+  const [isExiting, setIsExiting] = useState(false);
+
+  // Auto close after duration if specified
+  useEffect(() => {
+    if (duration && duration > 0) {
+      const timer = setTimeout(() => {
+        handleClose();
+      }, duration);
+      return () => clearTimeout(timer);
+    }
+  }, [duration]);
+
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      onClose(id);
+    }, ANIMATION_DURATION);
+  };
+
+  const statusConfig = {
+    success: { icon: CheckCircle, color: 'green.500' },
+    error: { icon: XCircle, color: 'red.500' },
+    pending: { icon: Loader, color: 'blue.500' },
+    warning: { icon: AlertCircle, color: 'orange.500' }
+  };
+
+  const config = statusConfig[status] || statusConfig.info;
   const bg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
-  const getStatusConfig = () => {
-    switch (status) {
-      case 'success':
-        return {
-          icon: CheckCircle,
-          color: 'green.500',
-          text: 'Success'
-        };
-      case 'error':
-        return {
-          icon: XCircle,
-          color: 'red.500',
-          text: 'Error'
-        };
-      case 'pending':
-      case 'confirming':
-        return {
-          icon: Loader,
-          color: 'blue.500',
-          text: 'Processing',
-          animation: 'spin 1s linear infinite'
-        };
-      default:
-        return {
-          icon: AlertCircle,
-          color: 'gray.500',
-          text: 'Info'
-        };
-    }
-  };
-
-  const statusConfig = getStatusConfig();
-
-  const handleViewTransaction = () => {
-    if (hash) {
-      window.open(`https://etherscan.io/tx/${hash}`, '_blank');
-    }
-  };
-
-  // Handle close with id
-  const handleClose = () => {
-    onClose();
-  };
-
   return (
     <Box
+      position="relative"
+      opacity={isExiting ? 0 : 1}
+      transform={isExiting ? 'translateX(100%)' : 'translateX(0)'}
+      transition={`all ${ANIMATION_DURATION}ms ease-in-out`}
       bg={bg}
       border="1px solid"
       borderColor={borderColor}
@@ -83,64 +63,50 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
       p={4}
       boxShadow="lg"
       maxW="sm"
-      position="relative"
-      data-toast-id={id} // Add data attribute for identification
+      mb={4}
+      role="alert"
     >
-      <CloseButton
-        size="sm"
-        position="absolute"
-        right={2}
-        top={2}
-        onClick={handleClose}
-        aria-label="Close notification"
-      />
-      
-      <HStack spacing={3} align="start">
-        <Box
-          animation={statusConfig.animation}
-          sx={{
-            '@keyframes spin': {
-              'from': { transform: 'rotate(0deg)' },
-              'to': { transform: 'rotate(360deg)' }
-            }
-          }}
-        >
-          <Icon
-            as={statusConfig.icon}
-            color={statusConfig.color}
-            boxSize={5}
+      <Flex align="start">
+        <Box flexShrink={0} mr={3}>
+          <config.icon 
+            size={20} 
+            color={config.color} 
+            style={status === 'pending' ? {
+              animation: 'spin 1s linear infinite'
+            } : undefined} 
           />
         </Box>
-        
-        <Box flex={1}>
-          <HStack justify="space-between" mb={1}>
-            <Text fontWeight="medium">{title}</Text>
-            <Text fontSize="sm" color={statusConfig.color}>
-              {statusConfig.text}
-            </Text>
-          </HStack>
-          
+
+        <Box flex="1" mr={isCloseable ? 8 : 0}>
+          <Text fontWeight="medium" mb={description ? 1 : 0}>
+            {title}
+          </Text>
           {description && (
-            <Text fontSize="sm" color="gray.600" mb={2}>
+            <Text fontSize="sm" color="gray.600">
               {description}
             </Text>
           )}
-          
-          {hash && (status === 'success' || status === 'pending') && (
-            <Text
-              fontSize="sm"
-              color="blue.500"
-              cursor="pointer"
-              onClick={handleViewTransaction}
-              _hover={{ textDecoration: 'underline' }}
-            >
-              View Transaction
-            </Text>
-          )}
         </Box>
-      </HStack>
+
+        {isCloseable && (
+          <CloseButton
+            position="absolute"
+            right={2}
+            top={2}
+            onClick={handleClose}
+            size="sm"
+            color="gray.500"
+            _hover={{ color: 'gray.700' }}
+          />
+        )}
+      </Flex>
+
+      <style jsx global>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </Box>
   );
-};
-
-export default NotificationToast;
+}

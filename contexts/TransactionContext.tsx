@@ -1,165 +1,148 @@
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { ethers, ContractTransactionResponse, BrowserProvider } from 'ethers';
-import { UseToastOptions } from '@chakra-ui/react';
-import { deployments, ABIs } from '../config/deployments';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { useToast, Box, CloseButton, Flex, Text } from '@chakra-ui/react';
+import { AlertCircle, XCircle, Loader, CheckCircle } from 'lucide-react';
 
-// Types
-export interface TransactionState {
+// Internal Toast Component
+const NotificationToast = ({ 
+  status, 
+  title, 
+  description,
+  onClose
+}) => {
+  const statusConfig = {
+    success: { icon: CheckCircle, color: 'green.500' },
+    error: { icon: XCircle, color: 'red.500' },
+    pending: { icon: Loader, color: 'blue.500' },
+    warning: { icon: AlertCircle, color: 'orange.500' }
+  };
+
+  const config = statusConfig[status] || statusConfig.warning;
+  const Icon = config.icon;
+
+  return (
+    <Box
+      bg="white"
+      borderRadius="lg"
+      p={4}
+      boxShadow="lg"
+      position="relative"
+      maxW="sm"
+    >
+      <CloseButton
+        position="absolute"
+        right={2}
+        top={2}
+        onClick={onClose}
+      />
+      <Flex>
+        <Box mr={3} mt={1}>
+          <Icon 
+            size={20} 
+            color={config.color} 
+            style={status === 'pending' ? {
+              animation: 'spin 1s linear infinite'
+            } : undefined}
+          />
+        </Box>
+        <Box flex="1">
+          <Text fontWeight="bold" mb={description ? 1 : 0}>
+            {title}
+          </Text>
+          {description && (
+            <Text fontSize="sm" color="gray.600">
+              {description}
+            </Text>
+          )}
+        </Box>
+      </Flex>
+    </Box>
+  );
+};
+
+interface TransactionContextType {
+  executeTransaction: (chainId: string, transactionFn: any, options?: any) => Promise<any>;
   isTransacting: boolean;
-  currentTransaction: string | null;
   error: Error | null;
-}
-
-export interface TransactionContextType extends TransactionState {
-  executeTransaction: (
-    chainId: string,
-    transactionFn: (contract: ethers.Contract) => Promise<ContractTransactionResponse>,
-    options: {
-      successMessage: string;
-      onSuccess?: () => void;
-    }
-  ) => Promise<void>;
   clearError: () => void;
 }
 
-// Initial state
-const initialState: TransactionState = {
+const TransactionContext = createContext<TransactionContextType>({
+  executeTransaction: async () => {},
   isTransacting: false,
-  currentTransaction: null,
   error: null,
-};
+  clearError: () => {}
+});
 
-// Action types
-type TransactionAction =
-  | { type: 'START_TRANSACTION'; payload: string }
-  | { type: 'END_TRANSACTION' }
-  | { type: 'SET_ERROR'; payload: Error }
-  | { type: 'CLEAR_ERROR' };
+export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isTransacting, setIsTransacting] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const toast = useToast();
 
-// Reducer
-function transactionReducer(state: TransactionState, action: TransactionAction): TransactionState {
-  switch (action.type) {
-    case 'START_TRANSACTION':
-      return {
-        ...state,
-        isTransacting: true,
-        currentTransaction: action.payload,
-        error: null,
-      };
-    case 'END_TRANSACTION':
-      return {
-        ...state,
-        isTransacting: false,
-        currentTransaction: null,
-      };
-    case 'SET_ERROR':
-      return {
-        ...state,
-        isTransacting: false,
-        currentTransaction: null,
-        error: action.payload,
-      };
-    case 'CLEAR_ERROR':
-      return {
-        ...state,
-        error: null,
-      };
-    default:
-      return state;
-  }
-}
-
-const getWillWeContract = async (chainId: string, provider: BrowserProvider): Promise<ethers.Contract> => {
-  const cleanChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
-  const signer = await provider.getSigner();
-  
-  return new ethers.Contract(
-    deployments.WillWe[cleanChainId],
-    ABIs.WillWe,
-    signer
-  );
-};
-
-// Context
-const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
-
-// Provider component
-export function TransactionProvider({ 
-  children,
-  toast
-}: { 
-  children: React.ReactNode;
-  toast: (options: UseToastOptions) => void;
-}) {
-  const [state, dispatch] = useReducer(transactionReducer, initialState);
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   const executeTransaction = useCallback(async (
     chainId: string,
-    transactionFn: (contract: ethers.Contract) => Promise<ContractTransactionResponse>,
-    options: {
-      successMessage: string;
-      onSuccess?: () => void;
-    }
+    transactionFn: any,
+    options: { successMessage?: string } = {}
   ) => {
+    setIsTransacting(true);
+    setError(null);
+
     try {
-      dispatch({ type: 'START_TRANSACTION', payload: 'Executing transaction...' });
-
-      // Get provider from window.ethereum
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = await getWillWeContract(chainId, provider);
+      const result = await transactionFn();
       
-      const tx = await transactionFn(contract);
-      await tx.wait();
-      
-      toast({
-        title: 'Success',
-        description: options.successMessage,
-        status: 'success',
-        duration: 5000,
-      });
-
-      if (options.onSuccess) {
-        options.onSuccess();
+      if (options.successMessage) {
+        toast({
+          render: ({ onClose }) => (
+            <NotificationToast
+              status="success"
+              title={options.successMessage}
+              onClose={onClose}
+            />
+          ),
+          position: "top-right",
+          duration: 5000,
+          isClosable: true,
+        });
       }
-    } catch (error: any) {
-      console.error('Transaction failed:', error);
-      const errorMessage = error.message || 'Transaction failed';
+      
+      return result;
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
       
       toast({
-        title: 'Error',
-        description: errorMessage,
-        status: 'error',
-        duration: 5000,
+        render: ({ onClose }) => (
+          <NotificationToast
+            status="error"
+            title="Transaction Failed"
+            description={error.message}
+            onClose={onClose}
+          />
+        ),
+        position: "top-right",
+        duration: null,
+        isClosable: true,
       });
       
-      dispatch({ type: 'SET_ERROR', payload: error });
+      throw error;
     } finally {
-      dispatch({ type: 'END_TRANSACTION' });
+      setIsTransacting(false);
     }
   }, [toast]);
 
-  const clearError = useCallback(() => {
-    dispatch({ type: 'CLEAR_ERROR' });
-  }, []);
-
   return (
-    <TransactionContext.Provider
-      value={{
-        ...state,
-        executeTransaction,
-        clearError,
-      }}
-    >
+    <TransactionContext.Provider value={{ 
+      executeTransaction, 
+      isTransacting, 
+      error,
+      clearError 
+    }}>
       {children}
     </TransactionContext.Provider>
   );
-}
+};
 
-// Custom hook
-export function useTransaction() {
-  const context = useContext(TransactionContext);
-  if (context === undefined) {
-    throw new Error('useTransaction must be used within a TransactionProvider');
-  }
-  return context;
-}
+export const useTransaction = () => useContext(TransactionContext);

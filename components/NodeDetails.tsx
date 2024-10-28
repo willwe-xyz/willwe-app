@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import {
   Box,
   VStack,
@@ -11,49 +11,48 @@ import {
   Tr,
   Th,
   Td,
-  Button,
   useColorModeValue,
   Tooltip,
   Skeleton,
   Alert,
   AlertIcon,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { 
   Users, 
-  GitBranch, 
   ArrowUpRight, 
-  Activity,
-  Signal,
-  Clock
+  GitBranch,
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useNodeData } from '../hooks/useNodeData';
 import { useNodeOperations } from '../hooks/useNodeOperations';
 import { formatBalance } from '../hooks/useBalances';
 import { NodeState } from '../types/chainData';
+import { NodeOperations } from './Node/NodeOperations';
+import { TokenOperationModal } from './Node/TokenOperationModal';
 
 interface NodeDetailsProps {
   chainId: string;
   nodeId: string;
   onNodeSelect?: (nodeId: string) => void;
+  selectedTokenColor: string;
 }
 
-const safeFormatBalance = (value: any): string => {
-  if (!value) return '0';
-  try {
-    return formatBalance(value.toString());
-  } catch (e) {
-    console.error('Error in safeFormatBalance:', e);
-    return '0';
-  }
-};
+interface OperationParams {
+  amount?: string;
+  membraneId?: string;
+  targetNodeId?: string;
+}
 
 const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
-  onNodeSelect
+  onNodeSelect,
+  selectedTokenColor
 }) => {
   const { user } = usePrivy();
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [currentOperation, setCurrentOperation] = useState<string>('');
   
   const cleanChainId = useMemo(() => 
     chainId?.includes('eip155:') ? chainId.replace('eip155:', '') : chainId,
@@ -67,91 +66,48 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   const permissionsBg = useColorModeValue('gray.50', 'gray.900');
 
   const { data: nodeData, error, isLoading } = useNodeData(cleanChainId, nodeId);
-
   const { permissions, transactions, isProcessing } = useNodeOperations(
     cleanChainId,
     nodeData,
     user?.wallet?.address
   );
 
-  const stats = useMemo(() => {
-    if (!nodeData?.basicInfo) {
-      return {
-        totalValue: '0',
-        dailyGrowth: '0',
-        memberCount: 0,
-        childCount: 0,
-        pathDepth: 0
-      };
-    }
+  // Operation handlers
+  const handleOperation = useCallback((operation: string) => {
+    setCurrentOperation(operation);
+    onOpen();
+  }, [onOpen]);
 
+  const handleOperationSubmit = useCallback(async (params: OperationParams) => {
+    if (!nodeData?.basicInfo?.[0]) return;
+    
     try {
-      const totalValue = nodeData.basicInfo[4] ? BigInt(nodeData.basicInfo[4]) : BigInt(0);
-      const inflation = nodeData.basicInfo[1] ? BigInt(nodeData.basicInfo[1]) : BigInt(0);
-      const dailyGrowth = inflation * BigInt(86400);
-
-      return {
-        totalValue: safeFormatBalance(totalValue),
-        dailyGrowth: safeFormatBalance(dailyGrowth),
-        memberCount: Array.isArray(nodeData.membersOfNode) ? nodeData.membersOfNode.length : 0,
-        childCount: Array.isArray(nodeData.childrenNodes) ? nodeData.childrenNodes.length : 0,
-        pathDepth: Array.isArray(nodeData.rootPath) ? nodeData.rootPath.length : 0
-      };
+      switch (currentOperation) {
+        case 'mint':
+          if (params.amount) await transactions.mint(params.amount);
+          break;
+        case 'burn':
+          if (params.amount) await transactions.burn(params.amount);
+          break;
+        case 'mintPath':
+          if (params.amount) await transactions.mintPath(nodeData.basicInfo[0], params.amount);
+          break;
+        case 'burnPath':
+          if (params.amount) await transactions.burnPath(nodeData.basicInfo[0], params.amount);
+          break;
+        case 'spawn':
+          await transactions.spawn();
+          break;
+        case 'spawnWithMembrane':
+          if (params.membraneId) await transactions.spawnBranchWithMembrane(params.membraneId);
+          break;
+        default:
+          console.warn('Unknown operation:', currentOperation);
+      }
     } catch (err) {
-      console.error('Error calculating stats:', err);
-      return {
-        totalValue: '0',
-        dailyGrowth: '0',
-        memberCount: 0,
-        childCount: 0,
-        pathDepth: 0
-      };
+      console.error(`${currentOperation} operation failed:`, err);
     }
-  }, [nodeData]);
-
-  const signalData = useMemo(() => {
-    if (!nodeData?.signals || !Array.isArray(nodeData.signals)) {
-      return {
-        recentSignals: [],
-        hasActiveSignals: false,
-        lastSignalTime: 0
-      };
-    }
-
-    try {
-      const processedSignals = nodeData.signals
-        .filter(signal => signal && Array.isArray(signal.MembraneInflation))
-        .flatMap(signal => {
-          if (!Array.isArray(signal.MembraneInflation)) return [];
-          
-          return signal.MembraneInflation.map(([membrane, inflation], index) => {
-            const safeValue = inflation?.toString() || '0';
-            return {
-              membrane: String(membrane || ''),
-              inflation: safeValue,
-              timestamp: signal.lastRedistSignal && Array.isArray(signal.lastRedistSignal) 
-                ? Number(signal.lastRedistSignal[index]) || Date.now()
-                : Date.now(),
-              value: safeValue
-            };
-          });
-        })
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      return {
-        recentSignals: processedSignals.slice(0, 10),
-        hasActiveSignals: processedSignals.length > 0,
-        lastSignalTime: processedSignals[0]?.timestamp || Date.now()
-      };
-    } catch (err) {
-      console.error('Error processing signals:', err);
-      return {
-        recentSignals: [],
-        hasActiveSignals: false,
-        lastSignalTime: 0
-      };
-    }
-  }, [nodeData]);
+  }, [currentOperation, nodeData?.basicInfo, transactions]);
 
   const handleRedistribute = useCallback(async () => {
     if (!permissions.canRedistribute) return;
@@ -171,11 +127,48 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     }
   }, [permissions.canSignal, transactions]);
 
-  const handlePathNodeClick = useCallback((pathNodeId: string) => {
-    if (onNodeSelect && pathNodeId) {
-      onNodeSelect(pathNodeId);
+  // Stats calculation
+  const stats = useMemo(() => {
+    if (!nodeData?.basicInfo) return {
+      totalValue: '0',
+      dailyGrowth: '0',
+      memberCount: 0,
+      childCount: 0,
+      pathDepth: 0
+    };
+
+    try {
+      const totalValue = nodeData.basicInfo[4] ? BigInt(nodeData.basicInfo[4]) : BigInt(0);
+      const inflation = nodeData.basicInfo[1] ? BigInt(nodeData.basicInfo[1]) : BigInt(0);
+      const dailyGrowth = inflation * BigInt(86400);
+
+      return {
+        totalValue: formatBalance(totalValue.toString()),
+        dailyGrowth: formatBalance(dailyGrowth.toString()),
+        memberCount: nodeData.membersOfNode?.length || 0,
+        childCount: nodeData.childrenNodes?.length || 0,
+        pathDepth: nodeData.rootPath?.length || 0
+      };
+    } catch (err) {
+      console.error('Error calculating stats:', err);
+      return {
+        totalValue: '0',
+        dailyGrowth: '0',
+        memberCount: 0,
+        childCount: 0,
+        pathDepth: 0
+      };
     }
-  }, [onNodeSelect]);
+  }, [nodeData]);
+
+  // Format path data for modal
+  const modalData = useMemo(() => ({
+    path: nodeData?.rootPath?.map(id => ({
+      id,
+      name: `Node ${id.slice(-6)}`
+    })) || [],
+    membranes: [] // Add membrane data when available
+  }), [nodeData?.rootPath]);
 
   if (isLoading) {
     return (
@@ -218,40 +211,25 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           <VStack align="start" spacing={1}>
             <HStack>
               <Text fontSize="lg" fontWeight="bold">
-                Node {nodeId ? nodeId.slice(-6) : 'Unknown'}
+                Node {nodeId.slice(-6)}
               </Text>
               <Badge colorScheme="purple">
                 Depth {stats.pathDepth}
               </Badge>
             </HStack>
             <Text fontSize="sm" color={textColor}>
-              {nodeData.basicInfo[0] || 'Unknown ID'}
+              {nodeData.basicInfo[0]}
             </Text>
           </VStack>
-          <HStack>
-            <Button
-              leftIcon={<Activity size={16} />}
-              size="sm"
-              onClick={handleRedistribute}
-              colorScheme="purple"
-              variant="outline"
-              isDisabled={!permissions.canRedistribute || isProcessing}
-              isLoading={isProcessing}
-            >
-              Redistribute
-            </Button>
-            <Button
-              leftIcon={<Signal size={16} />}
-              size="sm"
-              onClick={handleSignal}
-              colorScheme="purple"
-              variant="outline"
-              isDisabled={!permissions.canSignal || isProcessing}
-              isLoading={isProcessing}
-            >
-              Signal
-            </Button>
-          </HStack>
+          
+          <NodeOperations
+            permissions={permissions}
+            isProcessing={isProcessing}
+            onOperation={handleOperation}
+            onRedistribute={handleRedistribute}
+            onSignal={handleSignal}
+            selectedTokenColor={selectedTokenColor}
+          />
         </HStack>
 
         <HStack spacing={8} wrap="wrap">
@@ -296,7 +274,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         </HStack>
       </Box>
 
-      {Array.isArray(nodeData.rootPath) && nodeData.rootPath.length > 0 && (
+      {/* Path Display */}
+      {nodeData.rootPath.length > 0 && (
         <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
           <Text fontWeight="medium" mb={2}>Path</Text>
           <HStack spacing={2}>
@@ -305,10 +284,10 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 {index > 0 && <ArrowUpRight size={14} />}
                 <Badge
                   cursor="pointer"
-                  onClick={() => handlePathNodeClick(pathNodeId)}
+                  onClick={() => onNodeSelect?.(pathNodeId)}
                   _hover={{ bg: 'purple.100' }}
                 >
-                  {pathNodeId ? pathNodeId.slice(-6) : 'Unknown'}
+                  {pathNodeId.slice(-6)}
                 </Badge>
               </React.Fragment>
             ))}
@@ -316,16 +295,10 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         </Box>
       )}
 
-      {signalData.recentSignals.length > 0 && (
+      {/* Signal History */}
+      {nodeData.signals.length > 0 && (
         <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
-          <HStack justify="space-between" mb={4}>
-            <Text fontWeight="medium">Recent Signals</Text>
-            {signalData.hasActiveSignals && (
-              <Text fontSize="sm" color={textColor}>
-                Last activity: {new Date(signalData.lastSignalTime).toLocaleString()}
-              </Text>
-            )}
-          </HStack>
+          <Text fontWeight="medium" mb={4}>Recent Signals</Text>
           <Table size="sm">
             <Thead>
               <Tr>
@@ -336,12 +309,12 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               </Tr>
             </Thead>
             <Tbody>
-              {signalData.recentSignals.map((signal, index) => (
+              {nodeData.signals.slice(0, 5).map((signal, index) => (
                 <Tr key={index}>
-                  <Td>{signal.membrane || 'Unknown'}</Td>
-                  <Td>{signal.inflation || '0'}</Td>
-                  <Td>{new Date(signal.timestamp).toLocaleString()}</Td>
-                  <Td isNumeric>{safeFormatBalance(signal.value)}</Td>
+                  <Td>{signal.MembraneInflation[0] || 'Unknown'}</Td>
+                  <Td>{signal.MembraneInflation[1] || '0'}</Td>
+                  <Td>{new Date(Number(signal.lastRedistSignal[0])).toLocaleString()}</Td>
+                  <Td isNumeric>{formatBalance(signal.MembraneInflation[1] || '0')}</Td>
                 </Tr>
               ))}
             </Tbody>
@@ -349,6 +322,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         </Box>
       )}
 
+      {/* Permissions */}
       {user?.wallet?.address && (
         <Box p={6} bg={permissionsBg}>
           <Text fontWeight="medium" mb={2}>Permissions</Text>
@@ -365,6 +339,16 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           </HStack>
         </Box>
       )}
+
+      {/* Token Operation Modal */}
+      <TokenOperationModal
+        isOpen={isOpen}
+        onClose={onClose}
+        onSubmit={handleOperationSubmit}
+        operation={currentOperation}
+        isLoading={isProcessing}
+        data={modalData}
+      />
     </Box>
   );
 };
