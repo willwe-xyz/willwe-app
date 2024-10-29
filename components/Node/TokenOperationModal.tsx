@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { ethers } from 'ethers';
 import {
   Modal,
   ModalOverlay,
@@ -19,8 +20,28 @@ import {
   Radio,
   Stack,
   FormErrorMessage,
+  Box,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Badge,
+  HStack,
+  Spinner,
+  Link,
+  useToast,
+  Alert,
+  AlertIcon,
+  Progress
 } from '@chakra-ui/react';
-import { ethers } from 'ethers';
+import {
+  ExternalLink,
+  Check,
+  Copy,
+  Info
+} from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
 import { deployments, ABIs } from '../../config/contracts';
 
@@ -34,14 +55,38 @@ interface TokenOperationModalProps {
     currentNode: { id: string; name: string };
     children?: Array<{ id: string; name: string }>;
   };
-  currentNodeId: string;
-  chainId: string;
+  nodeId: string;
+  chainId?: string;
 }
 
 interface OperationParams {
   amount?: string;
   membraneId?: string;
   targetNodeId?: string;
+}
+
+interface MembraneMetadata {
+  name: string;
+  characteristics: Array<{
+    title: string;
+    link: string;
+  }>;
+  membershipConditions: Array<{
+    tokenAddress: string;
+    requiredBalance: string;
+  }>;
+}
+
+interface MembraneRequirement {
+  tokenAddress: string;
+  symbol: string;
+  requiredBalance: string;
+  formattedBalance: string;
+}
+
+interface Membrane {
+  id: string;
+  name: string;
 }
 
 export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
@@ -51,17 +96,30 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   operation,
   isLoading,
   data,
-  currentNodeId,
-  chainId
+  nodeId,
+  chainId: providedChainId
 }) => {
-  const { getEthersProvider } = usePrivy();
+  const { getEthersProvider, user } = usePrivy();
   const [amount, setAmount] = useState('');
   const [membraneId, setMembraneId] = useState('');
   const [membraneInputType, setMembraneInputType] = useState<'dropdown' | 'manual'>('dropdown');
   const [targetNodeId, setTargetNodeId] = useState('');
-  const [membranes, setMembranes] = useState<Array<{ id: string; name: string }>>([]);
+  const [membranes, setMembranes] = useState<Membrane[]>([]);
   const [membraneError, setMembraneError] = useState<string>('');
   const [isValidating, setIsValidating] = useState(false);
+  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
+  const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [hasCopied, setHasCopied] = useState(false);
+
+  const toast = useToast();
+  const chainId = providedChainId || user?.wallet?.chainId?.toString();
+
+  useEffect(() => {
+    if (isOpen && nodeId) {
+      setTargetNodeId(nodeId);
+    }
+  }, [isOpen, nodeId]);
 
   // Load membranes from localStorage
   useEffect(() => {
@@ -85,81 +143,111 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
       setTargetNodeId('');
       setMembraneError('');
       setIsValidating(false);
+      setRequirements([]);
+      setMembraneMetadata(null);
     }
   }, [isOpen]);
 
-  // Validate membrane ID
-  const validateMembraneId = useCallback(async (id: string): Promise<boolean> => {
-    if (!id) {
-      setMembraneError('Membrane ID is required');
-      return false;
-    }
-
-    setIsValidating(true);
-    setMembraneError('');
-
+  const fetchTokenDetails = async (tokenAddress: string) => {
     try {
-      // Convert to number and validate
-      const membraneIdNum = parseInt(id);
-      if (isNaN(membraneIdNum)) {
-        setMembraneError('Invalid membrane ID format');
-        return false;
-      }
-
       const provider = await getEthersProvider();
-      if (!provider) {
-        throw new Error('Provider not available');
-      }
-
-      const cleanChainId = chainId.replace('eip155:', '');
-      const membraneAddress = deployments.Membrane[cleanChainId];
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ABIs.IERC20,
+        provider
+      );
       
-      if (!membraneAddress) {
-        throw new Error(`No membrane contract found for chain ${chainId}`);
-      }
+      const symbol = await tokenContract.symbol();
+      return symbol;
+    } catch (error) {
+      console.error('Error fetching token details:', error);
+      return 'Unknown';
+    }
+  };
 
+  const loadMembraneRequirements = async (membraneId: string) => {
+    setIsLoadingTokens(true);
+    try {
+      if (!chainId) throw new Error('Chain ID not available');
+      
+      const provider = await getEthersProvider();
+      const cleanChainId = chainId?.includes('eip155:') ? 
+        chainId.replace('eip155:', '') : 
+        chainId;
+      
+      const membraneAddress = deployments.Membrane[cleanChainId];
       const membraneContract = new ethers.Contract(
         membraneAddress,
         ABIs.Membrane,
         provider
       );
 
-      console.log('Validating membrane:', id, 'at address:', membraneAddress);
+      const membraneData = await membraneContract.getMembraneById(BigInt(membraneId));
+      if (!membraneData) throw new Error('Membrane not found');
 
-      // Try to fetch the membrane data
-      const membraneData = await membraneContract.getMembraneById(membraneIdNum);
-      console.log('Membrane data:', membraneData);
-
-      // Check if membrane data is valid (adjust based on your contract's return structure)
-      if (!membraneData || !membraneData.tokens) {
-        setMembraneError('Invalid membrane or membrane does not exist');
-        return false;
+      // Fetch IPFS metadata
+      if (membraneData.meta) {
+        try {
+          const response = await fetch(`https://underlying-tomato-locust.myfilebase.com/ipfs/${membraneData.meta}`);
+          if (!response.ok) throw new Error('Failed to fetch IPFS data');
+          const metadata = await response.json();
+          setMembraneMetadata(metadata);
+        } catch (error) {
+          console.error('Error fetching IPFS metadata:', error);
+        }
       }
 
-      setMembraneError('');
-      return true;
-    } catch (error) {
-      console.error('Membrane validation error:', error);
-      setMembraneError(error.message || 'Failed to validate membrane');
-      return false;
-    } finally {
-      setIsValidating(false);
-    }
-  }, [chainId, getEthersProvider]);
+      const requirements: MembraneRequirement[] = await Promise.all(
+        membraneData.tokens.map(async (tokenAddress: string, index: number) => {
+          const symbol = await fetchTokenDetails(tokenAddress);
+          const balance = membraneData.balances[index];
+          return {
+            tokenAddress,
+            symbol,
+            requiredBalance: balance.toString(),
+            formattedBalance: ethers.formatEther(balance)
+          };
+        })
+      );
 
-  // Handle membrane ID change with debounce
+      setRequirements(requirements);
+      setMembraneError('');
+    } catch (error) {
+      console.error('Error loading membrane requirements:', error);
+      setMembraneError('Failed to load membrane requirements');
+    } finally {
+      setIsLoadingTokens(false);
+    }
+  };
+
   const handleMembraneIdChange = useCallback(async (value: string) => {
     setMembraneId(value);
     if (membraneInputType === 'manual' && value) {
-      setMembraneError('');
-      // Add a small delay before validation to avoid too many calls
-      setTimeout(async () => {
-        await validateMembraneId(value);
-      }, 500);
+      loadMembraneRequirements(value);
     }
-  }, [membraneInputType, validateMembraneId]);
+  }, [membraneInputType]);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setHasCopied(true);
+      toast({
+        title: "Copied to clipboard",
+        status: "success",
+        duration: 2000,
+      });
+      setTimeout(() => setHasCopied(false), 2000);
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        description: "Please try copying manually",
+        status: "error",
+        duration: 2000,
+      });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
@@ -170,10 +258,6 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
       }
       
       if (operation === 'spawnWithMembrane') {
-        if (membraneInputType === 'manual') {
-          const isValid = await validateMembraneId(membraneId);
-          if (!isValid) return;
-        }
         params.membraneId = membraneId;
       }
       
@@ -186,13 +270,18 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     } catch (error) {
       console.error('Operation failed:', error);
       setMembraneError(error.message || 'Operation failed');
+      toast({
+        title: "Operation Failed",
+        description: error.message || "Failed to execute operation",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
     }
-  }, [operation, amount, membraneId, targetNodeId, membraneInputType, validateMembraneId, onSubmit, onClose]);
-
-  // ... rest of your component remains the same ...
+  };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="md">
+    <Modal isOpen={isOpen} onClose={onClose} size="lg">
       <ModalOverlay />
       <ModalContent>
         <ModalHeader>
@@ -203,7 +292,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
         <ModalCloseButton />
         <form onSubmit={handleSubmit}>
           <ModalBody>
-            <VStack spacing={4}>
+            <VStack spacing={6}>
               {/* Amount Input for mint/burn operations */}
               {['mint', 'burn', 'mintPath', 'burnPath'].includes(operation) && (
                 <FormControl isRequired>
@@ -218,7 +307,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                 </FormControl>
               )}
 
-              {/* Membrane Input for spawn operations */}
+              {/* Membrane Input for spawnWithMembrane */}
               {operation === 'spawnWithMembrane' && (
                 <>
                   <FormControl>
@@ -228,6 +317,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                         setMembraneInputType(value as 'dropdown' | 'manual');
                         setMembraneError('');
                         setMembraneId('');
+                        setRequirements([]);
                       }}
                       value={membraneInputType}
                     >
@@ -245,7 +335,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                     {membraneInputType === 'dropdown' ? (
                       <Select
                         value={membraneId}
-                        onChange={(e) => setMembraneId(e.target.value)}
+                        onChange={(e) => handleMembraneIdChange(e.target.value)}
                         placeholder="Select membrane"
                       >
                         {membranes.map(membrane => (
@@ -259,13 +349,84 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                         value={membraneId}
                         onChange={(e) => handleMembraneIdChange(e.target.value)}
                         placeholder="Enter membrane ID"
-                        type="number"
                       />
                     )}
                     {membraneError && (
                       <FormErrorMessage>{membraneError}</FormErrorMessage>
                     )}
                   </FormControl>
+
+                  {isLoadingTokens ? (
+                    <Box p={8} textAlign="center">
+                      <Spinner size="md" />
+                      <Text mt={2}>Loading membrane requirements...</Text>
+                    </Box>
+                  ) : requirements.length > 0 && (
+                    <Box w="100%" borderRadius="md" borderWidth="1px" p={4}>
+                      {membraneMetadata?.name && (
+                        <Text fontSize="lg" fontWeight="bold" mb={4}>
+                          {membraneMetadata.name}
+                        </Text>
+                      )}
+
+                      {membraneMetadata?.characteristics && membraneMetadata.characteristics.length > 0 && (
+                        <Box mb={4}>
+                          <Text fontWeight="semibold" mb={2}>Characteristics:</Text>
+                          <VStack align="stretch" spacing={2}>
+                            {membraneMetadata.characteristics.map((char, idx) => (
+                              <HStack key={idx} justify="space-between">
+                                <Text>{char.title}</Text>
+                                <Link
+                                  href={char.link}
+                                  isExternal
+                                  color="blue.500"
+                                  display="flex"
+                                  alignItems="center"
+                                >
+                                  View <ExternalLink size={14} className="ml-1" />
+                                </Link>
+                              </HStack>
+                            ))}
+                          </VStack>
+                        </Box>
+                      )}
+
+                      <Text fontWeight="semibold" mb={4}>Membership Requirements</Text>
+                      <Table size="sm">
+                        <Thead>
+                          <Tr>
+                            <Th>Token</Th>
+                            <Th isNumeric>Required Amount</Th>
+                            <Th></Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {requirements.map((req, idx) => (
+                            <Tr key={idx}>
+                              <Td>
+                                <HStack spacing={2}>
+                                  <Text>{req.symbol}</Text>
+                                  <Badge colorScheme="gray" fontSize="xs">
+                                    {`${req.tokenAddress.slice(0, 6)}...${req.tokenAddress.slice(-4)}`}
+                                  </Badge>
+                                </HStack>
+                              </Td>
+                              <Td isNumeric>{req.formattedBalance}</Td>
+                              <Td>
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => copyToClipboard(req.tokenAddress)}
+                                >
+                                  <Copy size={14} />
+                                </Button>
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </Box>
+                  )}
                 </>
               )}
 
@@ -278,8 +439,8 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                     onChange={(e) => setTargetNodeId(e.target.value)}
                     placeholder="Select target node"
                   >
-                    <option value={currentNodeId}>
-                      Current Node ({currentNodeId.slice(-6)})
+                    <option value={nodeId}>
+                      Current Node ({nodeId.slice(-6)})
                     </option>
                     
                     {data.children && data.children.length > 0 && (
@@ -287,7 +448,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                         <Divider my={2} />
                         {data.children.map(child => (
                           <option key={child.id} value={child.id}>
-                            Child: {child.name}
+                            Child: {child.name || `Node ${child.id.slice(-6)}`}
                           </option>
                         ))}
                       </>
@@ -296,26 +457,103 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                 </FormControl>
               )}
 
-              {/* Info text for path operations */}
+              {/* Path Operations Info */}
               {['mintPath', 'burnPath'].includes(operation) && (
-                <Text fontSize="sm" color="gray.600">
-                  This operation will affect all nodes along the path.
-                </Text>
+                <Alert status="info" borderRadius="md">
+                  <AlertIcon />
+                  <Text fontSize="sm">
+                    This operation will affect all nodes along the path from the current node to the target node.
+                  </Text>
+                </Alert>
+              )}
+
+              {/* Operation Summary */}
+              {operation === 'spawnWithMembrane' && membraneMetadata && (
+                <Box 
+                  p={4} 
+                  bg="gray.50" 
+                  borderRadius="md" 
+                  w="100%"
+                >
+                  <VStack align="start" spacing={3}>
+                    <HStack justify="space-between" w="100%">
+                      <Text fontWeight="semibold">Operation Summary:</Text>
+                      {membraneId && (
+                        <Badge colorScheme="purple">
+                          ID: {membraneId.slice(0, 8)}...{membraneId.slice(-6)}
+                        </Badge>
+                      )}
+                    </HStack>
+                    <Text fontSize="sm">
+                      • Creating sub-node with membrane restrictions
+                    </Text>
+                    <Text fontSize="sm">
+                      • Token requirements: {requirements.length}
+                    </Text>
+                    {membraneMetadata.characteristics?.length > 0 && (
+                      <Text fontSize="sm">
+                        • Characteristics: {membraneMetadata.characteristics.length}
+                      </Text>
+                    )}
+                  </VStack>
+                </Box>
+              )}
+
+              {/* Loading State */}
+              {(isValidating || isLoadingTokens) && (
+                <Box w="100%">
+                  <Progress 
+                    size="xs" 
+                    isIndeterminate 
+                    colorScheme="purple" 
+                    borderRadius="full"
+                  />
+                  <Text 
+                    mt={2} 
+                    fontSize="sm" 
+                    color="gray.600" 
+                    textAlign="center"
+                  >
+                    {isValidating ? 'Validating membrane...' : 'Loading token details...'}
+                  </Text>
+                </Box>
+              )}
+
+              {/* Error Display */}
+              {membraneError && (
+                <Alert status="error" borderRadius="md">
+                  <AlertIcon />
+                  <Text fontSize="sm">{membraneError}</Text>
+                </Alert>
               )}
             </VStack>
           </ModalBody>
+
           <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onClose}>
+            <Button 
+              variant="ghost" 
+              mr={3} 
+              onClick={onClose}
+              isDisabled={isLoading}
+            >
               Cancel
             </Button>
+            
             <Button
               type="submit"
-              colorScheme={operation.includes('burn') ? 'red' : 'green'}
-              isLoading={isLoading || isValidating}
+              colorScheme={operation.includes('burn') ? 'red' : 'purple'}
+              isLoading={isLoading || isLoadingTokens || isValidating}
+              loadingText={
+                isLoadingTokens ? 'Loading tokens...' :
+                isValidating ? 'Validating...' :
+                'Processing...'
+              }
               isDisabled={
-                (operation === 'spawnWithMembrane' && (!!membraneError || isValidating)) ||
+                (operation === 'spawnWithMembrane' && (!!membraneError || isValidating || !membraneId)) ||
                 (['mint', 'burn', 'mintPath', 'burnPath'].includes(operation) && !amount) ||
-                (['mintPath', 'burnPath'].includes(operation) && !targetNodeId)
+                (['mintPath', 'burnPath'].includes(operation) && !targetNodeId) ||
+                isLoading ||
+                isLoadingTokens
               }
             >
               {operation === 'spawn' ? 'Spawn Sub-Node' : 
@@ -328,3 +566,5 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     </Modal>
   );
 };
+
+export default TokenOperationModal;

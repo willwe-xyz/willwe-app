@@ -347,6 +347,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         onSubmit={handleOperationSubmit}
         operation={currentOperation}
         isLoading={isProcessing}
+        nodeId={nodeId}
+        chainId={cleanChainId}
         data={modalData}
       />
     </Box>
