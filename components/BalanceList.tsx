@@ -1,8 +1,7 @@
 import React from 'react';
 import { VStack, Box, Text, Spinner } from '@chakra-ui/react';
-import { BalanceItem } from '@covalenthq/client-sdk';
+import { useRouter } from 'next/router';
 import TokenBalance from './TokenBalance';
-import { ProtocolBalance } from '../types/chainData';
 
 interface BalanceListProps {
   selectedToken: string;
@@ -12,8 +11,8 @@ interface BalanceListProps {
   hoverColor: string;
   userAddress: string;
   chainId: string;
-  balances: BalanceItem[];
-  protocolBalances: ProtocolBalance[];
+  balances: any[];
+  protocolBalances: any[];
   isLoading: boolean;
 }
 
@@ -27,6 +26,18 @@ const BalanceList: React.FC<BalanceListProps> = ({
   protocolBalances = [],
   isLoading
 }) => {
+  const router = useRouter();
+
+  const onTokenSelect = (tokenAddress: string) => {
+    // First update the URL
+    router.push({
+      pathname: '/dashboard',
+      query: { token: tokenAddress }
+    }, undefined, { shallow: true });
+  
+    // Then call the handler
+    handleTokenSelect(tokenAddress);
+  };
   if (isLoading) {
     return (
       <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center" p={4}>
@@ -70,7 +81,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
         return (
           <Box
             key={balance.contract_address}
-            onClick={() => handleTokenSelect(balance.contract_address)}
+            onClick={() => onTokenSelect(balance.contract_address)}
             cursor="pointer"
             transition="all 0.2s"
             borderRadius="md"

@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { NodeState, TransformedNodeData } from '../types/chainData';
+import { NodeState } from '../types/chainData';
 import { deployments, ABIs, getRPCUrl } from '../config/contracts';
-import { transformNodeData } from '../utils/formatters';
 
 export function useRootNodes(chainId: string, tokenAddress: string, userAddress: string) {
-  const [data, setData] = useState<TransformedNodeData[] | null>(null);
+  const [data, setData] = useState<NodeState[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -17,21 +16,26 @@ export function useRootNodes(chainId: string, tokenAddress: string, userAddress:
 
     try {
       setIsLoading(true);
+      console.log('Fetching nodes for:', { chainId, tokenAddress, userAddress });
+      
       const cleanChainId = chainId.replace('eip155:', '');
       const willWeAddress = deployments.WillWe[cleanChainId];
-      if (!willWeAddress) throw new Error(`No contract for chain ${cleanChainId}`);
+      
+      if (!willWeAddress) {
+        throw new Error(`No contract for chain ${cleanChainId}`);
+      }
 
       const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       const contract = new ethers.Contract(willWeAddress, ABIs.WillWe, provider);
 
-      const nodesData : NodeState[] = await contract.getAllNodesForRoot(tokenAddress, userAddress);
-      const transformedData = nodesData.map(transformNodeData);
-      console.log("got transformedData in useRootNodes : ", transformedData)
-      setData(transformedData);
+      const nodesData = await contract.getAllNodesForRoot(tokenAddress, userAddress);
+      console.log('Received nodes data:', nodesData);
+
+      setData(nodesData);
       setError(null);
     } catch (err) {
       console.error('Error fetching root nodes:', err);
-      setError(err instanceof Error ? err : new Error('Failed to fetch root nodes'));
+      setError(err instanceof Error ? err : new Error('Failed to fetch nodes'));
     } finally {
       setIsLoading(false);
     }

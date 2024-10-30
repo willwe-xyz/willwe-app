@@ -1,37 +1,48 @@
-import React, { Suspense, useEffect, useState } from 'react';
+// pages/nodes/[chainId]/[nodeId].tsx
+import React from 'react';
 import { useRouter } from 'next/router';
 import { Box, Spinner } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
-import { SWRConfig } from 'swr';
-import dynamic from 'next/dynamic';
-import { useNodeData } from '../../../hooks/useNodeData';
-import { useCovalentBalances } from '../../../hooks/useCovalentBalances';
-import LoadingSkeleton from '../../../components/LoadingSkeleton';
-import NodeViewLayout from '../../../components/NodeViewLayout';
-import NodeDetails from '../../../components/NodeDetails';
-import { NodeState } from '../../../types/chainData';
+import NodeViewLayout from '../../../components/Layout/NodeViewLayout';
+import { useColorManagement } from '../../../hooks/useColorManagement';
 
-const NodePageContent: React.FC<{ userAddress: string }> = ({
-  userAddress,
-}) => {
+const NodePage = () => {
   const router = useRouter();
+  const { ready, authenticated } = usePrivy();
+  const { colorState, cycleColors } = useColorManagement();
+  
+  // Get chainId and nodeId from router
   const { chainId, nodeId } = router.query;
 
-  // Always call hooks, even if userAddress is not available
-  // const { balances, isBalancesLoading, balancesError } = useCovalentBalances(userAddress || '', chainId as string);
-  // const { nodeData, nodeError, isNodeLoading } = useNodeData(chainId as string | undefined, nodeId as string | undefined);
+  // Handle loading state
+  if (!router.isReady || !ready) {
+    return (
+      <Box minH="100vh" display="flex" alignItems="center" justifyContent="center">
+        <Spinner size="xl" />
+      </Box>
+    );
+  }
 
-  // if (isNodeLoading) {
-  //   return <Spinner size="xl" />;
-  // }
+  // Handle authentication
+  if (!authenticated) {
+    router.push('/');
+    return null;
+  }
+
+  // Validate params
+  if (typeof chainId !== 'string' || typeof nodeId !== 'string') {
+    router.push('/dashboard');
+    return null;
+  }
 
   return (
-    <NodeViewLayout 
-      chainId={chainId as string}
-      nodeId={nodeId as string}
-
+    <NodeViewLayout
+      chainId={chainId}
+      nodeId={nodeId}
+      colorState={colorState}
+      cycleColors={cycleColors}
     />
   );
 };
 
-export default NodePageContent;
+export default NodePage;

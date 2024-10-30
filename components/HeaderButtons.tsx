@@ -1,8 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import {
   HStack,
   Button,
+  Box,
+  Portal,
   useDisclosure,
+  useColorModeValue,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -14,22 +17,20 @@ import {
   TabPanels,
   Tab,
   TabPanel,
-  Box,
-  Portal,
-  useColorModeValue
+  Tooltip,
 } from '@chakra-ui/react';
 import { 
   LogOut, 
   Puzzle, 
-  LogIn, 
-  FileText, 
-  Shapes 
+  LogIn,
+  Coins,
+  Users,
+  Plus 
 } from 'lucide-react';
 import CreateToken from './CreateToken';
 import DefineEntity from './DefineEntity';
 import NotificationToast from './NotificationToast';
 import { useTransaction } from '../contexts/TransactionContext';
-import { useNode } from '../contexts/NodeContext';
 
 interface HeaderButtonsProps {
   userAddress: string;
@@ -39,6 +40,7 @@ interface HeaderButtonsProps {
   selectedNodeId?: string;
   onNodeSelect: (nodeId: string) => void;
   isTransacting?: boolean;
+  buttonHoverBg?: string;
 }
 
 const HeaderButtons: React.FC<HeaderButtonsProps> = ({
@@ -48,67 +50,54 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
   login,
   selectedNodeId,
   onNodeSelect,
-  isTransacting
+  isTransacting,
+  buttonHoverBg = 'purple.50'
 }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const [activeTab, setActiveTab] = useState(0);
   const { error: txError } = useTransaction();
-
-  const modalBg = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
-
-  const handleClose = useCallback(() => {
-    onClose();
-    setActiveTab(0);
-  }, [onClose]);
-
-  const tabs = [
-    {
-      label: 'Create Token',
-      icon: <FileText size={16} />,
-      content: (
-        <CreateToken
-          chainId={chainId}
-          userAddress={userAddress}
-          onSuccess={handleClose}
-        />
-      )
-    },
-    {
-      label: 'Define Entity',
-      icon: <Shapes size={16} />,
-      content: (
-        <DefineEntity
-          chainId={chainId}
-          onSubmit={handleClose}
-        />
-      )
-    }
-  ];
+  
+  // Consistent button styles
+  const buttonStyles = {
+    size: "sm",
+    variant: "outline",
+    colorScheme: "purple",
+    _hover: { bg: buttonHoverBg },
+    isDisabled: isTransacting
+  };
 
   return (
     <>
-      <HStack spacing={2}>
-        <Button
-          leftIcon={<Puzzle size={18} />}
-          onClick={onOpen}
-          size="sm"
-          variant="outline"
-          colorScheme="purple"
-          isDisabled={isTransacting}
-          _hover={{ bg: 'purple.50' }}
-        >
-          Compose
-        </Button>
+      <HStack spacing={4}>
+        {/* Compose Button - Always Visible */}
+        <Tooltip label="Create new token or entity">
+          <Button
+            leftIcon={<Plus size={18} />}
+            onClick={onOpen}
+            {...buttonStyles}
+          >
+            Compose
+          </Button>
+        </Tooltip>
 
+        {/* Dashboard Button - Optional based on context */}
+        {selectedNodeId && (
+          <Tooltip label="Return to dashboard">
+            <Button
+              leftIcon={<Puzzle size={18} />}
+              onClick={() => onNodeSelect('')}
+              {...buttonStyles}
+            >
+              Dashboard
+            </Button>
+          </Tooltip>
+        )}
+
+        {/* Auth Button */}
         {userAddress ? (
           <Button
             leftIcon={<LogOut size={18} />}
             onClick={logout}
-            size="sm"
-            variant="outline"
-            colorScheme="purple"
-            _hover={{ bg: 'purple.50' }}
+            {...buttonStyles}
           >
             {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
           </Button>
@@ -116,68 +105,90 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
           <Button
             leftIcon={<LogIn size={18} />}
             onClick={login}
-            size="sm"
-            variant="outline"
-            colorScheme="purple"
-            _hover={{ bg: 'purple.50' }}
+            {...buttonStyles}
           >
             Connect
           </Button>
         )}
       </HStack>
 
-      <Modal
-        isOpen={isOpen}
-        onClose={handleClose}
+      {/* Compose Modal */}
+      <Modal 
+        isOpen={isOpen} 
+        onClose={onClose}
         size="4xl"
         isCentered
-        scrollBehavior="inside"
+        motionPreset="slideInBottom"
       >
-        <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent
-          bg={modalBg}
-          border="1px solid"
-          borderColor={borderColor}
-          borderRadius="xl"
+        <ModalOverlay 
+          bg="blackAlpha.300"
+          backdropFilter="blur(10px)"
+        />
+        <ModalContent 
+          maxW="1000px"
+          maxH="90vh"
+          bg="white"
+          rounded="lg"
+          shadow="xl"
+          overflow="hidden"
         >
-          <ModalHeader borderBottom="1px solid" borderColor={borderColor}>
+          <ModalHeader 
+            borderBottom="1px solid"
+            borderColor="gray.100"
+          >
             Compose
             <ModalCloseButton />
           </ModalHeader>
-          
+
           <ModalBody p={0}>
             <Tabs
               isFitted
-              index={activeTab}
-              onChange={setActiveTab}
               colorScheme="purple"
               isLazy
             >
-              <TabList borderBottom="1px solid" borderColor={borderColor}>
-                {tabs.map((tab, index) => (
-                  <Tab
-                    key={index}
-                    py={4}
-                    _selected={{
-                      color: 'purple.600',
-                      borderBottom: '2px solid',
-                      borderColor: 'purple.600'
-                    }}
-                  >
-                    <HStack spacing={2}>
-                      {tab.icon}
-                      <span>{tab.label}</span>
-                    </HStack>
-                  </Tab>
-                ))}
+              <TabList borderBottom="1px solid" borderColor="gray.100">
+                <Tab
+                  py={4}
+                  _selected={{
+                    color: 'purple.600',
+                    borderBottom: '2px solid',
+                    borderColor: 'purple.600'
+                  }}
+                >
+                  <HStack spacing={2}>
+                    <Coins size={16} />
+                    <span>Create Token</span>
+                  </HStack>
+                </Tab>
+                <Tab
+                  py={4}
+                  _selected={{
+                    color: 'purple.600',
+                    borderBottom: '2px solid',
+                    borderColor: 'purple.600'
+                  }}
+                >
+                  <HStack spacing={2}>
+                    <Users size={16} />
+                    <span>Define Entity</span>
+                  </HStack>
+                </Tab>
               </TabList>
 
               <TabPanels>
-                {tabs.map((tab, index) => (
-                  <TabPanel key={index} p={6}>
-                    {tab.content}
-                  </TabPanel>
-                ))}
+                <TabPanel p={6}>
+                  <CreateToken
+                    chainId={chainId}
+                    userAddress={userAddress}
+                    onSuccess={onClose}
+                  />
+                </TabPanel>
+                <TabPanel p={6}>
+                  <DefineEntity
+                    chainId={chainId}
+                    onSubmit={onClose}
+                  />
+                </TabPanel>
               </TabPanels>
             </Tabs>
           </ModalBody>
@@ -214,11 +225,4 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
   );
 };
 
-export default React.memo(HeaderButtons, (prevProps, nextProps) => {
-  return (
-    prevProps.userAddress === nextProps.userAddress &&
-    prevProps.chainId === nextProps.chainId &&
-    prevProps.selectedNodeId === nextProps.selectedNodeId &&
-    prevProps.isTransacting === nextProps.isTransacting
-  );
-});
+export default HeaderButtons;
