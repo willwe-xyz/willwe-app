@@ -1,75 +1,45 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { NodeState, RootNodeState } from '../types/chainData';
-import { deployments, ABIs, getRPCUrl, getChainById } from '../config/contracts';
+import { NodeState, TransformedNodeData } from '../types/chainData';
+import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+import { transformNodeData } from '../utils/formatters';
 
-export const useRootNodes = (chainID: string, tokenAddress: string, userAddress: string) => {
-  const [rootNodeStates, setRootNodeStates] = useState<RootNodeState[]>([]);
+export function useRootNodes(chainId: string, tokenAddress: string, userAddress: string) {
+  const [data, setData] = useState<TransformedNodeData[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchRootNodes = useCallback(async () => {
-    if (!chainID || !tokenAddress) {
-      setError(new Error('Missing chainID or tokenAddress'));
+  const fetchData = useCallback(async () => {
+    if (!chainId || !tokenAddress || !userAddress) {
       setIsLoading(false);
       return;
     }
 
     try {
       setIsLoading(true);
-      const actualChainID = chainID.startsWith('eip155:') ? chainID.split(':')[1] : chainID;
-      const rpcUrl = getRPCUrl(actualChainID);
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
-      console.log(actualChainID, chainID, rpcUrl, provider);
+      const cleanChainId = chainId.replace('eip155:', '');
+      const willWeAddress = deployments.WillWe[cleanChainId];
+      if (!willWeAddress) throw new Error(`No contract for chain ${cleanChainId}`);
 
-      if ( ! actualChainID) {
-        throw new Error(`Invalid chainID: ${actualChainID}`);
-      }
-      if (! deployments["WillWe"][actualChainID]) {
-        throw new Error(`No WillWe contract deployment found for chainID: ${actualChainID}`);
-      }
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+      const contract = new ethers.Contract(willWeAddress, ABIs.WillWe, provider);
 
-      if (!ethers.isAddress(tokenAddress)) {
-        throw new Error(`Invalid token address: ${tokenAddress}`);
-      }
-
-
-      
-      const WW = new ethers.Contract(deployments["WillWe"][actualChainID], ABIs["WillWe"], provider);
-
-
-
-      const nodeData: NodeState[] = await WW.getAllNodesForRoot(tokenAddress, userAddress);
-
-      
-      const nodesByDepth: { [depth: string]: NodeState[] } = {};
-      nodeData.forEach((node) => {
-        const depth = (node.rootPath.length - 1).toString();
-        if (!nodesByDepth[depth]) {
-          nodesByDepth[depth] = [];
-        }
-        nodesByDepth[depth].push(node);
-      });
-
-      const rootNodeStates: RootNodeState[] = Object.entries(nodesByDepth).map(([depth, nodes]) => ({
-        nodes,
-        depth
-      }));
-
-      rootNodeStates.sort((a, b) => parseInt(a.depth) - parseInt(b.depth));
-      setRootNodeStates(rootNodeStates);
+      const nodesData : NodeState[] = await contract.getAllNodesForRoot(tokenAddress, userAddress);
+      const transformedData = nodesData.map(transformNodeData);
+      console.log("got transformedData in useRootNodes : ", transformedData)
+      setData(transformedData);
       setError(null);
     } catch (err) {
       console.error('Error fetching root nodes:', err);
-      setError(err instanceof Error ? err : new Error('An unknown error occurred'));
+      setError(err instanceof Error ? err : new Error('Failed to fetch root nodes'));
     } finally {
       setIsLoading(false);
     }
-  }, [chainID, tokenAddress]);
+  }, [chainId, tokenAddress, userAddress]);
 
   useEffect(() => {
-    fetchRootNodes();
-  }, [fetchRootNodes]);
+    fetchData();
+  }, [fetchData]);
 
-  return { rootNodeStates, isLoading, error, refetch: fetchRootNodes };
-};
+  return { data, isLoading, error, refetch: fetchData };
+}

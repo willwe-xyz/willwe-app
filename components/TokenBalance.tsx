@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
 import { Box, Text, VStack, HStack, Tooltip } from '@chakra-ui/react';
 import { Activity, Wallet, Clock } from 'lucide-react';
-import { BalanceItem } from '@covalenthq/client-sdk';
+import { BalanceItem, ProtocolBalance } from '../types/chainData'
 
 interface TokenBalanceProps {
   balanceItem: BalanceItem;
-  protocolBalance?: BalanceItem | null;
+  protocolBalance?: ProtocolBalance | null;
   isSelected: boolean;
   contrastingColor: string;
   reverseColor: string;
@@ -38,10 +38,7 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
   reverseColor,
 }) => {
   const formattedAmounts = useMemo(() => {
-    console.log('Formatting amounts:', {
-      userBalance: balanceItem?.balance,
-      protocolBalance: protocolBalance?.balance
-    });
+
 
     return {
       user: formatTokenAmount(balanceItem?.balance),

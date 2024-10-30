@@ -1,3 +1,4 @@
+// pages/dashboard.tsx
 import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { usePrivy } from '@privy-io/react-auth';
@@ -5,7 +6,7 @@ import { Spinner, Box, Alert, AlertIcon, Button, HStack } from '@chakra-ui/react
 import { Palette, LogOut, Plus } from 'lucide-react';
 import { useCovalentBalances } from '../hooks/useCovalentBalances';
 import { useColorManagement } from '../hooks/useColorManagement';
-import { useNodeData } from '../hooks/useNodeData';
+import { useRootNodes } from '../hooks/useRootNodes';
 import BalanceList from '../components/BalanceList';
 import RootNodeDetails from '../components/RootNodeDetails';
 import { useNode } from '../contexts/NodeContext';
@@ -16,35 +17,43 @@ const DashboardPage = () => {
   const { colorState, cycleColors } = useColorManagement();
   const { selectedToken, selectToken } = useNode();
   
-  // Get chain ID
-  const rawChainId = user?.wallet?.chainId?.toString() || '';
-  const chainId = rawChainId.includes('eip') ? rawChainId.replace('eip155:', '') : rawChainId;
+  const chainId = user?.wallet?.chainId?.toString() || '';
+  const userAddress = user?.wallet?.address || '';
 
   // Fetch balances
   const { balances, protocolBalances, isLoading: balancesLoading } = useCovalentBalances(
-    authenticated ? user?.wallet?.address || '' : '',
+    authenticated ? userAddress : '',
     chainId
   );
 
-  // Fetch node data when a token is selected
-  const { data: nodeData, isLoading: nodesLoading } = useNodeData(chainId, selectedToken);
+  // Fetch root nodes when a token is selected
+  const { 
+    data: nodes, 
+    isLoading: nodesLoading,
+    error: nodesError,
+    refetch: refetchNodes
+  } = useRootNodes(chainId, selectedToken, userAddress);
 
-  console.log('Dashboard state:', {
-    selectedToken,
-    chainId,
-    nodeData,
-    balances: balances?.length
-  });
-
-  const handleTokenSelect = useCallback((tokenAddress) => {
-    console.log('Token selected:', tokenAddress);
+  const handleTokenSelect = useCallback((tokenAddress: string) => {
     selectToken(tokenAddress);
   }, [selectToken]);
 
-  const isLoading = balancesLoading || nodesLoading;
+  const handleNodeSelect = useCallback((nodeId: string) => {
+    router.push(`/nodes/${chainId}/${nodeId}`);
+  }, [router, chainId]);
+
+  const handleSpawnNode = useCallback(async () => {
+    try {
+      // Implement spawn logic
+      console.log('Spawning node for token:', selectedToken);
+      await refetchNodes();
+    } catch (error) {
+      console.error('Error spawning node:', error);
+    }
+  }, [selectedToken, refetchNodes]);
 
   // Loading state
-  if (!ready || isLoading) {
+  if (!ready || (balancesLoading && !nodes)) {
     return (
       <Box height="100vh" display="flex" alignItems="center" justifyContent="center">
         <Spinner size="xl" color={colorState.contrastingColor} />
@@ -55,15 +64,8 @@ const DashboardPage = () => {
   return (
     <Box height="100vh" display="flex" flexDirection="column" overflow="hidden">
       {/* Header */}
-      <Box 
-        py={4} 
-        px={6} 
-        borderBottom="1px solid" 
-        borderColor="gray.200"
-        bg="white"
-      >
+      <Box py={4} px={6} borderBottom="1px solid" borderColor="gray.200" bg="white">
         <HStack justify="space-between">
-          {/* Left side */}
           <Button
             leftIcon={<Palette />}
             variant="ghost"
@@ -73,7 +75,6 @@ const DashboardPage = () => {
             Theme
           </Button>
 
-          {/* Right side */}
           <HStack spacing={4}>
             <Button
               leftIcon={<Plus />}
@@ -90,13 +91,10 @@ const DashboardPage = () => {
                 onClick={() => logout()}
                 variant="outline"
               >
-                {user?.wallet?.address?.slice(0, 6)}...{user?.wallet?.address?.slice(-4)}
+                {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
               </Button>
             ) : (
-              <Button
-                onClick={() => login()}
-                colorScheme="purple"
-              >
+              <Button onClick={() => {/* implement login */}} colorScheme="purple">
                 Connect Wallet
               </Button>
             )}
@@ -123,7 +121,7 @@ const DashboardPage = () => {
             contrastingColor={colorState.contrastingColor}
             reverseColor={colorState.reverseColor}
             hoverColor={colorState.hoverColor}
-            userAddress={user?.wallet?.address}
+            userAddress={userAddress}
             chainId={chainId}
             balances={balances || []}
             protocolBalances={protocolBalances || []}
@@ -132,31 +130,21 @@ const DashboardPage = () => {
         </Box>
 
         {/* Content Area */}
-        <Box 
-          flex={1} 
-          overflow="auto"
-          bg="gray.50"
-          p={6}
-        >
+        <Box flex={1} overflow="auto" bg="gray.50" p={6}>
           {selectedToken ? (
             <RootNodeDetails
-              nodes={nodeData?.nodes || []}
-              totalValue={nodeData?.totalValue || BigInt(0)}
+              chainId={chainId}
+              selectedToken={selectedToken}
+              userAddress={userAddress}
               selectedTokenColor={colorState.contrastingColor}
-              onNodeSelect={(nodeId) => {
-                router.push(`/nodes/${chainId}/${nodeId}`);
-              }}
-              onSpawnNode={async () => {
-                // Implement spawn logic
-                console.log('Spawning node for token:', selectedToken);
-              }}
+              onNodeSelect={handleNodeSelect}
+              onSpawnNode={handleSpawnNode}
+              nodes={nodes || []}
+              isLoading={nodesLoading}
+              error={nodesError}
             />
           ) : (
-            <Box
-              p={8}
-              textAlign="center"
-              color="gray.500"
-            >
+            <Box p={8} textAlign="center" color="gray.500">
               Select a token from the sidebar to view details
             </Box>
           )}

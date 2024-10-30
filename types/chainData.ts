@@ -89,3 +89,14 @@ export type RootNodeState = {
   nodes: NodeState[];
   depth: string;
 }
+
+export type TransformedNodeData = {
+  basicInfo: string[];
+  membersOfNode: string[];
+  childrenNodes: string[];
+  rootPath: string[];
+  signals: {
+    MembraneInflation: string[];
+    lastRedistSignal: string[];
+  }[];
+};

@@ -1,93 +1,159 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
-  Users, 
-  Activity,
-  GitBranch,
-  Signal,
-  Shield,
-  Plus,
-  ArrowUpRight,
-  ArrowDownRight
+  Users, Activity, GitBranch, Signal, Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Button,
-  Box,
-  Text,
-  VStack,
-  HStack,
-  Heading,
-  useToast
+  Button, Box, Text, VStack, HStack, Heading, useToast,
+  Spinner, Alert, AlertIcon
 } from '@chakra-ui/react';
+import { useRootNodes } from '../hooks/useRootNodes';
+import { NodeState } from '../types/chainData';
+import { formatBalance, formatPercentage } from '../utils/formatters';
 
-const RootNodeDetails = ({
-  nodes = [],
-  totalValue = BigInt(0),
+
+interface RootNodeDetailsProps {
+  chainId: string;
+  selectedToken: string;
+  userAddress: string;
+  selectedTokenColor: string;
+  onNodeSelect: (nodeId: string) => void;
+  onSpawnNode: () => Promise<void>;
+  nodes: NodeState[];
+  isLoading: boolean;
+  error: Error | null;
+}
+
+const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
+  chainId,
+  selectedToken,
+  userAddress,
   selectedTokenColor,
   onNodeSelect,
-  onSpawnNode
+  onSpawnNode,
+  nodes,
+  isLoading,
+  error
 }) => {
-  const [hoveredNode, setHoveredNode] = useState(null);
+  const [hoveredNode, setHoveredNode] = useState<NodeState | null>(null);
+  const [isSpawning, setIsSpawning] = useState(false);
   const toast = useToast();
 
-  // Handle spawn root node
-  const handleSpawnRoot = async () => {
-    try {
-      await onSpawnNode();
-      toast({
-        title: "Spawning root node",
-        description: "Please wait while the transaction is processed",
-        status: "info",
-        duration: 5000,
-        isClosable: true,
-      });
-    } catch (error) {
-      console.error('Failed to spawn root node:', error);
-      toast({
-        title: "Failed to spawn root node",
-        description: error.message,
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
-    }
-  };
 
-  // Stats cards configuration
-  const statsCards = [
+  const { totalValue, nodeValues } = useMemo(() => {
+    if (!nodes) return { totalValue: BigInt(0), nodeValues: {} };
+
+    const total = nodes.reduce((sum, node) => {
+      if (!node?.basicInfo?.[4]) return sum;
+      try {
+        return sum + BigInt(node.basicInfo[4]);
+      } catch {
+        return sum;
+      }
+    }, BigInt(0));
+
+    const values: Record<string, number> = {};
+    nodes.forEach(node => {
+      if (!node?.basicInfo?.[0] || !node?.basicInfo?.[4]) return;
+      try {
+        const nodeValue = BigInt(node.basicInfo[4]);
+        values[node.basicInfo[0]] = total > 0 
+          ? Number((nodeValue * BigInt(10000)) / total) / 100
+          : 0;
+      } catch {
+        values[node.basicInfo[0]] = 0;
+      }
+    });
+
+    return { totalValue: total, nodeValues: values };
+  }, [nodes]);
+
+  const statsCards = useMemo(() => [
     {
       title: 'Total Value',
-      value: (Number(totalValue) / 10 ** 18).toFixed(4),
+      value: formatBalance(totalValue),
       icon: Activity,
       bgColor: 'purple.50',
       textColor: 'purple.600',
     },
     {
       title: 'Total Members',
-      value: nodes.reduce((sum, node) => sum + (node.membersOfNode?.length || 0), 0),
+      value: (nodes || []).reduce((sum, node) => sum + (node.membersOfNode?.length || 0), 0).toString(),
       icon: Users,
       bgColor: 'blue.50',
       textColor: 'blue.600',
     },
     {
       title: 'Node Depth',
-      value: Math.max(...nodes.map(node => node.rootPath?.length || 0), 0),
+      value: Math.max(...(nodes || []).map(node => node.rootPath?.length || 0), 0).toString(),
       icon: GitBranch,
       bgColor: 'green.50',
       textColor: 'green.600',
     },
     {
       title: 'Total Signals',
-      value: nodes.reduce((sum, node) => sum + (node.signals?.length || 0), 0),
+      value: (nodes || []).reduce((sum, node) => sum + (node.signals?.length || 0), 0).toString(),
       icon: Signal,
       bgColor: 'orange.50',
       textColor: 'orange.600',
     }
-  ];
+  ], [nodes, totalValue]);
+
+  const handleSpawnRoot = async () => {
+    try {
+      setIsSpawning(true);
+      await onSpawnNode();
+      await refetch();
+      toast({
+        title: "Success",
+        description: "Root node spawned successfully",
+        status: "success",
+        duration: 5000,
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to spawn root node",
+        status: "error",
+        duration: 5000,
+      });
+    } finally {
+      setIsSpawning(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Box p={6} bg="white" rounded="xl" shadow="sm" textAlign="center">
+        <Spinner size="xl" color={selectedTokenColor} />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box p={6} bg="white" rounded="xl" shadow="sm">
+        <Alert status="error">
+          <AlertIcon />
+          Error loading node data: {error.message}
+        </Alert>
+      </Box>
+    );
+  }
+
+  if (!nodes) {
+    return (
+      <Box p={6} bg="white" rounded="xl" shadow="sm">
+        <Alert status="info">
+          <AlertIcon />
+          No nodes found
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box p={6} bg="white" rounded="xl" shadow="sm">
-      {/* Action Bar */}
       <HStack justify="space-between" mb={8}>
         <Button
           leftIcon={<Plus size={16} />}
@@ -95,12 +161,13 @@ const RootNodeDetails = ({
           variant="outline"
           size="md"
           colorScheme="purple"
+          isLoading={isSpawning}
+          loadingText="Spawning..."
         >
           Spawn Root Node
         </Button>
       </HStack>
 
-      {/* Summary Stats */}
       <Box mb={8}>
         <HStack spacing={4} wrap="wrap">
           {statsCards.map((stat, index) => (
@@ -124,12 +191,10 @@ const RootNodeDetails = ({
         </HStack>
       </Box>
 
-      {/* Value Flow */}
       <Box>
         <Heading size="md" mb={6}>Value Flow</Heading>
         
         {nodes.length === 0 ? (
-          // Empty state
           <Box 
             p={8} 
             bg="gray.50" 
@@ -147,13 +212,13 @@ const RootNodeDetails = ({
                 onClick={handleSpawnRoot}
                 variant="outline"
                 colorScheme="purple"
+                isLoading={isSpawning}
               >
                 Spawn Root Node
               </Button>
             </VStack>
           </Box>
         ) : (
-          // Node visualization
           <Box 
             overflowX="auto" 
             overflowY="hidden"
@@ -165,10 +230,10 @@ const RootNodeDetails = ({
                 if (!node?.basicInfo?.[0]) return null;
                 
                 const nodeId = node.basicInfo[0];
-                const value = node.basicInfo[4] ? 
-                  Number(BigInt(node.basicInfo[4]) / BigInt(10 ** 18)) : 0;
                 const memberCount = node.membersOfNode?.length || 0;
                 const signalCount = node.signals?.length || 0;
+                const nodeValue = node.basicInfo[4];
+                const percentage = nodeValues[nodeId] || 0;
 
                 return (
                   <motion.div
@@ -211,7 +276,9 @@ const RootNodeDetails = ({
                         <HStack justify="space-between">
                           <HStack>
                             <Activity size={14} />
-                            <Text fontSize="sm">{value.toFixed(4)}</Text>
+                            <Text fontSize="sm">
+                              {formatBalance(nodeValue)}
+                            </Text>
                           </HStack>
                           <HStack>
                             <Users size={14} />
@@ -219,14 +286,16 @@ const RootNodeDetails = ({
                           </HStack>
                         </HStack>
 
-                        {/* Value progress bar */}
                         <Box bg="gray.100" rounded="full" h="2" overflow="hidden">
                           <Box
                             bg={selectedTokenColor}
                             h="full"
-                            w={`${(value / (Number(totalValue) / 10 ** 18)) * 100}%`}
+                            w={`${percentage}%`}
                           />
                         </Box>
+                        <Text fontSize="xs" color="gray.500" textAlign="right">
+                          {formatPercentage(percentage)}
+                        </Text>
                       </VStack>
                     </Box>
                   </motion.div>
@@ -237,7 +306,6 @@ const RootNodeDetails = ({
         )}
       </Box>
 
-      {/* Hover details */}
       <AnimatePresence>
         {hoveredNode && (
           <motion.div
@@ -264,7 +332,7 @@ const RootNodeDetails = ({
                 <HStack>
                   <Activity size={14} />
                   <Text fontSize="sm">
-                    {(Number(BigInt(hoveredNode.basicInfo[4]) / BigInt(10 ** 18))).toFixed(4)}
+                    {formatBalance(hoveredNode.basicInfo[4])}
                   </Text>
                 </HStack>
                 <HStack>

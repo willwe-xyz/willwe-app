@@ -1,49 +1,44 @@
 import React from 'react';
 import { VStack, Box, Text, Spinner } from '@chakra-ui/react';
+import { BalanceItem } from '@covalenthq/client-sdk';
 import TokenBalance from './TokenBalance';
+import { ProtocolBalance } from '../types/chainData';
 
-const BalanceList = ({
+interface BalanceListProps {
+  selectedToken: string;
+  handleTokenSelect: (tokenAddress: string) => void;
+  contrastingColor: string;
+  reverseColor: string;
+  hoverColor: string;
+  userAddress: string;
+  chainId: string;
+  balances: BalanceItem[];
+  protocolBalances: ProtocolBalance[];
+  isLoading: boolean;
+}
+
+const BalanceList: React.FC<BalanceListProps> = ({
   selectedToken,
   handleTokenSelect,
   contrastingColor,
   reverseColor,
   hoverColor,
-  userAddress,
-  chainId,
   balances = [],
   protocolBalances = [],
   isLoading
 }) => {
-  // Loading state
   if (isLoading) {
     return (
-      <Box 
-        width="100%"
-        height="100%"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        p={4}
-      >
+      <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center" p={4}>
         <Spinner size="sm" color={contrastingColor} />
       </Box>
     );
   }
 
-  // No balances state
-  if (!balances || balances.length === 0) {
+  if (!balances.length) {
     return (
-      <Box 
-        width="100%"
-        height="100%"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        p={4}
-      >
-        <Text color="gray.500" fontSize="sm">
-          No balances found
-        </Text>
+      <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center" p={4}>
+        <Text color="gray.500" fontSize="sm">No balances found</Text>
       </Box>
     );
   }
@@ -58,17 +53,13 @@ const BalanceList = ({
       py={2}
       px={3}
       css={{
-        '&::-webkit-scrollbar': {
-          width: '4px',
-        },
+        '&::-webkit-scrollbar': { width: '4px' },
         '&::-webkit-scrollbar-thumb': {
           background: contrastingColor,
           borderRadius: '4px',
           opacity: 0.5,
         },
-        '&::-webkit-scrollbar-track': {
-          background: 'transparent',
-        },
+        '&::-webkit-scrollbar-track': { background: 'transparent' },
       }}
     >
       {balances.map((balance) => {
