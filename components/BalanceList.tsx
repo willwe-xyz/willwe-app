@@ -1,107 +1,100 @@
 import React from 'react';
-import { VStack, Box, Text, Spinner, useColorModeValue } from "@chakra-ui/react";
-import { TokenBalance } from "./TokenBalance";
-import { BalanceItem } from '@covalenthq/client-sdk';
-import { formatBalance } from '../hooks/useBalances';
+import { VStack, Box, Text, Spinner } from '@chakra-ui/react';
+import TokenBalance from './TokenBalance';
 
-interface BalanceListProps {
-  selectedToken: string;
-  handleTokenSelect: (tokenAddress: string) => void;
-  contrastingColor: string;
-  reverseColor: string;
-  hoverColor: string;
-  userAddress: string;
-  chainId: string;
-  balances: BalanceItem[];
-  protocolBalances: BalanceItem[];
-  isLoading: boolean;
-}
-
-const BalanceList: React.FC<BalanceListProps> = ({ 
-  selectedToken, 
-  handleTokenSelect, 
+const BalanceList = ({
+  selectedToken,
+  handleTokenSelect,
   contrastingColor,
   reverseColor,
   hoverColor,
-  balances = [], // Provide default empty array
-  protocolBalances = [], // Provide default empty array
+  userAddress,
+  chainId,
+  balances = [],
+  protocolBalances = [],
   isLoading
 }) => {
-  const scrollbarBg = useColorModeValue('gray.100', 'gray.700');
-  const scrollbarHoverBg = useColorModeValue('gray.300', 'gray.500');
-
+  // Loading state
   if (isLoading) {
     return (
-      <Box p={4} textAlign="center">
+      <Box 
+        width="100%"
+        height="100%"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        p={4}
+      >
         <Spinner size="sm" color={contrastingColor} />
       </Box>
     );
   }
 
-  // Early return if no balances
+  // No balances state
   if (!balances || balances.length === 0) {
     return (
-      <Box p={4} textAlign="center">
-        <Text color={contrastingColor}>No balances found</Text>
+      <Box 
+        width="100%"
+        height="100%"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        p={4}
+      >
+        <Text color="gray.500" fontSize="sm">
+          No balances found
+        </Text>
       </Box>
     );
   }
 
   return (
-    <VStack 
-      align="stretch" 
-      spacing={0} 
+    <VStack
+      spacing={2}
+      align="stretch"
       width="100%"
       height="100%"
-      overflowY="auto"
-      overflowX="hidden"
+      overflow="auto"
+      py={2}
+      px={3}
       css={{
         '&::-webkit-scrollbar': {
           width: '4px',
         },
+        '&::-webkit-scrollbar-thumb': {
+          background: contrastingColor,
+          borderRadius: '4px',
+          opacity: 0.5,
+        },
         '&::-webkit-scrollbar-track': {
-          width: '4px',
           background: 'transparent',
         },
-        '&::-webkit-scrollbar-thumb': {
-          background: scrollbarBg,
-          borderRadius: '2px',
-        },
-        '&:hover::-webkit-scrollbar-thumb': {
-          background: scrollbarHoverBg,
-        },
-        'scrollbarWidth': 'thin',
-        'scrollbarColor': `${scrollbarBg} transparent`,
       }}
     >
       {balances.map((balance) => {
-        // Safely find protocol balance
-        const protocolBalance = protocolBalances?.find(
-          p => p?.contract_address === balance?.contract_address
+        const protocolBalance = protocolBalances.find(
+          p => p.contract_address.toLowerCase() === balance.contract_address.toLowerCase()
         );
-        
+
         return (
-          <Box 
+          <Box
             key={balance.contract_address}
             onClick={() => handleTokenSelect(balance.contract_address)}
             cursor="pointer"
-            opacity={selectedToken && selectedToken !== balance.contract_address ? 0.5 : 1}
-            transition="opacity 0.2s, background-color 0.2s"
+            transition="all 0.2s"
+            borderRadius="md"
             _hover={{
-              opacity: 1,
-              backgroundColor: hoverColor,
+              bg: hoverColor,
+              transform: 'translateY(-1px)',
             }}
-            width="100%"
-            padding={1}
+            bg={selectedToken === balance.contract_address ? `${contrastingColor}10` : 'transparent'}
           >
             <TokenBalance
               balanceItem={balance}
-              protocolBalance={protocolBalance?.balance}
+              protocolBalance={protocolBalance}
               isSelected={selectedToken === balance.contract_address}
               contrastingColor={contrastingColor}
               reverseColor={reverseColor}
-              formattedBalance={formatBalance(balance.balance)}
-              formattedProtocolBalance={protocolBalance ? formatBalance(protocolBalance.balance) : undefined}
             />
           </Box>
         );

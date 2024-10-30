@@ -1,23 +1,32 @@
-import React, { useMemo } from "react";
-import { Box, Text, VStack, Tooltip, HStack } from "@chakra-ui/react";
-import { BalanceItem } from "@covalenthq/client-sdk";
-import { ArrowUpRight, Wallet, Clock } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Box, Text, VStack, HStack, Tooltip } from '@chakra-ui/react';
+import { Activity, Wallet, Clock } from 'lucide-react';
+import { BalanceItem } from '@covalenthq/client-sdk';
 
 interface TokenBalanceProps {
   balanceItem: BalanceItem;
-  protocolBalance?: string;
+  protocolBalance?: BalanceItem | null;
   isSelected: boolean;
   contrastingColor: string;
   reverseColor: string;
-  formattedBalance: string;
-  formattedProtocolBalance?: string;
 }
 
-const formatTokenAmount = (amount: string): { digits: string; decimals: string } => {
-  const parts = amount.split('.');
+const formatTokenAmount = (rawAmount: string | number | undefined | null): { digits: string; decimals: string } => {
+  if (!rawAmount) return { digits: '0', decimals: '00' };
+  
+  // Convert to string and handle scientific notation
+  const stringAmount = typeof rawAmount === 'number' ? 
+    rawAmount.toLocaleString('fullwide', { useGrouping: false }) : 
+    String(rawAmount);
+
+  // Format balance to show 18 decimals max
+  const value = Number(stringAmount) / 1e18;
+  const formatted = value.toFixed(4);
+  const [whole, fraction] = formatted.split('.');
+
   return {
-    digits: parts[0],
-    decimals: parts[1] || '0'
+    digits: whole || '0',
+    decimals: fraction || '00'
   };
 };
 
@@ -27,97 +36,81 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
   isSelected,
   contrastingColor,
   reverseColor,
-  formattedBalance,
-  formattedProtocolBalance
 }) => {
-  const formattedAmounts = useMemo(() => ({
-    user: formatTokenAmount(formattedBalance),
-    protocol: formattedProtocolBalance ? formatTokenAmount(formattedProtocolBalance) : null
-  }), [formattedBalance, formattedProtocolBalance]);
+  const formattedAmounts = useMemo(() => {
+    console.log('Formatting amounts:', {
+      userBalance: balanceItem?.balance,
+      protocolBalance: protocolBalance?.balance
+    });
 
-  // Calculate token percentages for visual indicators
+    return {
+      user: formatTokenAmount(balanceItem?.balance),
+      protocol: formatTokenAmount(protocolBalance?.balance)
+    };
+  }, [balanceItem?.balance, protocolBalance?.balance]);
+
+  // Calculate percentages safely
   const percentages = useMemo(() => {
-    if (!protocolBalance) return { user: 100, protocol: 0 };
-    
-    const total = BigInt(balanceItem.balance) + BigInt(protocolBalance);
+    const userBalance = BigInt(balanceItem?.balance || '0');
+    const protocolBal = BigInt(protocolBalance?.balance || '0');
+    const total = userBalance + protocolBal;
+
     if (total === BigInt(0)) return { user: 0, protocol: 0 };
-    
-    const userPercentage = Number((BigInt(balanceItem.balance) * BigInt(100)) / total);
+
+    const userPercentage = Number((userBalance * BigInt(100)) / total);
     return {
       user: userPercentage,
       protocol: 100 - userPercentage
     };
-  }, [balanceItem.balance, protocolBalance]);
+  }, [balanceItem?.balance, protocolBalance?.balance]);
 
   return (
     <Box
       position="relative"
-      borderWidth={2}
-      borderColor={isSelected ? contrastingColor : 'transparent'}
-      color={isSelected ? reverseColor : contrastingColor}
-      backgroundColor={isSelected ? contrastingColor : 'transparent'}
-      p={2}
+      p={3}
       borderRadius="md"
-      width="100%"
-      height="auto"
-      minHeight="90px"
-      transition="all 0.2s ease"
-      overflow="hidden"
+      borderWidth={1}
+      borderColor={isSelected ? contrastingColor : 'transparent'}
+      bg={isSelected ? `${contrastingColor}10` : 'transparent'}
+      transition="all 0.2s"
+      _hover={{ borderColor: contrastingColor }}
     >
       {/* Token Header */}
-      <VStack align="start" spacing={0.5}>
-        <HStack justify="space-between" width="100%">
-          <Text 
-            fontSize="sm" 
-            fontWeight="bold" 
-            isTruncated 
-            maxWidth="70%"
-          >
-            {balanceItem.contract_ticker_symbol}
+      <HStack justify="space-between" mb={2}>
+        <VStack align="start" spacing={0}>
+          <Text fontWeight="medium" fontSize="sm">
+            {balanceItem.contract_ticker_symbol || 'Unknown Token'}
           </Text>
-          <Text fontSize="xs" opacity={0.8}>
-            {percentages.user}%
+          <Text fontSize="xs" color="gray.500">
+            {balanceItem.contract_name || 'Unknown Name'}
           </Text>
-        </HStack>
-        
-        <Text 
-          fontSize="xs" 
-          opacity={0.7} 
-          isTruncated 
-          width="100%"
-        >
-          {balanceItem.contract_name}
-        </Text>
-      </VStack>
+        </VStack>
+      </HStack>
 
       {/* Balance Display */}
-      <VStack align="start" spacing={1} mt={2}>
-        <Tooltip
-          label={`Your wallet balance: ${formattedBalance} ${balanceItem.contract_ticker_symbol}`}
-          placement="top"
-        >
-          <HStack spacing={1}>
-            <Wallet size={12} />
-            <Text fontSize="sm">
+      <VStack align="start" spacing={2}>
+        {/* User Balance */}
+        <Tooltip label="Your wallet balance">
+          <HStack spacing={2}>
+            <Wallet size={14} />
+            <Text fontSize="sm" fontWeight="medium">
               {formattedAmounts.user.digits}
-              <Text as="span" fontSize="xs">
+              <Text as="span" fontSize="xs" color="gray.500">
                 .{formattedAmounts.user.decimals}
               </Text>
             </Text>
           </HStack>
         </Tooltip>
 
+        {/* Protocol Balance */}
         {protocolBalance && (
-          <Tooltip
-            label={`Protocol balance: ${formattedProtocolBalance} ${balanceItem.contract_ticker_symbol}`}
-            placement="bottom"
-          >
-            <HStack spacing={1}>
-              <Clock size={12} />
-              <Text fontSize="sm">
-                {formattedAmounts.protocol?.digits}
-                <Text as="span" fontSize="xs">
-                  .{formattedAmounts.protocol?.decimals}
+          <Tooltip label="Protocol balance">
+            <HStack spacing={2}>
+              <Clock size={14} />
+              <Text fontSize="sm" fontWeight="medium">
+                {formattedAmounts.protocol.digits}
+                <Text as="span" fontSize="xs" color="gray.500">
+                  .{formattedAmounts.protocol.decimals}
                 </Text>
               </Text>
             </HStack>
@@ -126,20 +119,11 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
       </VStack>
 
       {/* Progress Bar */}
-      <Box 
-        position="absolute" 
-        bottom={0} 
-        left={0} 
-        width="100%" 
-        height="2px" 
-        backgroundColor={isSelected ? reverseColor : contrastingColor}
-        opacity={0.2}
-      >
+      <Box mt={3} h="2px" bg={`${contrastingColor}20`} borderRadius="full" overflow="hidden">
         <Box
-          height="100%"
-          width={`${percentages.user}%`}
-          backgroundColor={isSelected ? reverseColor : contrastingColor}
-          opacity={1}
+          h="100%"
+          w={`${percentages.user}%`}
+          bg={contrastingColor}
           transition="width 0.3s ease"
         />
       </Box>
@@ -150,53 +134,24 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
           position="absolute"
           top={2}
           right={2}
-          width="6px"
-          height="6px"
+          w="2"
+          h="2"
           borderRadius="full"
-          backgroundColor={isSelected ? reverseColor : contrastingColor}
+          bg={contrastingColor}
+          opacity={0.6}
           animation="pulse 2s infinite"
         />
       )}
 
-      {/* Hover State Elements */}
-      <Box
-        position="absolute"
-        top={0}
-        right={0}
-        p={2}
-        opacity={0}
-        transition="opacity 0.2s ease"
-        _groupHover={{ opacity: 1 }}
-      >
-        <ArrowUpRight size={16} />
-      </Box>
-
       <style jsx global>{`
         @keyframes pulse {
-          0% {
-            transform: scale(0.95);
-            opacity: 0.5;
-          }
-          50% {
-            transform: scale(1.05);
-            opacity: 0.8;
-          }
-          100% {
-            transform: scale(0.95);
-            opacity: 0.5;
-          }
+          0% { transform: scale(0.95); opacity: 0.5; }
+          50% { transform: scale(1.05); opacity: 0.8; }
+          100% { transform: scale(0.95); opacity: 0.5; }
         }
       `}</style>
     </Box>
   );
 };
 
-export default React.memo(TokenBalance, (prevProps, nextProps) => {
-  return (
-    prevProps.balanceItem.balance === nextProps.balanceItem.balance &&
-    prevProps.protocolBalance === nextProps.protocolBalance &&
-    prevProps.isSelected === nextProps.isSelected &&
-    prevProps.contrastingColor === nextProps.contrastingColor &&
-    prevProps.reverseColor === nextProps.reverseColor
-  );
-});
+export default TokenBalance;
