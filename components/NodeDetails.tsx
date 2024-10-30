@@ -29,7 +29,7 @@ import { useNodeOperations } from '../hooks/useNodeOperations';
 import { formatBalance } from '../hooks/useBalances';
 import { NodeState } from '../types/chainData';
 import { NodeOperations } from './Node/NodeOperations';
-import { TokenOperationModal } from './Node/TokenOperationModal';
+import { TokenOperationModal } from './TokenOperations/TokenOperationModal';
 
 interface NodeDetailsProps {
   chainId: string;
