@@ -1,6 +1,6 @@
 import React from 'react';
 import { Flex } from '@chakra-ui/react';
-import { PaletteButton } from '../AllStackComponents';
+import { PaletteButton } from './PaletteButton';
 import HeaderButtons from '../HeaderButtons';
 
 interface HeaderProps {

@@ -343,8 +343,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
     <Box p={6} bg="white" borderRadius="lg" shadow="sm">
       <VStack spacing={6} align="stretch">
         <Box>
-          <Heading size="md" mb={2}>Define Entity</Heading>
-          <Text color="gray.600">Create a new entity with membership conditions</Text>
+          <Text color="gray.600">Define an entity and its membership conditions.</Text>
         </Box>
 
         <FormControl isRequired>

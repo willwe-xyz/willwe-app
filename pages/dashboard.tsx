@@ -1,66 +1,64 @@
-import React from 'react';
-import { Box, HStack, Button } from '@chakra-ui/react';
-import { Palette, LogOut, Plus } from 'lucide-react';
 import { useRouter } from 'next/router';
-import { usePrivy } from '@privy-io/react-auth';
-import { useColorManagement } from '../hooks/useColorManagement';
+import { usePrivy } from "@privy-io/react-auth";
+import { MainLayout } from '../components/Layout/MainLayout';
+import ContentLayout from '../components/Layout/ContentLayout';
 import DashboardContent from '../components/Layout/DashboardContent';
+import { useNode } from '../contexts/NodeContext';
+import { useColorManagement } from '../hooks/useColorManagement';
 
-const DashboardPage = () => {
+export default function DashboardPage() {
   const router = useRouter();
-  const { authenticated, user, logout } = usePrivy();
   const { colorState, cycleColors } = useColorManagement();
-  
-  const userAddress = user?.wallet?.address || '';
+  const { user, ready, authenticated, logout, login } = usePrivy();
+  const { selectedToken, selectToken } = useNode();
+
+  // Handle token selection from sidebar
+  const handleTokenSelect = (tokenAddress: string) => {
+    selectToken(tokenAddress);
+    // Update URL to reflect selected token
+    router.push({
+      pathname: '/dashboard',
+      query: { token: tokenAddress }
+    }, undefined, { shallow: true });
+  };
+
+  // Handle compose panel submission
+  const handleComposeSubmit = async (data: any) => {
+    // Handle token creation or entity definition
+    // This will be handled by the ComposePanel component in MainLayout
+  };
+
+  // Prepare header props
+  const headerProps = {
+    userAddress: user?.wallet?.address,
+    chainId: user?.wallet?.chainId || '',
+    logout,
+    login,
+    selectedNodeId: undefined,
+    isTransacting: false,
+    contrastingColor: colorState.contrastingColor,
+    reverseColor: colorState.reverseColor,
+    cycleColors,
+    onComposeSubmit: handleComposeSubmit
+  };
+
+  // Prepare sidebar props
+  const sidebarProps = {
+    selectedToken,
+    handleTokenSelect,
+    ...colorState,
+    userAddress: user?.wallet?.address || '',
+    chainId: user?.wallet?.chainId || '',
+  };
 
   return (
-    <Box height="100vh" display="flex" flexDirection="column" overflow="hidden">
-      {/* Header */}
-      <Box py={4} px={6} borderBottom="1px solid" borderColor="gray.200" bg="white">
-        <HStack justify="space-between">
-          <Button
-            leftIcon={<Palette />}
-            variant="ghost"
-            onClick={cycleColors}
-            color={colorState.contrastingColor}
-          >
-            Theme
-          </Button>
-
-          <HStack spacing={4}>
-            <Button
-              leftIcon={<Plus />}
-              onClick={() => router.push('/compose')}
-              colorScheme="purple"
-              variant="outline"
-            >
-              Compose
-            </Button>
-            
-            {authenticated ? (
-              <Button
-                leftIcon={<LogOut />}
-                onClick={() => logout()}
-                variant="outline"
-              >
-                {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
-              </Button>
-            ) : (
-              <Button 
-                onClick={() => {/* implement login */}} 
-                colorScheme="purple"
-              >
-                Connect Wallet
-              </Button>
-            )}
-          </HStack>
-        </HStack>
-      </Box>
-
-      {/* Dashboard Content */}
-      <DashboardContent colorState={colorState} />
-    </Box>
+    <MainLayout headerProps={headerProps}>
+      <ContentLayout sidebarProps={sidebarProps}>
+        <DashboardContent 
+          colorState={colorState} 
+          tokenAddress={router.query.token as string}
+        />
+      </ContentLayout>
+    </MainLayout>
   );
-};
-
-export default DashboardPage;
+}

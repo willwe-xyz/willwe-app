@@ -3,15 +3,13 @@ import {
   HStack,
   Button,
   Box,
-  Portal,
-  useDisclosure,
-  useColorModeValue,
   Modal,
   ModalOverlay,
   ModalContent,
   ModalHeader,
   ModalBody,
   ModalCloseButton,
+  useDisclosure,
   Tabs,
   TabList,
   TabPanels,
@@ -21,7 +19,6 @@ import {
 } from '@chakra-ui/react';
 import { 
   LogOut, 
-  Puzzle, 
   LogIn,
   Coins,
   Users,
@@ -29,8 +26,6 @@ import {
 } from 'lucide-react';
 import CreateToken from './CreateToken';
 import DefineEntity from './DefineEntity';
-import NotificationToast from './NotificationToast';
-import { useTransaction } from '../contexts/TransactionContext';
 
 interface HeaderButtonsProps {
   userAddress: string;
@@ -43,7 +38,7 @@ interface HeaderButtonsProps {
   buttonHoverBg?: string;
 }
 
-const HeaderButtons: React.FC<HeaderButtonsProps> = ({
+export default function HeaderButtons({
   userAddress,
   chainId,
   logout,
@@ -52,10 +47,9 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
   onNodeSelect,
   isTransacting,
   buttonHoverBg = 'purple.50'
-}) => {
+}: HeaderButtonsProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const { error: txError } = useTransaction();
-  
+
   // Consistent button styles
   const buttonStyles = {
     size: "sm",
@@ -78,19 +72,6 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
             Compose
           </Button>
         </Tooltip>
-
-        {/* Dashboard Button - Optional based on context */}
-        {selectedNodeId && (
-          <Tooltip label="Return to dashboard">
-            <Button
-              leftIcon={<Puzzle size={18} />}
-              onClick={() => onNodeSelect('')}
-              {...buttonStyles}
-            >
-              Dashboard
-            </Button>
-          </Tooltip>
-        )}
 
         {/* Auth Button */}
         {userAddress ? (
@@ -194,35 +175,6 @@ const HeaderButtons: React.FC<HeaderButtonsProps> = ({
           </ModalBody>
         </ModalContent>
       </Modal>
-
-      {/* Transaction Notifications */}
-      <Portal>
-        <Box
-          position="fixed"
-          top={4}
-          right={4}
-          zIndex={9999}
-        >
-          {txError && (
-            <NotificationToast
-              status="error"
-              title="Transaction Failed"
-              description={txError.message}
-              onClose={() => {/* clear error */}}
-            />
-          )}
-          {isTransacting && (
-            <NotificationToast
-              status="pending"
-              title="Transaction Pending"
-              description="Your transaction is being processed"
-              onClose={() => {}}
-            />
-          )}
-        </Box>
-      </Portal>
     </>
   );
-};
-
-export default HeaderButtons;
+}

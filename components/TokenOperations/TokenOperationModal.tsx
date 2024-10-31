@@ -180,8 +180,8 @@ export const TokenOperationModal = ({
                   value={membraneInputType}
                 >
                   <Stack direction="row">
-                    <Radio value="dropdown">Select from List</Radio>
                     <Radio value="manual">Enter Membrane ID</Radio>
+                    <Radio value="dropdown" isDisabled>Select </Radio>
                   </Stack>
                 </RadioGroup>
               </FormControl>

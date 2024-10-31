@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -26,20 +26,20 @@ interface ComposePanelProps {
   userAddress?: string;
 }
 
-const ComposePanel: React.FC<ComposePanelProps> = ({
+export default function ComposePanel({
   children,
   chainId,
   userAddress
-}) => {
+}: ComposePanelProps) {
   const { isOpen, onOpen, onClose: originalOnClose } = useDisclosure();
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = React.useState(0);
   const toast = useToast();
 
-  const resetState = useCallback(() => {
+  const resetState = React.useCallback(() => {
     setActiveTab(0);
   }, []);
 
-  const onClose = useCallback(() => {
+  const onClose = React.useCallback(() => {
     originalOnClose();
     setTimeout(resetState, 300);
   }, [originalOnClose, resetState]);
@@ -140,11 +140,23 @@ const ComposePanel: React.FC<ComposePanelProps> = ({
               <TabPanels flex={1} overflowY="hidden">
                 <TabPanel p={0} h="full">
                   <Box 
-                    height="600px"
-                    overflowY="auto"
+                    height="80%"
+                    overflowY="scroll"
                     px={6}
                     py={4}
-                    bg="white"
+                    css={{
+                      '&::-webkit-scrollbar': {
+                        width: '4px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        width: '6px',
+                        background: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        background: 'gray.200',
+                        borderRadius: '24px',
+                      },
+                    }}
                   >
                     <CreateToken
                       chainId={chainId}
@@ -158,7 +170,19 @@ const ComposePanel: React.FC<ComposePanelProps> = ({
                     overflowY="auto"
                     px={6}
                     py={4}
-                    bg="white"
+                    css={{
+                      '&::-webkit-scrollbar': {
+                        width: '4px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        width: '6px',
+                        background: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        background: 'gray.200',
+                        borderRadius: '24px',
+                      },
+                    }}
                   >
                     <DefineEntity
                       chainId={chainId}
@@ -180,6 +204,4 @@ const ComposePanel: React.FC<ComposePanelProps> = ({
       </Modal>
     </>
   );
-};
-
-export default ComposePanel;
+}

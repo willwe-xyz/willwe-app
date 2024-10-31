@@ -22,26 +22,11 @@ interface ContentLayoutProps {
 const ContentLayout: React.FC<ContentLayoutProps> = ({ children, sidebarProps }) => {
   return (
     <Flex flex={1} direction={{ base: 'column', md: 'row' }}>
-      <Sidebar {...sidebarProps} />
       <MainContent>{children}</MainContent>
     </Flex>
   );
 };
 
-const Sidebar: React.FC<ContentLayoutProps['sidebarProps']> = (props) => {
-  return (
-    <Box 
-      width={{ base: '100%', md: '12%' }} 
-      maxWidth={{ md: '110px' }}
-      borderRight={{ md: '1px solid' }}
-      borderColor={{ md: 'gray.200' }}
-      overflowY="auto"
-      bg="white"
-    >
-      <BalanceList {...props} />
-    </Box>
-  );
-};
 
 const MainContent: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (

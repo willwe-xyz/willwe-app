@@ -134,32 +134,6 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ colorState }) => {
 
   return (
     <Box flex={1} display="flex" overflow="hidden">
-      {/* Sidebar */}
-      <Box 
-        width="240px" 
-        borderRight="1px solid" 
-        borderColor="gray.200"
-        height="100%"
-        overflow="hidden"
-        display="flex"
-        flexDirection="column"
-        bg="white"
-      >
-        <BalanceList
-          selectedToken={selectedToken}
-          handleTokenSelect={handleTokenSelect}
-          contrastingColor={colorState.contrastingColor}
-          reverseColor={colorState.reverseColor}
-          hoverColor={colorState.hoverColor}
-          userAddress={userAddress}
-          chainId={chainId}
-          balances={balances || []}
-          protocolBalances={protocolBalances || []}
-          isLoading={balancesLoading}
-        />
-      </Box>
-
-      {/* Content Area */}
       <Box flex={1} overflow="auto" bg="gray.50" p={6}>
         <RootNodeDetails
           chainId={chainId}
