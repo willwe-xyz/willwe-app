@@ -2,8 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
 import { usePrivy } from "@privy-io/react-auth";
 import { useTransaction } from '../contexts/TransactionContext';
-import { NodeState } from '../types/chainData';
 import { deployments, ABIs } from '../config/contracts';
+import { NodeState } from '../types/chainData';
 
 interface NodePermissions {
   canMint: boolean;
@@ -29,8 +29,9 @@ export function useNodeOperations(
   userAddress?: string
 ) {
   const { getEthersProvider } = usePrivy();
-  const { executeTransaction, isTransacting, error } = useTransaction();
+  const { executeTransaction, isTransacting } = useTransaction();
 
+  // Get contract instance
   const getContract = useCallback(async () => {
     if (!chainId) throw new Error('Chain ID is required');
     
@@ -64,9 +65,10 @@ export function useNodeOperations(
   // Root Node Operations
   const spawnRootBranch = useCallback(async (fungibleTokenAddress: string) => {
     if (!chainId) throw new Error('Chain ID is required');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         return contract.spawnRootBranch(fungibleTokenAddress);
@@ -77,13 +79,14 @@ export function useNodeOperations(
 
   // Spawn Operations
   const spawn = useCallback(async () => {
-    if (!chainId) throw new Error('Chain ID is required');
+    if (!chainId || !node) throw new Error('Chain ID and node are required');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
-        return contract.spawnBranch(node?.basicInfo[0] || '0');
+        return contract.spawnBranch(node.basicInfo[0]);
       },
       { successMessage: 'Node spawned successfully' }
     );
@@ -91,9 +94,10 @@ export function useNodeOperations(
 
   const spawnBranchWithMembrane = useCallback(async (membraneId: string) => {
     if (!chainId || !node) throw new Error('Chain ID and node are required');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         return contract.spawnBranchWithMembrane(node.basicInfo[0], membraneId);
@@ -105,9 +109,10 @@ export function useNodeOperations(
   // Membership Operations
   const mintMembership = useCallback(async () => {
     if (!chainId || !node) throw new Error('Chain ID and node are required');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         return contract.mintMembership(node.basicInfo[0]);
@@ -118,9 +123,10 @@ export function useNodeOperations(
 
   const membershipEnforce = useCallback(async (targetAddress: string) => {
     if (!chainId || !node) throw new Error('Chain ID and node are required');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         return contract.membershipEnforce(targetAddress, node.basicInfo[0]);
@@ -133,9 +139,10 @@ export function useNodeOperations(
   const mint = useCallback(async (amount: string) => {
     if (!chainId || !node) throw new Error('Chain ID and node are required');
     if (!permissions.canMint) throw new Error('No permission to mint');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         const parsedAmount = ethers.parseUnits(amount, 18);
@@ -148,9 +155,10 @@ export function useNodeOperations(
   const mintPath = useCallback(async (targetNodeId: string, amount: string) => {
     if (!chainId) throw new Error('Chain ID is required');
     if (!permissions.canMint) throw new Error('No permission to mint');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         const parsedAmount = ethers.parseUnits(amount, 18);
@@ -160,26 +168,13 @@ export function useNodeOperations(
     );
   }, [chainId, permissions.canMint, executeTransaction, getContract]);
 
-  const mintInflation = useCallback(async () => {
-    if (!chainId || !node) throw new Error('Chain ID and node are required');
-    if (!permissions.canMint) throw new Error('No permission to mint inflation');
-
-    await executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract();
-        return contract.mintInflation(node.basicInfo[0]);
-      },
-      { successMessage: 'Inflation minted successfully' }
-    );
-  }, [chainId, node, permissions.canMint, executeTransaction, getContract]);
-
   const burn = useCallback(async (amount: string) => {
     if (!chainId || !node) throw new Error('Chain ID and node are required');
     if (!permissions.canBurn) throw new Error('No permission to burn');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         const parsedAmount = ethers.parseUnits(amount, 18);
@@ -192,9 +187,10 @@ export function useNodeOperations(
   const burnPath = useCallback(async (targetNodeId: string, amount: string) => {
     if (!chainId) throw new Error('Chain ID is required');
     if (!permissions.canBurn) throw new Error('No permission to burn');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         const parsedAmount = ethers.parseUnits(amount, 18);
@@ -208,9 +204,10 @@ export function useNodeOperations(
   const redistribute = useCallback(async () => {
     if (!chainId || !node) throw new Error('Chain ID and node are required');
     if (!permissions.canRedistribute) throw new Error('No permission to redistribute');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         return contract.redistributePath(node.basicInfo[0]);
@@ -223,9 +220,10 @@ export function useNodeOperations(
   const signal = useCallback(async (signals: number[]) => {
     if (!chainId || !node) throw new Error('Chain ID and node are required');
     if (!permissions.canSignal) throw new Error('No permission to signal');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         return contract.sendSignal(node.basicInfo[0], signals);
@@ -241,9 +239,10 @@ export function useNodeOperations(
   ) => {
     if (!chainId) throw new Error('Chain ID is required');
     if (!permissions.canSignal) throw new Error('No permission to resignal');
+    const cleanChainId = chainId.replace('eip155:', '');
 
-    await executeTransaction(
-      chainId,
+    return executeTransaction(
+      cleanChainId,
       async () => {
         const contract = await getContract();
         return contract.resignal(targetNodeId, signals, originatorAddress);
@@ -269,7 +268,6 @@ export function useNodeOperations(
       // Value Operations
       mint,
       mintPath,
-      mintInflation,
       burn,
       burnPath,
 
@@ -280,7 +278,8 @@ export function useNodeOperations(
       signal,
       resignal
     },
-    isProcessing: isTransacting,
-    error
+    isProcessing: isTransacting
   };
 }
+
+export default useNodeOperations;

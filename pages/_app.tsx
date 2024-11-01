@@ -1,3 +1,4 @@
+// File: pages/_app.tsx
 import '../styles/globals.css';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
@@ -16,6 +17,7 @@ import {
 import { TransactionProvider } from '../contexts/TransactionContext';
 import { NodeProvider } from '../contexts/NodeContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { customTheme } from '../config/theme';
 
 // App wrapper to provide toast context
 function AppContent({ Component, pageProps }: AppProps) {
@@ -35,6 +37,30 @@ function AppContent({ Component, pageProps }: AppProps) {
 
 function MyApp(props: AppProps) {
   const router = useRouter();
+  const toast = useToast();
+
+  // Configure Privy login success callback
+  const handlePrivyLoginSuccess = async () => {
+    await router.push('/dashboard');
+    toast({
+      title: "Welcome!",
+      description: "You've successfully logged in",
+      status: "success",
+      duration: 5000,
+      isClosable: true,
+    });
+  };
+
+  // Configure Privy login error handling
+  const handlePrivyLoginError = (error: Error) => {
+    toast({
+      title: "Login Failed",
+      description: error.message,
+      status: "error",
+      duration: 5000,
+      isClosable: true,
+    });
+  };
 
   return (
     <>
@@ -52,11 +78,9 @@ function MyApp(props: AppProps) {
         <link rel="manifest" href="/favicons/manifest.json" />
 
         {/* Meta tags */}
-        <title>WillWe</title>
-        <meta name="description" content="Token Coordination Protocol" />
+        <title>WillWe · Token Coordination Protocol</title>
+        <meta name="description" content="Decentralized Token Coordination Protocol" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        
-        {/* Any additional meta tags or SEO configuration */}
         <meta name="theme-color" content="#ffffff" />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="WillWe" />
@@ -80,13 +104,13 @@ function MyApp(props: AppProps) {
           ],
           appearance: {
             theme: 'light',
-            accentColor: '#7C3AED', // Purple color matching your theme
+            accentColor: customTheme.colors.brand[600],
             showWalletLoginFirst: true,
           },
         }}
-        onSuccess={() => router.push('/dashboard')}
+        onSuccess={handlePrivyLoginSuccess}
       >
-        <ChakraProvider>
+        <ChakraProvider theme={customTheme}>
           <AppContent {...props} />
         </ChakraProvider>
       </PrivyProvider>
@@ -95,49 +119,3 @@ function MyApp(props: AppProps) {
 }
 
 export default MyApp;
-
-// Add custom theme configuration
-const theme = {
-  styles: {
-    global: {
-      'html, body': {
-        minHeight: '100vh',
-        backgroundColor: 'gray.50',
-        color: 'gray.900',
-      },
-    },
-  },
-  fonts: {
-    body: "'AdelleSans-Regular', -apple-system, system-ui, sans-serif",
-    heading: "'AdelleSans-Semibold', -apple-system, system-ui, sans-serif",
-  },
-  colors: {
-    brand: {
-      50: '#f5f3ff',
-      100: '#ede9fe',
-      200: '#ddd6fe',
-      300: '#c4b5fd',
-      400: '#a78bfa',
-      500: '#8b5cf6',
-      600: '#7c3aed',
-      700: '#6d28d9',
-      800: '#5b21b6',
-      900: '#4c1d95',
-    },
-  },
-  components: {
-    Button: {
-      baseStyle: {
-        fontWeight: 'semibold',
-        borderRadius: 'md',
-      },
-      defaultProps: {
-        colorScheme: 'brand',
-      },
-    },
-  },
-};
-
-// Extend Chakra theme
-import { extendTheme } from '@chakra-ui/react';
-export const customTheme = extendTheme(theme);

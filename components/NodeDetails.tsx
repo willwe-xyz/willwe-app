@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   VStack,
@@ -25,11 +25,8 @@ import {
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useNodeData } from '../hooks/useNodeData';
-import { useNodeOperations } from '../hooks/useNodeOperations';
-import { formatBalance } from '../hooks/useBalances';
-import { NodeState } from '../types/chainData';
 import { NodeOperations } from './Node/NodeOperations';
-import { TokenOperationModal } from './TokenOperations/TokenOperationModal';
+import { formatBalance } from '../utils/formatters';
 
 interface NodeDetailsProps {
   chainId: string;
@@ -38,26 +35,18 @@ interface NodeDetailsProps {
   selectedTokenColor: string;
 }
 
-interface OperationParams {
-  amount?: string;
-  membraneId?: string;
-  targetNodeId?: string;
-}
-
 const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
   onNodeSelect,
   selectedTokenColor
 }) => {
+  // Hooks
   const { user } = usePrivy();
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const [currentOperation, setCurrentOperation] = useState<string>('');
-  
-  const cleanChainId = useMemo(() => 
-    chainId?.includes('eip155:') ? chainId.replace('eip155:', '') : chainId,
-    [chainId]
-  );
+
+  // Clean chain ID
+  const cleanChainId = chainId?.replace('eip155:', '') || '';
 
   // Style hooks
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -65,69 +54,10 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   const textColor = useColorModeValue('gray.600', 'gray.400');
   const permissionsBg = useColorModeValue('gray.50', 'gray.900');
 
+  // Fetch node data
   const { data: nodeData, error, isLoading } = useNodeData(cleanChainId, nodeId);
-  const { permissions, transactions, isProcessing } = useNodeOperations(
-    cleanChainId,
-    nodeData,
-    user?.wallet?.address
-  );
 
-  // Operation handlers
-  const handleOperation = useCallback((operation: string) => {
-    setCurrentOperation(operation);
-    onOpen();
-  }, [onOpen]);
-
-  const handleOperationSubmit = useCallback(async (params: OperationParams) => {
-    if (!nodeData?.basicInfo?.[0]) return;
-    
-    try {
-      switch (currentOperation) {
-        case 'mint':
-          if (params.amount) await transactions.mint(params.amount);
-          break;
-        case 'burn':
-          if (params.amount) await transactions.burn(params.amount);
-          break;
-        case 'mintPath':
-          if (params.amount) await transactions.mintPath(nodeData.basicInfo[0], params.amount);
-          break;
-        case 'burnPath':
-          if (params.amount) await transactions.burnPath(nodeData.basicInfo[0], params.amount);
-          break;
-        case 'spawn':
-          await transactions.spawn();
-          break;
-        case 'spawnWithMembrane':
-          if (params.membraneId) await transactions.spawnBranchWithMembrane(params.membraneId);
-          break;
-        default:
-          console.warn('Unknown operation:', currentOperation);
-      }
-    } catch (err) {
-      console.error(`${currentOperation} operation failed:`, err);
-    }
-  }, [currentOperation, nodeData?.basicInfo, transactions]);
-
-  const handleRedistribute = useCallback(async () => {
-    if (!permissions.canRedistribute) return;
-    try {
-      await transactions.redistribute();
-    } catch (err) {
-      console.error('Redistribution failed:', err);
-    }
-  }, [permissions.canRedistribute, transactions]);
-
-  const handleSignal = useCallback(async () => {
-    if (!permissions.canSignal) return;
-    try {
-      await transactions.signal([]);
-    } catch (err) {
-      console.error('Signal failed:', err);
-    }
-  }, [permissions.canSignal, transactions]);
-
-  // Stats calculation
+  // Calculate stats
   const stats = useMemo(() => {
     if (!nodeData?.basicInfo) return {
       totalValue: '0',
@@ -161,15 +91,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     }
   }, [nodeData]);
 
-  // Format path data for modal
-  const modalData = useMemo(() => ({
-    path: nodeData?.rootPath?.map(id => ({
-      id,
-      name: `Node ${id.slice(-6)}`
-    })) || [],
-    membranes: [] // Add membrane data when available
-  }), [nodeData?.rootPath]);
-
+  // Loading state
   if (isLoading) {
     return (
       <VStack spacing={4} align="stretch" p={6}>
@@ -180,6 +102,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
+  // Error state
   if (error) {
     return (
       <Alert status="error">
@@ -189,6 +112,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
+  // No data state
   if (!nodeData?.basicInfo) {
     return (
       <Alert status="warning">
@@ -206,6 +130,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       borderColor={borderColor}
       overflow="hidden"
     >
+      {/* Header Section */}
       <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
         <HStack justify="space-between" mb={4}>
           <VStack align="start" spacing={1}>
@@ -223,13 +148,12 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           </VStack>
           
           <NodeOperations
-            permissions={permissions}
-            isProcessing={isProcessing}
-            onOperation={handleOperation}
-            onRedistribute={handleRedistribute}
-            onSignal={handleSignal}
-            selectedTokenColor={selectedTokenColor}
-          />
+  nodeId={nodeId}
+  chainId={cleanChainId}
+  node={nodeData}  // Add this prop
+  selectedTokenColor={selectedTokenColor}
+  onNodeSelect={onNodeSelect}
+/>
         </HStack>
 
         <HStack spacing={8} wrap="wrap">
@@ -241,6 +165,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               </Text>
             </VStack>
           </Tooltip>
+
           <Tooltip label="Daily Growth">
             <VStack align="start">
               <Text fontSize="sm" color={textColor}>Daily Growth</Text>
@@ -249,6 +174,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               </Text>
             </VStack>
           </Tooltip>
+
           <Tooltip label="Members">
             <VStack align="start">
               <Text fontSize="sm" color={textColor}>Members</Text>
@@ -260,6 +186,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               </HStack>
             </VStack>
           </Tooltip>
+
           <Tooltip label="Child Nodes">
             <VStack align="start">
               <Text fontSize="sm" color={textColor}>Child Nodes</Text>
@@ -313,7 +240,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 <Tr key={index}>
                   <Td>{signal.MembraneInflation[0] || 'Unknown'}</Td>
                   <Td>{signal.MembraneInflation[1] || '0'}</Td>
-                  <Td>{new Date(Number(signal.lastRedistSignal[0])).toLocaleString()}</Td>
+                  <Td>{new Date(Number(signal.lastRedistSignal[0] || '0')).toLocaleString()}</Td>
                   <Td isNumeric>{formatBalance(signal.MembraneInflation[1] || '0')}</Td>
                 </Tr>
               ))}
@@ -327,32 +254,16 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         <Box p={6} bg={permissionsBg}>
           <Text fontWeight="medium" mb={2}>Permissions</Text>
           <HStack spacing={4} wrap="wrap">
-            {Object.entries(permissions).map(([permission, isAllowed]) => (
-              <Badge
-                key={permission}
-                colorScheme={isAllowed ? 'green' : 'gray'}
-                variant="subtle"
-              >
-                {permission.replace('can', '')}
-              </Badge>
-            ))}
+            {/* We'll get these from the node operations hook */}
+            <Badge colorScheme="green" variant="subtle">Mint</Badge>
+            <Badge colorScheme="green" variant="subtle">Burn</Badge>
+            <Badge colorScheme="green" variant="subtle">Signal</Badge>
+            <Badge colorScheme="green" variant="subtle">Redistribute</Badge>
           </HStack>
         </Box>
       )}
-
-      {/* Token Operation Modal */}
-      <TokenOperationModal
-        isOpen={isOpen}
-        onClose={onClose}
-        onSubmit={handleOperationSubmit}
-        operation={currentOperation}
-        isLoading={isProcessing}
-        nodeId={nodeId}
-        chainId={cleanChainId}
-        data={modalData}
-      />
     </Box>
   );
 };
 
-export default React.memo(NodeDetails);
+export default NodeDetails;

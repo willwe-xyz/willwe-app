@@ -1,148 +1,130 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { useToast, Box, CloseButton, Flex, Text } from '@chakra-ui/react';
-import { AlertCircle, XCircle, Loader, CheckCircle } from 'lucide-react';
+import React, { createContext, useContext, useCallback } from 'react';
+import { UseToastOptions, useToast } from '@chakra-ui/react';
 
-// Internal Toast Component
-const NotificationToast = ({ 
-  status, 
-  title, 
-  description,
-  onClose
-}) => {
-  const statusConfig = {
-    success: { icon: CheckCircle, color: 'green.500' },
-    error: { icon: XCircle, color: 'red.500' },
-    pending: { icon: Loader, color: 'blue.500' },
-    warning: { icon: AlertCircle, color: 'orange.500' }
-  };
-
-  const config = statusConfig[status] || statusConfig.warning;
-  const Icon = config.icon;
-
-  return (
-    <Box
-      bg="white"
-      borderRadius="lg"
-      p={4}
-      boxShadow="lg"
-      position="relative"
-      maxW="sm"
-    >
-      <CloseButton
-        position="absolute"
-        right={2}
-        top={2}
-        onClick={onClose}
-      />
-      <Flex>
-        <Box mr={3} mt={1}>
-          <Icon 
-            size={20} 
-            color={config.color} 
-            style={status === 'pending' ? {
-              animation: 'spin 1s linear infinite'
-            } : undefined}
-          />
-        </Box>
-        <Box flex="1">
-          <Text fontWeight="bold" mb={description ? 1 : 0}>
-            {title}
-          </Text>
-          {description && (
-            <Text fontSize="sm" color="gray.600">
-              {description}
-            </Text>
-          )}
-        </Box>
-      </Flex>
-    </Box>
-  );
-};
-
-interface TransactionContextType {
-  executeTransaction: (chainId: string, transactionFn: any, options?: any) => Promise<any>;
+interface TransactionContextValue {
+  executeTransaction: (
+    chainId: string,
+    transactionFn: () => Promise<any>,
+    toastConfig?: {
+      successMessage?: string;
+      errorMessage?: string;
+    }
+  ) => Promise<void>;
   isTransacting: boolean;
   error: Error | null;
-  clearError: () => void;
 }
 
-const TransactionContext = createContext<TransactionContextType>({
+const TransactionContext = createContext<TransactionContextValue>({
   executeTransaction: async () => {},
   isTransacting: false,
   error: null,
-  clearError: () => {}
 });
 
-export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isTransacting, setIsTransacting] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const toast = useToast();
+interface TransactionProviderProps {
+  children: React.ReactNode;
+  toast: ReturnType<typeof useToast>;
+}
 
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
+export function TransactionProvider({ children, toast }: TransactionProviderProps) {
+  const [isTransacting, setIsTransacting] = React.useState(false);
+  const [error, setError] = React.useState<Error | null>(null);
 
-  const executeTransaction = useCallback(async (
-    chainId: string,
-    transactionFn: any,
-    options: { successMessage?: string } = {}
-  ) => {
-    setIsTransacting(true);
-    setError(null);
-
+  const waitForTransaction = async (tx: any): Promise<any> => {
     try {
-      const result = await transactionFn();
-      
-      if (options.successMessage) {
+      // v6 transaction receipt handling
+      const receipt = await tx.provider.waitForTransaction(tx.hash);
+      return receipt;
+    } catch (err) {
+      console.error('Error waiting for transaction:', err);
+      throw err;
+    }
+  };
+
+  const executeTransaction = useCallback(
+    async (
+      chainId: string,
+      transactionFn: () => Promise<any>,
+      toastConfig?: {
+        successMessage?: string;
+        errorMessage?: string;
+      }
+    ) => {
+      setIsTransacting(true);
+      setError(null);
+
+      try {
+        const tx = await transactionFn();
+        
+        // Show pending toast
+        const pendingToastId = toast({
+          title: 'Transaction Pending',
+          description: 'Please wait while your transaction is being processed...',
+          status: 'info',
+          duration: null,
+          isClosable: true,
+          position: 'top-right'
+        });
+
+        try {
+          // Wait for transaction confirmation
+          const receipt = await waitForTransaction(tx);
+
+          // Close pending toast
+          toast.close(pendingToastId);
+
+          if (receipt.status === 1) {
+            toast({
+              title: 'Transaction Successful',
+              description: toastConfig?.successMessage || 'Transaction completed successfully',
+              status: 'success',
+              duration: 5000,
+              isClosable: true,
+              position: 'top-right'
+            });
+          } else {
+            throw new Error('Transaction failed');
+          }
+
+          return receipt;
+        } catch (error) {
+          // Close pending toast
+          toast.close(pendingToastId);
+          throw error;
+        }
+      } catch (error) {
+        console.error('Transaction error:', error);
+        setError(error as Error);
+        
         toast({
-          render: ({ onClose }) => (
-            <NotificationToast
-              status="success"
-              title={options.successMessage}
-              onClose={onClose}
-            />
-          ),
-          position: "top-right",
+          title: 'Transaction Failed',
+          description: toastConfig?.errorMessage || error.message || 'Transaction failed',
+          status: 'error',
           duration: 5000,
           isClosable: true,
+          position: 'top-right'
         });
+        
+        throw error;
+      } finally {
+        setIsTransacting(false);
       }
-      
-      return result;
-    } catch (err) {
-      const error = err as Error;
-      setError(error);
-      
-      toast({
-        render: ({ onClose }) => (
-          <NotificationToast
-            status="error"
-            title="Transaction Failed"
-            description={error.message}
-            onClose={onClose}
-          />
-        ),
-        position: "top-right",
-        duration: null,
-        isClosable: true,
-      });
-      
-      throw error;
-    } finally {
-      setIsTransacting(false);
-    }
-  }, [toast]);
+    },
+    [toast]
+  );
 
   return (
-    <TransactionContext.Provider value={{ 
-      executeTransaction, 
-      isTransacting, 
-      error,
-      clearError 
-    }}>
+    <TransactionContext.Provider value={{ executeTransaction, isTransacting, error }}>
       {children}
     </TransactionContext.Provider>
   );
-};
+}
 
-export const useTransaction = () => useContext(TransactionContext);
+export function useTransaction() {
+  const context = useContext(TransactionContext);
+  if (context === undefined) {
+    throw new Error('useTransaction must be used within a TransactionProvider');
+  }
+  return context;
+}
+
+export default TransactionContext;

@@ -1,6 +1,8 @@
-import React, { ReactNode } from 'react';
-import { Box, useToast } from '@chakra-ui/react';
+
+import React, { ReactNode, useCallback } from 'react';
+import { Box } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
 import { useCovalentBalances } from '../../hooks/useCovalentBalances';
 import Header from './Header';
 import BalanceList from '../BalanceList';
@@ -24,9 +26,9 @@ interface MainLayoutProps {
 export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps }) => {
   const { user } = usePrivy();
   const { selectedToken, selectToken } = useNode();
-  const toast = useToast();
-
-  // Fetch balances for sidebar
+  const router = useRouter();
+  
+  // Fetch balances for top bar
   const { 
     balances, 
     protocolBalances, 
@@ -36,45 +38,44 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
     headerProps?.chainId || ''
   );
 
-  const handleTokenSelect = (tokenAddress: string) => {
+  // Handle token selection with navigation
+  const handleTokenSelect = useCallback((tokenAddress: string) => {
     selectToken(tokenAddress);
-    // Optionally navigate to dashboard if needed
-  };
+    // Always navigate to dashboard with the selected token
+    router.push({
+      pathname: '/dashboard',
+      query: { token: tokenAddress }
+    });
+  }, [selectToken, router]);
 
   return (
     <Box height="100vh" display="flex" flexDirection="column" overflow="hidden">
+      {/* Header */}
       {headerProps && <Header {...headerProps} />}
       
-      <Box flex={1} display="flex">
-        {/* Sidebar - Single Instance */}
-        <Box 
-          width="240px" 
-          borderRight="1px solid" 
-          borderColor="gray.200"
-          height="100%"
-          overflow="hidden"
-          display="flex"
-          flexDirection="column"
-          bg="white"
-        >
-          <BalanceList
-            selectedToken={selectedToken}
-            handleTokenSelect={handleTokenSelect}
-            contrastingColor={headerProps?.contrastingColor || ''}
-            reverseColor={headerProps?.reverseColor || ''}
-            hoverColor={`${headerProps?.contrastingColor}20` || ''}
-            userAddress={user?.wallet?.address || ''}
-            chainId={headerProps?.chainId || ''}
-            balances={balances || []}
-            protocolBalances={protocolBalances || []}
-            isLoading={balancesLoading}
-          />
-        </Box>
-
-        {/* Main Content */}
-        <Box flex={1} overflow="hidden">
-          {children}
-        </Box>
+      {/* Token Balance Bar */}
+      <Box width="100%" borderBottom="1px solid" borderColor="gray.200">
+        <BalanceList
+          selectedToken={selectedToken}
+          handleTokenSelect={handleTokenSelect}
+          contrastingColor={headerProps?.contrastingColor || ''}
+          reverseColor={headerProps?.reverseColor || ''}
+          hoverColor={`${headerProps?.contrastingColor}20` || ''}
+          userAddress={user?.wallet?.address || ''}
+          chainId={headerProps?.chainId || ''}
+          balances={balances || []}
+          protocolBalances={protocolBalances || []}
+          isLoading={balancesLoading}
+        />
+      </Box>
+      
+      {/* Main Content */}
+      <Box 
+        flex={1} 
+        overflow="hidden"
+        bg="gray.50"
+      >
+        {children}
       </Box>
     </Box>
   );
