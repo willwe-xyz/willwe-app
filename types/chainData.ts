@@ -1,124 +1,151 @@
-// types/chainData.ts
+export enum SQState {
+  None = 0,
+  Initialized = 1,
+  Valid = 2,
+  Executed = 3,
+  Stale = 4
+}
 
-/**
- * Represents the basic information of a node
- * [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, balanceOfUser, childParentEligibilityPerSec, lastParentRedistribution]
- */
-export type NodeBasicInfo = [
-  string, // nodeId
-  string, // inflation
-  string, // balanceAnchor
-  string, // balanceBudget
-  string, // value
-  string, // membraneId
-  string, // balanceOfUser
-  string, // childParentEligibilityPerSec
-  string  // lastParentRedistribution
-];
+export enum MovementType {
+  Revert = 0,
+  AgentMajority = 1,
+  EnergeticMajority = 2
+}
 
-/**
- * Signal data structure for membrane inflation
- */
+// Structs matching contract definitions
+export interface Call {
+  target: string;  // address in Solidity
+  callData: string; // bytes in Solidity
+}
+
+export interface Movement {
+  category: MovementType;
+  initiatior: string; // address in Solidity
+  exeAccount: string; // address in Solidity
+  viaNode: string; // uint256 in Solidity
+  expiresAt: string; // uint256 in Solidity
+  descriptionHash: string; // bytes32 in Solidity
+  executedPayload: string; // bytes in Solidity
+}
+
+export interface SignatureQueue {
+  state: SQState;
+  Action: Movement;
+  Signers: string[]; // address[] in Solidity
+  Sigs: string[]; // bytes[] in Solidity
+  exeSig: string; // bytes32 in Solidity
+}
+
 export interface UserSignal {
-  MembraneInflation: [string, string][]; // [membraneId, inflation][]
-  lastRedistSignal: string[];            // Timestamps of last redistribution signals
+  MembraneInflation: [string, string][]; // string[2][] in Solidity
+  lastRedistSignal: string[]; // string[] in Solidity
 }
 
-/**
- * Core node state structure matching the updated smart contract
- */
 export interface NodeState {
-  basicInfo: NodeBasicInfo;
-  membraneMeta: string;           // IPFS hash or direct metadata
-  membersOfNode: string[];        // Array of member addresses
-  childrenNodes: string[];        // Array of child node IDs
-  rootPath: string[];             // Path from root to current node
-  signals: UserSignal[];          // Array of signal data
-}
-
-/**
- * Transformed node data for frontend use
- */
-export interface TransformedNodeData {
-  id: string;
-  inflation: bigint;
-  balanceAnchor: bigint;
-  balanceBudget: bigint;
-  value: bigint;
-  membraneId: string;
-  balanceOfUser: bigint;
-  childParentEligibilityPerSec: bigint;
-  lastParentRedistribution: bigint;
+  basicInfo: [
+    string, // nodeId
+    string, // inflation
+    string, // balanceAnchor
+    string, // balanceBudget
+    string, // value
+    string, // membraneId
+    string, // balanceOfUser
+    string, // childParentEligibilityPerSec
+    string  // lastParentRedistribution
+  ];
   membraneMeta: string;
-  members: string[];
-  children: string[];
-  path: string[];
-  signals: {
-    membrane: string;
-    inflation: bigint;
-    timestamp: number;
-  }[];
+  membersOfNode: string[]; // address[] in Solidity
+  childrenNodes: string[];
+  rootPath: string[];
+  signals: UserSignal[];
 }
 
-/**
- * Node view specific data
- */
-export interface NodeViewData extends TransformedNodeData {
-  percentage: number;
-  valueFormatted: string;
-  inflationFormatted: string;
-  lastActivityTime: number;
-  isActive: boolean;
-}
-
-/**
- * Helper function to transform raw node data
- */
-export function transformNodeData(nodeData: NodeState): TransformedNodeData {
-  return {
-    id: nodeData.basicInfo[0],
-    inflation: BigInt(nodeData.basicInfo[1]),
-    balanceAnchor: BigInt(nodeData.basicInfo[2]),
-    balanceBudget: BigInt(nodeData.basicInfo[3]),
-    value: BigInt(nodeData.basicInfo[4]),
-    membraneId: nodeData.basicInfo[5],
-    balanceOfUser: BigInt(nodeData.basicInfo[6]),
-    childParentEligibilityPerSec: BigInt(nodeData.basicInfo[7]),
-    lastParentRedistribution: BigInt(nodeData.basicInfo[8]),
-    membraneMeta: nodeData.membraneMeta,
-    members: nodeData.membersOfNode,
-    children: nodeData.childrenNodes,
-    path: nodeData.rootPath,
-    signals: nodeData.signals.flatMap(signal =>
-      signal.MembraneInflation.map((membraneInflation, index) => ({
-        membrane: membraneInflation[0],
-        inflation: BigInt(membraneInflation[1]),
-        timestamp: Number(signal.lastRedistSignal[index])
-      }))
-    )
+// Interface for transformed node data (frontend-friendly format)
+export interface TransformedNodeData {
+  basicInfo: {
+    nodeId: string;
+    inflation: string;
+    balanceAnchor: string;
+    balanceBudget: string;
+    value: string;
+    membraneId: string;
+    balanceOfUser: string;
+    childParentEligibilityPerSec: string;
+    lastParentRedistribution: string;
   };
+  membraneMeta: string;
+  membersOfNode: string[];
+  childrenNodes: string[];
+  rootPath: string[];
+  signals: Array<{
+    MembraneInflation: [string, string][];
+    lastRedistSignal: string[];
+  }>;
 }
 
-/**
- * Extension of the Covalent BalanceItem type
- */
-export interface BalanceItem {
-  contract_decimals: number;
-  contract_name: string;
-  contract_ticker_symbol: string;
-  contract_address: string;
-  supports_erc?: string[] | null;
-  logo_url: string | null;
-  balance: string;
-  quote: number | null;
-  quote_rate: number | null;
-}
+// Updated transform function to match exact contract types
+export const transformNodeData = (nodeData: NodeState): TransformedNodeData => {
+  if (!nodeData || !Array.isArray(nodeData.basicInfo) || nodeData.basicInfo.length !== 9) {
+    throw new Error('Invalid node data format');
+  }
 
-/**
- * Protocol balance structure
- */
-export interface ProtocolBalance extends BalanceItem {
-  locked_balance?: string;
-  unlocked_balance?: string;
-  last_activity?: number;
-}
+  const [
+    nodeId,
+    inflation,
+    balanceAnchor,
+    balanceBudget,
+    value,
+    membraneId,
+    balanceOfUser,
+    childParentEligibilityPerSec,
+    lastParentRedistribution
+  ] = nodeData.basicInfo;
+
+  return {
+    basicInfo: {
+      nodeId: nodeId || '0',
+      inflation: inflation || '0',
+      balanceAnchor: balanceAnchor || '0',
+      balanceBudget: balanceBudget || '0',
+      value: value || '0',
+      membraneId: membraneId || '0',
+      balanceOfUser: balanceOfUser || '0',
+      childParentEligibilityPerSec: childParentEligibilityPerSec || '0',
+      lastParentRedistribution: lastParentRedistribution || '0'
+    },
+    membraneMeta: nodeData.membraneMeta,
+    membersOfNode: nodeData.membersOfNode,
+    childrenNodes: nodeData.childrenNodes,
+    rootPath: nodeData.rootPath,
+    signals: nodeData.signals.map(signal => ({
+      MembraneInflation: signal.MembraneInflation,
+      lastRedistSignal: signal.lastRedistSignal
+    }))
+  };
+};
+
+// Type guard functions
+export const isValidNodeState = (data: any): data is NodeState => {
+  return (
+    data &&
+    Array.isArray(data.basicInfo) &&
+    data.basicInfo.length === 9 &&
+    typeof data.membraneMeta === 'string' &&
+    Array.isArray(data.membersOfNode) &&
+    Array.isArray(data.childrenNodes) &&
+    Array.isArray(data.rootPath) &&
+    Array.isArray(data.signals)
+  );
+};
+
+export const isValidUserSignal = (data: any): data is UserSignal => {
+  return (
+    data &&
+    Array.isArray(data.MembraneInflation) &&
+    Array.isArray(data.lastRedistSignal) &&
+    data.MembraneInflation.every((item: any) => 
+      Array.isArray(item) && item.length === 2 && 
+      typeof item[0] === 'string' && typeof item[1] === 'string'
+    )
+  );
+};

@@ -21,7 +21,7 @@ export function useNodeTransactions(chainId: string) {
     // Convert token address to uint if needed
     let tokenId;
     try {
-      tokenId = ethers.toBigInt(tokenAddress);
+      tokenId = ethers.toBigInt(tokenAddress).toString(16);
     } catch {
       tokenId = tokenAddress;
     }

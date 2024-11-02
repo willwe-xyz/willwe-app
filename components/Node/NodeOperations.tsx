@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   ButtonGroup,
   Menu,
@@ -9,7 +9,10 @@ import {
   Divider,
   useDisclosure,
   Tooltip,
-  useToast
+  useToast,
+  Box,
+  VStack,
+  Text,
 } from '@chakra-ui/react';
 import {
   Plus,
@@ -18,124 +21,170 @@ import {
   Signal,
   Activity,
   ChevronDown,
-  UserPlus
+  UserPlus,
+  RefreshCw,
+  AlertTriangle,
+  Check,
 } from 'lucide-react';
 import { TokenOperationModal } from '../TokenOperations/TokenOperationModal';
 import { useNodeOperations } from '../../hooks/useNodeOperations';
+import { useNodeData } from '../../hooks/useNodeData';
 import { usePrivy } from '@privy-io/react-auth';
 import { NodeState } from '../../types/chainData';
+import { ethers } from 'ethers';
+import { formatBalance } from '../../utils/formatters';
 
 interface NodeOperationsProps {
   nodeId: string;
   chainId: string;
-  node: NodeState;
   onNodeSelect?: (nodeId: string) => void;
+  onSuccess?: () => void;
   selectedTokenColor: string;
 }
 
 export const NodeOperations: React.FC<NodeOperationsProps> = ({
   nodeId,
   chainId,
-  node,
   onNodeSelect,
-  selectedTokenColor
+  onSuccess,
+  selectedTokenColor,
 }) => {
   const { user } = usePrivy();
-  const { permissions, transactions, isProcessing } = useNodeOperations(
-    chainId,
-    node,
-    user?.wallet?.address
-  );
-
-  const modalProps = useDisclosure();
-  const [currentOperation, setCurrentOperation] = React.useState<string>('');
   const toast = useToast();
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [currentOperation, setCurrentOperation] = useState<string>('');
 
-  // Validate required parameters
-  const validateParams = () => {
-    if (!chainId?.trim()) {
-      throw new Error('Chain ID is required');
-    }
-    if (!nodeId?.trim()) {
-      throw new Error('Node ID is required');
-    }
-    if (!node) {
-      throw new Error('Node data is required');
-    }
-    console.log('Params validated:', { chainId, nodeId, node });
-  };
+  // Fetch node data
+  const { 
+    data: nodeData, 
+    rawData: node,
+    isLoading: isNodeLoading,
+    refetch: refetchNode,
+    value: nodeValue,
+    memberCount,
+    hasSignals
+  } = useNodeData(chainId, nodeId);
 
-  // Handle operation selection
-  const handleOperationSelect = (operation: string) => {
-    try {
-      validateParams();
-      console.log('Operation selected:', operation, { chainId, nodeId, node });
-      setCurrentOperation(operation);
-      modalProps.onOpen();
-    } catch (error) {
-      console.error('Validation error:', error);
+  // Get operations and permissions
+  const { 
+    permissions, 
+    transactions, 
+    isProcessing 
+  } = useNodeOperations(chainId, node, user?.wallet?.address);
+
+  // Operation Handlers
+  const handleOperationSelect = useCallback((operation: string) => {
+    if (!user?.wallet?.address) {
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Invalid parameters',
-        status: 'error',
-        duration: 5000,
+        title: "Connection Required",
+        description: "Please connect your wallet first",
+        status: "warning",
+        duration: 3000,
       });
+      return;
     }
-  };
 
-  // Handle modal submission
+    setCurrentOperation(operation);
+    onOpen();
+  }, [user?.wallet?.address, onOpen, toast]);
+
   const handleSubmit = async (params: any) => {
+    if (!node || !nodeData) {
+      toast({
+        title: "Error",
+        description: "Node data not available",
+        status: "error",
+        duration: 3000,
+      });
+      return;
+    }
+
     try {
-      validateParams();
-      
       switch (currentOperation) {
         case 'mint':
-          await transactions.mint(params.amount);
+          await transactions.mint(nodeId, params.amount);
           break;
+
         case 'burn':
-          await transactions.burn(params.amount);
+          await transactions.burn(nodeId, params.amount);
           break;
+
         case 'mintPath':
           await transactions.mintPath(params.targetNodeId, params.amount);
           break;
+
         case 'burnPath':
           await transactions.burnPath(params.targetNodeId, params.amount);
           break;
+
         case 'spawn':
-          await transactions.spawn();
+          await transactions.spawn(nodeId);
           break;
+
         case 'spawnWithMembrane':
-          await transactions.spawnBranchWithMembrane(params.membraneId);
+          await transactions.spawnBranchWithMembrane(nodeId, params.membraneId);
           break;
+
         case 'mintMembership':
-          console.log('Minting membership with:', { chainId, node });
-          await transactions.mintMembership();
+          await transactions.mintMembership(nodeId);
           break;
+
+        case 'redistribute':
+          await transactions.redistribute(nodeId);
+          break;
+
+        case 'signal':
+          await transactions.signal(nodeId, params.signals || []);
+          break;
+
         default:
           throw new Error('Unknown operation');
       }
-      
-      modalProps.onClose();
-      
+
+      onClose();
+      refetchNode();
+      onSuccess?.();
+
       toast({
-        title: 'Success',
-        description: 'Operation completed successfully',
-        status: 'success',
+        title: "Success",
+        description: "Operation completed successfully",
+        status: "success",
         duration: 5000,
+        icon: <Check size={16} />,
       });
     } catch (error) {
       console.error('Operation error:', error);
       toast({
-        title: 'Operation Failed',
+        title: "Operation Failed",
         description: error instanceof Error ? error.message : 'An error occurred',
-        status: 'error',
+        status: "error",
         duration: 5000,
+        icon: <AlertTriangle size={16} />,
       });
     }
   };
 
+  // Loading state
+  if (isNodeLoading) {
+    return (
+      <Box p={4}>
+        <Text>Loading node operations...</Text>
+      </Box>
+    );
+  }
+
+  // No data state
+  if (!node || !nodeData) {
+    return (
+      <Box p={4}>
+        <Text color="red.500">Node data unavailable</Text>
+      </Box>
+    );
+  }
+
   return (
-    <>
+    <VStack spacing={4} align="stretch">
+      {/* Operations Interface */}
       <ButtonGroup size="sm" spacing={2}>
         {/* Value Operations */}
         <Menu>
@@ -163,9 +212,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             >
               Mint Along Path
             </MenuItem>
-            
             <Divider />
-            
             <MenuItem
               icon={<Minus size={16} />}
               onClick={() => handleOperationSelect('burn')}
@@ -183,7 +230,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           </MenuList>
         </Menu>
 
-        {/* Spawn Operations */}
+        {/* Node Operations */}
         <Menu>
           <MenuButton
             as={Button}
@@ -192,18 +239,20 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             variant="outline"
             isDisabled={!permissions.canSpawn || isProcessing}
           >
-            Spawn
+            Node
           </MenuButton>
           <MenuList>
             <MenuItem
               icon={<GitBranch size={16} />}
               onClick={() => handleOperationSelect('spawn')}
+              isDisabled={!permissions.canSpawn || isProcessing}
             >
               Spawn Sub-Node
             </MenuItem>
             <MenuItem
               icon={<GitBranch size={16} />}
               onClick={() => handleOperationSelect('spawnWithMembrane')}
+              isDisabled={!permissions.canSpawn || isProcessing}
             >
               Spawn With Membrane
             </MenuItem>
@@ -211,53 +260,72 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         </Menu>
 
         {/* Direct Actions */}
-        <Button
-          leftIcon={<UserPlus size={16} />}
-          onClick={() => handleOperationSelect('mintMembership')}
-          colorScheme="purple"
-          variant="outline"
-          isDisabled={permissions.isMember || isProcessing}
-        >
-          Membership
-        </Button>
+        <Tooltip label={permissions.isMember ? "Already a member" : "Mint membership"}>
+          <Button
+            leftIcon={<UserPlus size={16} />}
+            onClick={() => handleOperationSelect('mintMembership')}
+            colorScheme="purple"
+            variant="outline"
+            isDisabled={permissions.isMember || isProcessing}
+          >
+            Membership
+          </Button>
+        </Tooltip>
 
-        <Button
-          leftIcon={<Activity size={16} />}
-          onClick={() => {
-            validateParams();
-            transactions.redistribute();
-          }}
-          colorScheme="purple"
-          variant="outline"
-          isDisabled={!permissions.canRedistribute || isProcessing}
-        >
-          Redistribute
-        </Button>
+        <Tooltip label={permissions.canRedistribute ? "Redistribute value" : "Must be member to redistribute"}>
+          <Button
+            leftIcon={<RefreshCw size={16} />}
+            onClick={() => handleOperationSelect('redistribute')}
+            colorScheme="purple"
+            variant="outline"
+            isDisabled={!permissions.canRedistribute || isProcessing}
+          >
+            Redistribute
+          </Button>
+        </Tooltip>
 
-        <Button
-          leftIcon={<Signal size={16} />}
-          onClick={() => {
-            validateParams();
-            transactions.signal([]);
-          }}
-          colorScheme="purple"
-          variant="outline"
-          isDisabled={!permissions.canSignal || isProcessing}
-        >
-          Signal
-        </Button>
+        <Tooltip label={permissions.canSignal ? "Send signal" : "Must be member to signal"}>
+          <Button
+            leftIcon={<Signal size={16} />}
+            onClick={() => handleOperationSelect('signal')}
+            colorScheme="purple"
+            variant="outline"
+            isDisabled={!permissions.canSignal || isProcessing}
+          >
+            Signal
+          </Button>
+        </Tooltip>
       </ButtonGroup>
 
+      {/* Node Stats */}
+      <Box>
+        <VStack spacing={2} align="start">
+          <Text fontSize="sm">
+            Value: {formatBalance(nodeValue)}
+          </Text>
+          <Text fontSize="sm">
+            Members: {memberCount}
+          </Text>
+          {hasSignals && (
+            <Text fontSize="sm" color={selectedTokenColor}>
+              Active Signals Present
+            </Text>
+          )}
+        </VStack>
+      </Box>
+
+      {/* Operation Modal */}
       <TokenOperationModal
-        isOpen={modalProps.isOpen}
-        onClose={modalProps.onClose}
+        isOpen={isOpen}
+        onClose={onClose}
         onSubmit={handleSubmit}
         operation={currentOperation}
         isLoading={isProcessing}
         nodeId={nodeId}
         chainId={chainId}
+        node={node}
       />
-    </>
+    </VStack>
   );
 };
 
