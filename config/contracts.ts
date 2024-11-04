@@ -1,6 +1,5 @@
 import { deployments, ABIs, getChainById } from './deployments';
-
-
+import { ethers } from 'ethers';
 
 export { deployments, ABIs, getChainById };
 
@@ -31,4 +30,37 @@ export const getRPCUrl = (chainId: string): string => {
     throw new Error(`No RPC URL configured for chain ID: ${chainId}`);
   }
   return url;
+};
+
+export const getExplorerLink = (chainId: string, hash: string, type: 'tx' | 'address' = 'tx'): string => {
+  try {
+    const chain = getChainById(chainId);
+    const explorerUrl = chain.blockExplorers?.default?.url;
+    if (!explorerUrl) throw new Error('No explorer URL found for chain');
+    return `${explorerUrl}/${type}/${hash}`;
+  } catch (error) {
+    console.warn('Failed to get explorer URL:', error);
+    return '#';
+  }
+};
+
+export const getMembraneContract = async (
+  chainId: string,
+  provider: ethers.Provider
+): Promise<ethers.Contract> => {
+  // Remove 'eip155:' prefix if present
+  const cleanChainId = chainId.replace('eip155:', '');
+  
+  // Get the contract address for this chain
+  const address = deployments["Membrane"][cleanChainId];
+  if (!address) {
+    throw new Error(`No Membrane contract deployed on chain ${chainId}`);
+  }
+
+  // Create and return the contract instance
+  return new ethers.Contract(
+    address,
+    ABIs.Membrane,
+    provider
+  );
 };

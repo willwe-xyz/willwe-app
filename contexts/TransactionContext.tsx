@@ -1,223 +1,310 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { ContractTransactionResponse } from 'ethers';
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { ethers, ContractTransactionResponse } from 'ethers';
 import { UseToastOptions } from '@chakra-ui/react';
+import { Check, ExternalLink, AlertTriangle } from 'lucide-react';
+import { deployments, ABIs } from '../config/contracts';
+import { getChainById } from '../config/deployments';
+import { usePrivy } from '@privy-io/react-auth';
+
+interface TransactionState {
+  isTransacting: boolean;
+  currentHash: string | null;
+  error: Error | null;
+}
 
 interface TransactionContextType {
   executeTransaction: <T extends ContractTransactionResponse>(
     chainId: string,
     transactionFn: () => Promise<T>,
     options?: TransactionOptions
-  ) => Promise<T>;
+  ) => Promise<T | null>;
   isTransacting: boolean;
-  currentTransaction: string | null;
+  currentHash: string | null;
+  error: Error | null;
 }
 
 interface TransactionOptions {
   successMessage?: string;
   errorMessage?: string;
-  pendingMessage?: string;
+  onSuccess?: () => void;
+  gasLimitMultiplier?: number;
+  gasLimit?: number;
 }
 
 interface TransactionProviderProps {
-  children: React.ReactNode;
-  toast: (options: UseToastOptions) => string | number;
+  children: ReactNode;
+  toast: (options: UseToastOptions) => void | string | number;
 }
 
 const TransactionContext = createContext<TransactionContextType>({
-  executeTransaction: async () => {
-    throw new Error('TransactionContext not initialized');
-  },
+  executeTransaction: async () => null,
   isTransacting: false,
-  currentTransaction: null,
+  currentHash: null,
+  error: null
 });
 
-export const TransactionProvider: React.FC<TransactionProviderProps> = ({ 
-  children, 
-  toast 
+export const TransactionProvider: React.FC<TransactionProviderProps> = ({
+  children,
+  toast
 }) => {
-  const [isTransacting, setIsTransacting] = useState(false);
-  const [currentTransaction, setCurrentTransaction] = useState<string | null>(null);
+  const [state, setState] = useState<TransactionState>({
+    isTransacting: false,
+    currentHash: null,
+    error: null
+  });
 
-  const executeTransaction = useCallback(async <T extends ContractTransactionResponse>(
-    chainId: string,
-    transactionFn: () => Promise<T>,
-    options: TransactionOptions = {}
-  ): Promise<T> => {
-    const {
-      successMessage = 'Transaction successful',
-      errorMessage = 'Transaction failed',
-      pendingMessage = 'Transaction pending'
-    } = options;
-
-    setIsTransacting(true);
-    const toastId = 'transaction-status';
-
-    try {
-      // Show pending toast
-      toast({
-        id: toastId,
-        title: 'Confirming Transaction',
-        description: pendingMessage,
-        status: 'info',
-        duration: null,
-        isClosable: false,
+  const executeTransaction = useCallback(
+    async <T extends ContractTransactionResponse>(
+      chainId: string,
+      transactionFn: () => Promise<T>,
+      options: TransactionOptions = {}
+    ): Promise<T | null> => {
+      setState({
+        isTransacting: true,
+        currentHash: null,
+        error: null
       });
 
-      // Execute transaction
-      const tx = await transactionFn();
-      setCurrentTransaction(tx.hash);
+      const toastId = 'transaction-status';
 
-      // Update toast for confirmation
-      toast.update(toastId, {
-        title: 'Waiting for Confirmation',
-        description: `Transaction submitted. Waiting for confirmation...`,
-        status: 'info',
-        duration: null,
-      });
-
-      // Wait for transaction confirmation
-      const receipt = await tx.wait();
-
-      // Close pending toast
-      toast.close(toastId);
-
-      // Check transaction status
-      if (receipt && receipt.status === 1) {
-        // Success toast
+      try {
+        // Initial toast for transaction submission
         toast({
-          title: 'Success',
-          description: successMessage,
-          status: 'success',
-          duration: 5000,
-          isClosable: true,
+          id: toastId,
+          title: 'Confirm Transaction',
+          description: 'Please confirm the transaction in your wallet',
+          status: 'info',
+          duration: null,
+          isClosable: false,
         });
 
-        // Optional: Show transaction hash
-        if (receipt.hash) {
+        // Execute transaction
+        const response = await transactionFn();
+        const hash = response.hash;
+        
+        // Update state with transaction hash
+        setState(prev => ({ ...prev, currentHash: hash }));
+
+        // Update toast to show pending status
+        toast.update(toastId, {
+          title: 'Transaction Pending',
+          description: (
+            <div>
+              <p>Waiting for confirmation...</p>
+              <a
+                href={`${getChainById(chainId).blockExplorers?.default.url}/tx/${hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'blue.500',
+                  marginTop: '8px'
+                }}
+              >
+                View on Explorer <ExternalLink size={14} style={{ marginLeft: 4 }} />
+              </a>
+            </div>
+          ),
+          status: 'loading',
+          duration: null,
+        });
+
+        // Get transaction object and wait for receipt
+        const tx = await response.getTransaction();
+        const receipt = await tx.wait(1);
+
+        // Close the pending toast
+        toast.close(toastId);
+
+        if (receipt.status === 1) {
           toast({
-            title: 'Transaction Details',
-            description: (
-              <React.Fragment>
-                View on Explorer:{' '}
-                <a
-                  href={`https://explorer.testnet.mantle.xyz/tx/${receipt.hash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ 
-                    color: '#553C9A',
-                    textDecoration: 'underline'
-                  }}
-                >
-                  {receipt.hash.slice(0, 6)}...{receipt.hash.slice(-4)}
-                </a>
-              </React.Fragment>
-            ),
-            status: 'info',
-            duration: 8000,
-            isClosable: true,
+            title: 'Transaction Confirmed',
+            description: options.successMessage || 'Transaction successful',
+            status: 'success',
+            duration: 5000,
+            icon: <Check size={16} />,
           });
+
+          if (options.onSuccess) {
+            options.onSuccess();
+          }
+          return response;
+        } else {
+          throw new Error('Transaction failed');
+        }
+      } catch (error: any) {
+        console.error('Transaction error:', error);
+        
+        // Close pending toast if it exists
+        toast.close(toastId);
+
+        // Handle user rejection specifically
+        if (
+          error.code === 'ACTION_REJECTED' || 
+          error.code === 4001 ||
+          error.message?.toLowerCase().includes('user rejected') ||
+          error.message?.toLowerCase().includes('user denied')
+        ) {
+          toast({
+            title: 'Transaction Cancelled',
+            description: 'You rejected the transaction',
+            status: 'warning',
+            duration: 5000,
+            icon: <AlertTriangle size={16} />,
+          });
+          return null;
         }
 
-        return tx;
-      } else {
-        throw new Error('Transaction failed');
+        const errorMessage = formatTransactionError(error);
+        setState(prev => ({ ...prev, error: new Error(errorMessage) }));
+
+        toast({
+          title: 'Transaction Failed',
+          description: options.errorMessage || errorMessage,
+          status: 'error',
+          duration: 5000,
+          icon: <AlertTriangle size={16} />,
+        });
+
+        return null;
+      } finally {
+        setState(prev => ({
+          ...prev,
+          isTransacting: false,
+          currentHash: null
+        }));
       }
-    } catch (error) {
-      // Close pending toast
-      toast.close(toastId);
-
-      // Show error toast
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : errorMessage,
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-
-      throw error;
-    } finally {
-      setIsTransacting(false);
-      setCurrentTransaction(null);
-    }
-  }, [toast]);
-
-  const value = {
-    executeTransaction,
-    isTransacting,
-    currentTransaction,
-  };
+    },
+    [toast]
+  );
 
   return (
-    <TransactionContext.Provider value={value}>
+    <TransactionContext.Provider
+      value={{
+        executeTransaction,
+        isTransacting: state.isTransacting,
+        currentHash: state.currentHash,
+        error: state.error
+      }}
+    >
       {children}
     </TransactionContext.Provider>
   );
 };
 
+export const useContractOperation = (contractName: keyof typeof deployments) => {
+  const { getEthersProvider } = usePrivy();
+  const context = useContext(TransactionContext);
+
+  return useCallback(
+    async (
+      chainId: string,
+      methodName: string,
+      args: any[],
+      options?: TransactionOptions
+    ) => {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments[contractName][cleanChainId];
+
+      if (!contractAddress) {
+        console.error(`No ${contractName} contract found for chain ${chainId}`);
+        return null;
+      }
+
+      return context.executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs[contractName],
+            signer
+          );
+
+          // Prepare transaction options
+          let txOptions = {};
+          if (options?.gasLimit) {
+            txOptions = { gasLimit: options.gasLimit };
+          } else {
+            try {
+              const estimatedGas = await contract[methodName].estimateGas(...args);
+              const multiplier = options?.gasLimitMultiplier || 1.2;
+              txOptions = {
+                gasLimit: Math.floor(Number(estimatedGas) * multiplier)
+              };
+            } catch (error) {
+              console.warn('Gas estimation failed, using default gas limit');
+              txOptions = { gasLimit: 500000 }; // Default fallback
+            }
+          }
+
+          return await contract[methodName](...args, txOptions);
+        },
+        options
+      );
+    },
+    [contractName, getEthersProvider]
+  );
+};
+
 export const useTransaction = () => {
   const context = useContext(TransactionContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useTransaction must be used within a TransactionProvider');
   }
   return context;
 };
 
-// Helper type for transaction status
-export type TransactionStatus = 'pending' | 'mining' | 'success' | 'error';
-
-// Custom error type for transaction failures
-export class TransactionError extends Error {
-  constructor(
-    message: string,
-    public readonly code?: string,
-    public readonly receipt?: any
+const formatTransactionError = (error: any): string => {
+  // Handle user rejection cases
+  if (
+    error?.code === 'ACTION_REJECTED' || 
+    error?.code === 4001 ||
+    error?.message?.toLowerCase().includes('user rejected') ||
+    error?.message?.toLowerCase().includes('user denied')
   ) {
-    super(message);
-    this.name = 'TransactionError';
-  }
-}
-
-// Helper function to format transaction errors
-export const formatTransactionError = (error: any): string => {
-  if (error instanceof TransactionError) {
-    return error.message;
+    return 'Transaction was rejected';
   }
 
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  if (error?.message) {
-    // Handle common error messages
-    if (error.message.includes('user rejected transaction')) {
-      return 'Transaction was rejected by the user';
-    }
-    if (error.message.includes('insufficient funds')) {
+  // Handle specific error codes
+  switch (error?.code) {
+    case 'INSUFFICIENT_FUNDS':
       return 'Insufficient funds to complete the transaction';
-    }
-    if (error.message.includes('gas required exceeds allowance')) {
-      return 'Transaction would exceed gas limit';
-    }
-    return error.message;
+    case 'UNPREDICTABLE_GAS_LIMIT':
+      return 'Unable to estimate gas limit. The transaction may fail';
+    case 'CALL_EXCEPTION':
+      return 'Transaction would fail. Please check your inputs';
+    default:
+      break;
   }
 
-  return 'An unknown error occurred';
-};
-
-// Utility function to get explorer URL based on chainId
-export const getExplorerUrl = (chainId: string, hash: string): string => {
-  const cleanChainId = chainId.replace('eip155:', '');
+  // Handle common error messages
+  const message = error?.message?.toLowerCase() || '';
+  if (message.includes('gas required exceeds allowance')) {
+    return 'Transaction would exceed gas limit';
+  }
+  if (message.includes('insufficient funds')) {
+    return 'Insufficient funds to complete the transaction';
+  }
+  if (message.includes('nonce too low')) {
+    return 'Please wait for your previous transaction to complete';
+  }
+  if (message.includes('replacement fee too low')) {
+    return 'Gas price too low. Please try again with a higher gas price';
+  }
   
-  // Add more explorers as needed
-  const explorers: Record<string, string> = {
-    '167009': 'https://explorer.testnet.mantle.xyz',
-    '84532': 'https://base-sepolia.blockscout.com',
-    '11155420': 'https://sepolia-optimism.etherscan.io',
-  };
-
-  const baseUrl = explorers[cleanChainId] || explorers['167009']; // Default to Taiko testnet
-  return `${baseUrl}/tx/${hash}`;
+  return error?.message || 'An error occurred while processing the transaction';
 };
 
-export default TransactionContext;
+const getExplorerLink = (chainId: string, hash: string): string => {
+  const chain = getChainById(chainId);
+  return `${chain.blockExplorers?.default.url}/tx/${hash}`;
+};
+
+export {
+  TransactionContext,
+  formatTransactionError,
+  getExplorerLink
+};

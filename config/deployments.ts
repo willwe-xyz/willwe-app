@@ -44,6 +44,7 @@ export const deployments: Deployments = {
  */
 export function getChainById(chainId: string): Chain {
     if (! chainId)   throw new Error(`Unproper provided chain id ${chainId}`);
+    chainId =  (chainId.includes(":")) ? chainId.split(":")[1] : chainId;
   for (const chain of Object.values(chains)) {
     if ('id' in chain) {
       if (chain.id === Number(chainId)) {

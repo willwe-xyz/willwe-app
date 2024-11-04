@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
+  Box,
   VStack,
   HStack,
-  Box,
-  Button,
   FormControl,
   FormLabel,
   Input,
+  Button,
   Table,
   Thead,
   Tbody,
@@ -17,452 +17,366 @@ import {
   AlertIcon,
   Progress,
   Text,
+  Badge,
   useToast,
   Link,
-  InputGroup,
-  InputRightElement,
   IconButton,
-  Badge,
   Code,
+  Tooltip,
   Divider,
 } from '@chakra-ui/react';
 import { usePrivy } from "@privy-io/react-auth";
-import { 
-  Trash2, 
-  Plus, 
-  ExternalLink, 
-  Copy, 
-  Check, 
-  Link as LinkIcon,
+import {
+  Trash2,
+  Plus,
+  ExternalLink,
+  Copy,
+  Check,
   AlertTriangle,
-  RefreshCw,
+  Info,
 } from 'lucide-react';
-import { isAddress } from 'viem';
 import { ethers } from 'ethers';
-import { useTransaction } from '../contexts/TransactionContext';
-import { useContractOperation } from '../hooks/useContractOperation';
-import { deployments } from '../config/contracts';
+import { useMembraneOperations } from '../hooks/useMembraneOperations';
 import { validateToken } from '../utils/tokenValidation';
-
-interface EntityData {
-  entityName: string;
-  characteristics: {
-    title: string;
-    link: string;
-  }[];
-  membershipConditions: {
-    tokenAddress: string;
-    requiredBalance: string;
-    symbol?: string;
-  }[];
-}
+import { getExplorerLink } from '../config/contracts';
 
 interface DefineEntityProps {
   chainId: string;
-  onSubmit?: (data: EntityData) => void;
+  onSubmit?: () => void;
 }
 
-export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
-  // State
+interface CreationResult {
+  membraneId?: string;
+  tokenAddress?: string;
+  txHash: string;
+  timestamp: number;
+}
+
+interface Characteristic {
+  title: string;
+  link: string;
+}
+
+interface MembershipCondition {
+  tokenAddress: string;
+  requiredBalance: string;
+  symbol?: string;
+}
+
+interface EntityMetadata {
+  name: string;
+  characteristics: Characteristic[];
+  membershipConditions: MembershipCondition[];
+}
+
+export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit }) => {
+  // Form state
   const [entityName, setEntityName] = useState('');
-  const [characteristicTitle, setCharacteristicTitle] = useState('');
-  const [characteristicLink, setCharacteristicLink] = useState('');
-  const [characteristics, setCharacteristics] = useState<{title: string; link: string}[]>([]);
-  const [tokenAddress, setTokenAddress] = useState('');
-  const [requiredBalance, setRequiredBalance] = useState('');
-  const [membershipConditions, setMembershipConditions] = useState<{
-    tokenAddress: string;
-    requiredBalance: string;
-    symbol?: string;
-  }[]>([]);
-  const [submissionState, setSubmissionState] = useState<'idle' | 'ipfs' | 'transaction' | 'complete'>('idle');
+  const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
+  const [newCharTitle, setNewCharTitle] = useState('');
+  const [newCharLink, setNewCharLink] = useState('');
+  const [membershipConditions, setMembershipConditions] = useState<MembershipCondition[]>([]);
+  const [newTokenAddress, setNewTokenAddress] = useState('');
+  const [newTokenBalance, setNewTokenBalance] = useState('');
+  const [predictedMembraneId, setPredictedMembraneId] = useState<string | null>(null);
+
+  // Transaction state
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ipfsCid, setIpfsCid] = useState<string>('');
-  const [membraneId, setMembraneId] = useState<string>('');
-  const [isValidatingToken, setIsValidatingToken] = useState(false);
-  const [hasCopied, setHasCopied] = useState(false);
-  const [transactionHash, setTransactionHash] = useState<string>('');
+  const [creationResult, setCreationResult] = useState<CreationResult | null>(null);
+  const [validatingToken, setValidatingToken] = useState(false);
 
   // Hooks
-  const { user, authenticated, ready } = usePrivy();
-  const { isTransacting } = useTransaction();
-  const executeOperation = useContractOperation({
-    contractName: 'Membrane',
-    successMessage: 'Entity created successfully'
-  });
+  const { authenticated, ready } = usePrivy();
   const toast = useToast();
+  const { createMembrane } = useMembraneOperations(chainId);
 
-  // Clean chainId
-  const cleanChainId = chainId.includes('eip155:') ? chainId.replace('eip155:', '') : chainId;
-
-  // Handle token validation
-  const handleTokenAddressChange = useCallback(async (address: string) => {
-    setTokenAddress(address);
-    if (!isAddress(address)) return;
-
-    setIsValidatingToken(true);
+  // Calculate membrane ID based on current conditions
+  const calculateMembraneId = useCallback(async () => {
     try {
-      const tokenInfo = await validateToken(address, cleanChainId);
-      if (!tokenInfo) {
-        toast({
-          title: "Invalid Token",
-          description: "Please enter a valid ERC20 token address",
-          status: "error",
-          duration: 3000,
-        });
+      if (!entityName || membershipConditions.length === 0) {
+        setPredictedMembraneId(null);
+        return null;
       }
+
+      // Prepare metadata
+      const metadata: EntityMetadata = {
+        name: entityName,
+        characteristics,
+        membershipConditions
+      };
+
+      // Prepare exact input format matching contract
+      const struct = {
+        tokens: membershipConditions.map(mc => mc.tokenAddress.toLowerCase()),
+        balances: membershipConditions.map(mc => ethers.parseUnits(mc.requiredBalance, 18).toString()),
+        meta: JSON.stringify(metadata)
+      };
+
+      // Important: Match exact contract encoding structure
+      const abiCoder = new ethers.AbiCoder();
+      const encodedData = abiCoder.encode(
+        ['tuple(address[] tokens, uint256[] balances, string meta)'],
+        [struct]
+      );
+
+      // Get keccak256 hash and convert to decimal string
+      const hash = ethers.keccak256(encodedData);
+      const membraneId = ethers.toBigInt(hash).toString();
+
+      setPredictedMembraneId(membraneId);
+      return membraneId;
+
     } catch (error) {
-      console.error('Token validation error:', error);
-    } finally {
-      setIsValidatingToken(false);
+      console.error('Error calculating membrane ID:', error);
+      setPredictedMembraneId(null);
+      return null;
     }
-  }, [cleanChainId, toast]);
+  }, [entityName, characteristics, membershipConditions]);
 
-  // Handle characteristics
-  const addCharacteristic = useCallback(() => {
-    if (characteristicTitle && characteristicLink) {
-      setCharacteristics(prev => [...prev, { 
-        title: characteristicTitle, 
-        link: characteristicLink 
-      }]);
-      setCharacteristicTitle('');
-      setCharacteristicLink('');
+  // Update predicted membrane ID when conditions change
+  useEffect(() => {
+    calculateMembraneId();
+  }, [calculateMembraneId]);
+
+  // Token validation and handling
+  const validateAndAddToken = useCallback(async () => {
+    if (!newTokenAddress || !newTokenBalance) {
+      toast({
+        title: 'Error',
+        description: 'Both token address and balance are required',
+        status: 'error',
+        duration: 3000
+      });
+      return;
     }
-  }, [characteristicTitle, characteristicLink]);
 
-  const removeCharacteristic = useCallback((index: number) => {
-    setCharacteristics(prev => prev.filter((_, i) => i !== index));
-  }, []);
-
-  // Handle membership conditions
-  const addMembershipCondition = useCallback(async () => {
-    if (!tokenAddress || !requiredBalance) return;
-
+    setValidatingToken(true);
     try {
-      const tokenInfo = await validateToken(tokenAddress, cleanChainId);
-      if (!tokenInfo) {
-        throw new Error("Invalid token address");
+      const tokenInfo = await validateToken(newTokenAddress, chainId);
+      if (!tokenInfo) throw new Error('Invalid token address');
+
+      // Check for duplicate token
+      const isDuplicate = membershipConditions.some(
+        mc => mc.tokenAddress.toLowerCase() === newTokenAddress.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        throw new Error('Token already added to conditions');
       }
 
       setMembershipConditions(prev => [...prev, {
-        tokenAddress,
-        requiredBalance,
+        tokenAddress: newTokenAddress.toLowerCase(),
+        requiredBalance: newTokenBalance,
         symbol: tokenInfo.symbol
       }]);
 
-      setTokenAddress('');
-      setRequiredBalance('');
-    } catch (error) {
+      setNewTokenAddress('');
+      setNewTokenBalance('');
+
       toast({
-        title: "Error",
-        description: "Failed to validate token",
-        status: "error",
-        duration: 3000,
+        title: 'Success',
+        description: `Added ${tokenInfo.symbol} token requirement`,
+        status: 'success',
+        duration: 2000
       });
+
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 3000
+      });
+    } finally {
+      setValidatingToken(false);
     }
-  }, [tokenAddress, requiredBalance, cleanChainId, toast]);
+  }, [newTokenAddress, newTokenBalance, chainId, membershipConditions, toast]);
 
-  const removeMembershipCondition = useCallback((index: number) => {
-    setMembershipConditions(prev => prev.filter((_, i) => i !== index));
-  }, []);
+  // Characteristic handling
+  const addCharacteristic = useCallback(() => {
+    if (!newCharTitle || !newCharLink) {
+      toast({
+        title: 'Error',
+        description: 'Both title and link are required',
+        status: 'error',
+        duration: 3000
+      });
+      return;
+    }
 
-  // Handle submission
+    setCharacteristics(prev => [...prev, {
+      title: newCharTitle,
+      link: newCharLink
+    }]);
+
+    setNewCharTitle('');
+    setNewCharLink('');
+  }, [newCharTitle, newCharLink, toast]);
+
+  // Form submission
   const handleSubmit = async () => {
     if (!authenticated || !ready) {
       toast({
-        title: "Error",
-        description: "Please connect your wallet first",
-        status: "error",
+        title: 'Error',
+        description: 'Please connect your wallet first',
+        status: 'error',
         duration: 3000,
       });
       return;
     }
 
+    if (!entityName || membershipConditions.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Entity name and at least one membership condition are required',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
     try {
-      setSubmissionState('ipfs');
-      
-      // Prepare and upload metadata
-      const metadata = {
+      // Prepare metadata
+      const metadata: EntityMetadata = {
         name: entityName,
         characteristics,
-        membershipConditions: membershipConditions.map(({ tokenAddress, requiredBalance }) => ({
-          tokenAddress,
-          requiredBalance
-        }))
+        membershipConditions
       };
 
+      // Upload to IPFS
       const response = await fetch('/api/upload-to-ipfs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: metadata }),
       });
 
-      if (!response.ok) throw new Error('Failed to upload to IPFS');
+      if (!response.ok) throw new Error('Failed to upload metadata');
       const { cid } = await response.json();
-      setIpfsCid(cid);
-      
-      setSubmissionState('transaction');
 
-      // Execute contract operation
-      const tokens = membershipConditions.map(c => c.tokenAddress);
-      const balances = membershipConditions.map(c => c.requiredBalance);
-
-      const tx = await executeOperation(
-        cleanChainId,
-        'createMembrane',
-        [tokens, balances, cid],
-        { gasLimit: 500000 }
+      // Prepare transaction parameters
+      const tokens = membershipConditions.map(mc => mc.tokenAddress.toLowerCase());
+      const balances = membershipConditions.map(mc => 
+        ethers.parseUnits(mc.requiredBalance, 18).toString()
       );
 
-      setTransactionHash(tx.hash);
+      // Create membrane
+      const tx = await createMembrane(tokens, balances, cid);
       const receipt = await tx.wait();
 
-      if (receipt.status === 1) {
-        const membraneAddress = deployments.Membrane[cleanChainId];
-        const membraneEvent = receipt.logs.find(log => 
-          log.topics[0] === ethers.id('MembraneCreated(uint256,string)')
-        );
+      // Extract membrane ID from event
+      const membraneCreatedEvent = receipt.logs.find(
+        log => log.topics[0] === ethers.id("MembraneCreated(uint256,string)")
+      );
 
-        if (membraneEvent) {
-          const createdMembraneId = ethers.decodeEventLog(
-            ['uint256', 'string'],
-            membraneEvent.data,
-            membraneEvent.topics
-          )[0].toString();
-
-          setMembraneId(createdMembraneId);
-          setSubmissionState('complete');
-
-          toast({
-            title: "Success",
-            description: "Entity created successfully",
-            status: "success",
-            duration: 5000,
-          });
-        }
+      if (!membraneCreatedEvent) {
+        throw new Error('Failed to get membrane ID from transaction');
       }
-    } catch (error: any) {
-      console.error('Error creating entity:', error);
-      setError(error.message || 'Transaction failed');
-      setSubmissionState('idle');
-      
+
+      const [actualMembraneId] = ethers.AbiCoder.defaultAbiCoder().decode(
+        ['uint256', 'string'],
+        membraneCreatedEvent.data
+      );
+
+      setCreationResult({
+        membraneId: actualMembraneId.toString(),
+        txHash: tx.hash,
+        timestamp: Date.now()
+      });
+
       toast({
-        title: "Error",
-        description: error.message || "Failed to create entity",
-        status: "error",
+        title: 'Success',
+        description: 'Entity created successfully',
+        status: 'success',
         duration: 5000,
+        icon: <Check size={16} />
       });
+
+      if (onSubmit) {
+        onSubmit();
+      }
+
+    } catch (error: any) {
+      console.error('Entity creation error:', error);
+      setError(error.message);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        icon: <AlertTriangle size={16} />
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  // Reset form on completion
-  useEffect(() => {
-    if (submissionState === 'complete') {
-      const timer = setTimeout(() => {
-        setEntityName('');
-        setCharacteristics([]);
-        setMembershipConditions([]);
-        setError(null);
-        setSubmissionState('idle');
-        setIpfsCid('');
-        setMembraneId('');
-        setTransactionHash('');
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [submissionState]);
-
-  // Copy to clipboard
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setHasCopied(true);
-      toast({
-        title: "Copied to clipboard",
-        status: "success",
-        duration: 2000,
-      });
-      setTimeout(() => setHasCopied(false), 2000);
-    } catch (err) {
-      toast({
-        title: "Failed to copy",
-        description: "Please try copying manually",
-        status: "error",
-        duration: 2000,
-      });
-    }
-  };
-
-  // Compute states
-  const isLoading = submissionState !== 'idle' && submissionState !== 'complete' || isTransacting;
-  const isSubmitDisabled = !entityName || 
-    characteristics.length === 0 || 
-    membershipConditions.length === 0 || 
-    isLoading || 
-    !authenticated || 
-    !ready;
 
   return (
-    <Box p={6} bg="white" borderRadius="lg" shadow="sm">
-      <VStack spacing={6} align="stretch">
-        {/* Entity Name */}
-        <FormControl isRequired>
-          <FormLabel>Entity Name</FormLabel>
-          <Input
-            value={entityName}
-            onChange={(e) => setEntityName(e.target.value)}
-            placeholder="Enter entity name"
-            isDisabled={isLoading}
-          />
-        </FormControl>
-
-        {/* Characteristics */}
-        <Box p={4} bg="gray.50" borderRadius="md">
-          <FormLabel>Characteristics</FormLabel>
-          <VStack spacing={4}>
-            <HStack width="full">
+    <Box display="flex" flexDirection="column" height="calc(100vh - 200px)">
+      <Box overflowY="auto" flex="1" pb="200px">
+        <Box p={6}>
+          <VStack spacing={6} align="stretch">
+            {/* Entity Name */}
+            <FormControl isRequired>
+              <FormLabel>Entity Name</FormLabel>
               <Input
-                placeholder="Title"
-                value={characteristicTitle}
-                onChange={(e) => setCharacteristicTitle(e.target.value)}
-                isDisabled={isLoading}
+                value={entityName}
+                onChange={(e) => setEntityName(e.target.value)}
+                placeholder="Enter entity name"
               />
-              <Input
-                placeholder="Link"
-                value={characteristicLink}
-                onChange={(e) => setCharacteristicLink(e.target.value)}
-                isDisabled={isLoading}
-              />
-              <IconButton
-                aria-label="Add characteristic"
-                icon={<Plus size={16} />}
-                onClick={addCharacteristic}
-                isDisabled={!characteristicTitle || !characteristicLink || isLoading}
-                colorScheme="purple"
-              />
-            </HStack>
+            </FormControl>
 
-            {characteristics.length > 0 && (
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>Title</Th>
-                    <Th>Link</Th>
-                    <Th width="50px"></Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {characteristics.map((char, index) => (
-                    <Tr key={index}>
-                      <Td>{char.title}</Td>
-                      <Td>
-                        <Link
-                          href={char.link}
-                          isExternal
-                          color="blue.500"
-                          display="flex"
-                          alignItems="center"
-                        >
-                          {char.link.length > 30 ? 
-                            `${char.link.substring(0, 30)}...` : 
-                            char.link}
-                          <ExternalLink size={14} className="ml-1" />
-                        </Link>
-                      </Td>
-                      <Td>
-                        <IconButton
-                          aria-label="Remove characteristic"
-                          icon={<Trash2 size={14} />}
-                          size="sm"
-                          colorScheme="red"
-                          variant="ghost"
-                          onClick={() => removeCharacteristic(index)}
-                          isDisabled={isLoading}
-                        />
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            )}
-          </VStack>
-        </Box>
-
-        {/* Membership Conditions */}
-        <Box p={4} bg="gray.50" borderRadius="md">
-          <FormLabel>Membership Conditions</FormLabel>
-          <VStack spacing={4}>
-            <HStack width="full">
-              <InputGroup>
+            {/* Characteristics Section */}
+            <Box>
+              <FormLabel>Characteristics</FormLabel>
+              <HStack mb={4}>
                 <Input
-                  placeholder="Token Address"
-                  value={tokenAddress}
-                  onChange={(e) => handleTokenAddressChange(e.target.value)}
-                  isDisabled={isLoading || isValidatingToken}
+                  placeholder="Title"
+                  value={newCharTitle}
+                  onChange={(e) => setNewCharTitle(e.target.value)}
                 />
-                {isValidatingToken && (
-                  <InputRightElement>
-                    <RefreshCw size={16} className="animate-spin" />
-                  </InputRightElement>
-                )}
-              </InputGroup>
-              <Input
-                placeholder="Required Balance"
-                value={requiredBalance}
-                type="number"
-                onChange={(e) => setRequiredBalance(e.target.value)}
-                isDisabled={isLoading || isValidatingToken}
-              />
-              <IconButton
-                aria-label="Add condition"
-                icon={<Plus size={16} />}
-                onClick={addMembershipCondition}
-                isDisabled={!tokenAddress || !requiredBalance || isLoading || isValidatingToken}
-                colorScheme="purple"
-              />
-            </HStack>
+                <Input
+                  placeholder="Link"
+                  value={newCharLink}
+                  onChange={(e) => setNewCharLink(e.target.value)}
+                />
+                <IconButton
+                  aria-label="Add characteristic"
+                  icon={<Plus size={20} />}
+                  onClick={addCharacteristic}
+                  isDisabled={!newCharTitle || !newCharLink}
+                />
+              </HStack>
 
-            {membershipConditions.length > 0 && (
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th>Token</Th>
-                    <Th>Required Balance</Th>
-                    <Th width="50px"></Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {membershipConditions.map((condition, index) => (
-                    <Tr key={index}>
-                      <Td>
-                        <HStack spacing={2}>
-                          <Badge colorScheme="purple">
-                            {condition.symbol || 'Token'}
-                          </Badge>
-                          <Text fontSize="sm" color="gray.500">
-                            {condition.tokenAddress.slice(0, 6)}...
-                            {condition.tokenAddress.slice(-4)}
-                          </Text>
+              {characteristics.length > 0 && (
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Title</Th>
+                      <Th>Link</Th>
+                      <Th width="50px"></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {characteristics.map((char, idx) => (
+                      <Tr key={idx}>
+                        <Td>{char.title}</Td>
+                        <Td>
+                          <Link href={char.link} isExternal color="purple.500">
+                            {char.link.substring(0, 30)}...
+                            <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
+                          </Link>
+                        </Td>
+                        <Td>
                           <IconButton
-                            aria-label="Copy address"
-                            icon={<Copy size={14} />}
-                            size="xs"
+                            aria-label="Remove"
+                            icon={<Trash2 size={16} />}
+                            size="sm"
                             variant="ghost"
-                            onClick={() => copyToClipboard(condition.tokenAddress)}
-                          />
-                        </HStack>
-                      </Td>
-                      <Td isNumeric>{condition.requiredBalance}</Td>
-                      <Td>
-                        <IconButton
-                          aria-label="Remove condition"
-                          icon={<Trash2 size={14} />}
-                          size="sm"
-                          colorScheme="red"
-                          variant="ghost"
-                          onClick={() => removeMembershipCondition(index)}
-                          isDisabled={isLoading}
+                            onClick={() => setCharacteristics(prev => prev.filter((_, i) => i !== idx))}
                           />
                         </Td>
                       </Tr>
@@ -470,156 +384,256 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId }) => {
                   </Tbody>
                 </Table>
               )}
-            </VStack>
-          </Box>
-  
-          {/* Error Display */}
-          {error && (
-            <Alert status="error" variant="left-accent">
-              <AlertIcon as={AlertTriangle} />
-              <VStack align="start" spacing={1}>
-                <Text fontWeight="medium">Error creating entity</Text>
-                <Text fontSize="sm">{error}</Text>
-              </VStack>
-            </Alert>
-          )}
-  
-          {/* Progress Indicator */}
-          {submissionState !== 'idle' && submissionState !== 'complete' && (
-            <Box>
-              <Progress 
-                size="xs" 
-                isIndeterminate={submissionState === 'transaction'}
-                value={submissionState === 'ipfs' ? 33 : 66}
-                colorScheme="purple"
-              />
-              <Text mt={2} fontSize="sm" textAlign="center" color="gray.600">
-                {submissionState === 'ipfs' ? 'Uploading to IPFS...' :
-                 submissionState === 'transaction' ? 'Creating membrane...' : ''}
-              </Text>
             </Box>
-          )}
-  
-          {/* Success State */}
-          {submissionState === 'complete' && (
-            <Alert
-              status="success"
-              variant="subtle"
-              flexDirection="column"
-              alignItems="flex-start"
-              p={4}
-              borderRadius="md"
-            >
-              <VStack align="start" spacing={4} w="100%">
+
+            {/* Membership Conditions Section */}
+            <Box>
+              <FormLabel>
                 <HStack>
-                  <AlertIcon />
-                  <Text fontWeight="bold">Entity created successfully!</Text>
+                  <Text>Membership Conditions</Text>
+                  <Tooltip label="Add token requirements for membership">
+                    <span>
+                      <Info size={14} />
+                    </span>
+                  </Tooltip>
                 </HStack>
-                
-                {/* Membrane ID */}
-                {membraneId && (
-                  <Box bg="gray.50" p={4} borderRadius="md" w="100%">
-                    <FormControl>
-                      <FormLabel>Membrane ID</FormLabel>
-                      <InputGroup>
-                        <Input
-                          value={membraneId}
-                          isReadOnly
-                          pr="4.5rem"
-                          fontFamily="mono"
-                          bg="white"
-                        />
-                        <InputRightElement width="4.5rem">
-                          <Button
-                            h="1.75rem"
+              </FormLabel>
+              <HStack mb={4}>
+                <Input
+                  placeholder="Token Address"
+                  value={newTokenAddress}
+                  onChange={(e) => setNewTokenAddress(e.target.value)}
+                />
+                <Input
+                  placeholder="Required Balance"
+                  value={newTokenBalance}
+                  type="number"
+                  onChange={(e) => setNewTokenBalance(e.target.value)}
+                />
+                <IconButton
+                  aria-label="Add condition"
+                  icon={<Plus size={20} />}
+                  onClick={validateAndAddToken}
+                  isLoading={validatingToken}
+                  isDisabled={!newTokenAddress || !newTokenBalance || validatingToken}
+                />
+              </HStack>
+
+              {membershipConditions.length > 0 && (
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Token</Th>
+                      <Th>Required Balance</Th>
+                      <Th width="50px"></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {membershipConditions.map((condition, idx) => (
+                      <Tr key={idx}>
+                        <Td>
+                          <HStack>
+                            <Badge colorScheme="purple">{condition.symbol || 'Token'}</Badge>
+                            <Text fontSize="sm">
+                              {condition.tokenAddress.slice(0, 6)}...{condition.tokenAddress.slice(-4)}
+                            </Text>
+                            <IconButton
+                              aria-label="Copy address"
+                              icon={<Copy size={12} />}
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => {
+                                navigator.clipboard.writeText(condition.tokenAddress);
+                                toast({
+                                  title: 'Copied',
+                                  status: 'success',
+                                  duration: 2000
+                                });
+                              }}
+                            />
+                          </HStack>
+                        </Td>
+                        <Td>{condition.requiredBalance}</Td>
+                        <Td>
+                          <IconButton
+                            aria-label="Remove"
+                            icon={<Trash2 size={16} />}
                             size="sm"
-                            onClick={() => copyToClipboard(membraneId)}
-                            leftIcon={hasCopied ? <Check size={12} /> : <Copy size={12} />}
-                          >
-                            {hasCopied ? 'Copied!' : 'Copy'}
-                          </Button>
-                        </InputRightElement>
-                      </InputGroup>
-                    </FormControl>
-                  </Box>
-                )}
-  
-                {/* Transaction Details */}
-                {transactionHash && (
-                  <Box bg="gray.50" p={4} borderRadius="md" w="100%">
-                    <Text fontSize="sm" fontWeight="medium" mb={2}>
-                      Transaction Details:
+                            variant="ghost"
+                            onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
+                          />
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              )}
+            </Box>
+
+            {/* Predicted Membrane ID */}
+            {predictedMembraneId && (
+              <Alert status="info">
+                <AlertIcon />
+                <VStack align="start" spacing={1}>
+                  <Text fontWeight="medium">Predicted Membrane ID:</Text>
+                  <Code fontSize="sm">{predictedMembraneId}</Code>
+                </VStack>
+              </Alert>
+            )}
+
+            {/* Error Display */}
+{/* Error Display */}
+{error && (
+              <Alert status="error" variant="left-accent">
+                <AlertIcon />
+                <VStack align="start" spacing={1}>
+                  <Text fontWeight="medium">Error creating entity:</Text>
+                  <Text fontSize="sm">{error}</Text>
+                </VStack>
+              </Alert>
+            )}
+
+            {/* Creation Result */}
+            {creationResult && creationResult.membraneId && (
+              <Box 
+                borderWidth="1px" 
+                borderRadius="lg" 
+                p={4} 
+                bg="gray.50"
+                position="relative"
+                overflow="hidden"
+              >
+                <VStack align="stretch" spacing={3}>
+                  <HStack justify="space-between">
+                    <Text fontWeight="bold" color="green.600">
+                      <Check size={16} style={{ display: 'inline', marginRight: '8px' }} />
+                      Entity Created Successfully
                     </Text>
-                    <Text fontSize="sm" mb={2}>
-                      Hash: <Code>{transactionHash}</Code>
-                    </Text>
-                    <Link
-                      href={`https://explorer.testnet.mantle.xyz/tx/${transactionHash}`}
-                      isExternal
-                      color="purple.500"
-                      fontSize="sm"
-                      display="flex"
-                      alignItems="center"
+                    <Badge 
+                      colorScheme="purple"
+                      px={3}
+                      py={1}
+                      borderRadius="full"
                     >
-                      View on Explorer <ExternalLink size={14} className="ml-1" />
-                    </Link>
-                  </Box>
-                )}
-  
-                {/* IPFS Link */}
-                {ipfsCid && (
-                  <Box bg="gray.50" p={4} borderRadius="md" w="100%">
-                    <Text fontSize="sm" fontWeight="medium" mb={2}>
-                      IPFS Details:
-                    </Text>
-                    <Link
-                      href={`https://underlying-tomato-locust.myfilebase.com/ipfs/${ipfsCid}`}
-                      isExternal
-                      color="purple.500"
-                      fontSize="sm"
-                      display="flex"
-                      alignItems="center"
-                    >
-                      View Metadata <ExternalLink size={14} className="ml-1" />
-                    </Link>
-                  </Box>
-                )}
-  
-                <Divider />
-  
-                {/* Usage Instructions */}
-                <Box>
-                  <Text fontSize="sm" fontWeight="medium" mb={2}>
-                    Next Steps:
-                  </Text>
-                  <VStack align="start" spacing={1}>
-                    <Text fontSize="sm">• Use this Membrane ID when spawning nodes</Text>
-                    <Text fontSize="sm">• Set as membrane via signal</Text>
-                    <Text fontSize="sm">• Share with other members</Text>
+                      ID: {creationResult.membraneId}
+                    </Badge>
+                  </HStack>
+                  
+                  <Divider />
+                  
+                  <VStack align="stretch" spacing={2}>
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Name:</Text>
+                      <Text>{entityName}</Text>
+                    </HStack>
+
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Conditions:</Text>
+                      <Text>{membershipConditions.length} token requirement(s)</Text>
+                    </HStack>
+
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Transaction:</Text>
+                      <Link 
+                        href={getExplorerLink(chainId, creationResult.txHash)} 
+                        isExternal
+                        color="purple.500"
+                        display="flex"
+                        alignItems="center"
+                      >
+                        View on Explorer
+                        <ExternalLink size={14} style={{ marginLeft: '4px' }} />
+                      </Link>
+                    </HStack>
+                    
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Membrane ID:</Text>
+                      <HStack>
+                        <Code>{creationResult.membraneId}</Code>
+                        <IconButton
+                          aria-label="Copy membrane ID"
+                          icon={<Copy size={14} />}
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => {
+                            navigator.clipboard.writeText(creationResult.membraneId!);
+                            toast({
+                              title: 'Copied',
+                              description: 'Membrane ID copied to clipboard',
+                              status: 'success',
+                              duration: 2000,
+                            });
+                          }}
+                        />
+                      </HStack>
+                    </HStack>
                   </VStack>
-                </Box>
-              </VStack>
-            </Alert>
-          )}
-  
-          {/* Submit Button */}
-          <Button
-            colorScheme="purple"
-            onClick={handleSubmit}
-            isLoading={isLoading}
-            loadingText={
-              submissionState === 'ipfs' ? 'Uploading to IPFS...' :
-              submissionState === 'transaction' ? 'Creating Membrane...' :
-              'Creating Entity'
-            }
-            isDisabled={isSubmitDisabled}
-            size="lg"
-          >
-            Create Entity
-          </Button>
-        </VStack>
+
+                  <Text fontSize="sm" color="gray.500" textAlign="right">
+                    Created {new Date(creationResult.timestamp).toLocaleString()}
+                  </Text>
+                </VStack>
+              </Box>
+            )}
+          </VStack>
+        </Box>
       </Box>
-    );
-  };
-  
-  export default DefineEntity;
+
+      {/* Fixed Footer with Submit Button */}
+      <Box
+        position="fixed"
+        bottom={0}
+        left={0}
+        right={0}
+        p={6}
+        borderTop="1px solid"
+        borderColor="gray.200"
+        bg="white"
+        zIndex={2}
+      >
+        <Button
+          colorScheme="purple"
+          onClick={handleSubmit}
+          isLoading={isLoading}
+          loadingText="Creating Entity..."
+          isDisabled={
+            !entityName || 
+            membershipConditions.length === 0 || 
+            isLoading ||
+            !authenticated ||
+            !ready
+          }
+          width="100%"
+          size="lg"
+        >
+          {!authenticated || !ready 
+            ? 'Connect Wallet to Continue'
+            : isLoading 
+              ? 'Creating Entity...'
+              : 'Create Entity'
+          }
+        </Button>
+        {isLoading && (
+          <Box mt={2}>
+            <Progress 
+              size="xs" 
+              isIndeterminate 
+              colorScheme="purple" 
+              borderRadius="full"
+            />
+            <Text
+              fontSize="sm"
+              color="gray.600"
+              textAlign="center"
+              mt={1}
+            >
+              Please confirm the transaction in your wallet
+            </Text>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
+export default DefineEntity;

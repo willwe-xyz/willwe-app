@@ -55,7 +55,7 @@ const executeTransaction = async (
   const response = await contract[methodName](...args, options);
   const hash = response.hash;
   const tx = await response.getTransaction();
-  const receipt = await tx.wait();
+  const receipt = await tx.wait(1);
   return { hash, receipt };
 };
 

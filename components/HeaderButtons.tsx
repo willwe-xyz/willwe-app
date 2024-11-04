@@ -7,7 +7,6 @@ import {
   ModalOverlay,
   ModalContent,
   ModalHeader,
-  ModalBody,
   ModalCloseButton,
   useDisclosure,
   Tabs,
@@ -49,6 +48,12 @@ export default function HeaderButtons({
   buttonHoverBg = 'purple.50'
 }: HeaderButtonsProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
+
+  const modalContentStyles = {
+    maxH: 'calc(100vh - 200px)',
+    display: 'flex',
+    flexDirection: 'column',
+  };
 
   // Consistent button styles
   const buttonStyles = {
@@ -106,8 +111,8 @@ export default function HeaderButtons({
           backdropFilter="blur(10px)"
         />
         <ModalContent 
+          sx={modalContentStyles}
           maxW="1000px"
-          maxH="90vh"
           bg="white"
           rounded="lg"
           shadow="xl"
@@ -121,11 +126,14 @@ export default function HeaderButtons({
             <ModalCloseButton />
           </ModalHeader>
 
-          <ModalBody p={0}>
+          <Box flex="1" overflow="hidden">
             <Tabs
               isFitted
               colorScheme="purple"
               isLazy
+              display="flex"
+              flexDirection="column"
+              h="full"
             >
               <TabList borderBottom="1px solid" borderColor="gray.100">
                 <Tab
@@ -156,15 +164,15 @@ export default function HeaderButtons({
                 </Tab>
               </TabList>
 
-              <TabPanels>
-                <TabPanel p={6}>
+              <TabPanels flex="1" overflow="hidden">
+                <TabPanel h="full" p={0}>
                   <CreateToken
                     chainId={chainId}
                     userAddress={userAddress}
                     onSuccess={onClose}
                   />
                 </TabPanel>
-                <TabPanel p={6}>
+                <TabPanel h="full" p={0}>
                   <DefineEntity
                     chainId={chainId}
                     onSubmit={onClose}
@@ -172,7 +180,7 @@ export default function HeaderButtons({
                 </TabPanel>
               </TabPanels>
             </Tabs>
-          </ModalBody>
+          </Box>
         </ModalContent>
       </Modal>
     </>
