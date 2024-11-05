@@ -23,8 +23,8 @@ import {
   Users,
   Plus 
 } from 'lucide-react';
-import CreateToken from './CreateToken';
-import DefineEntity from './DefineEntity';
+import  CreateToken  from './CreateToken';
+import { DefineEntity } from './DefineEntity';
 
 interface HeaderButtonsProps {
   userAddress: string;
@@ -175,7 +175,6 @@ export default function HeaderButtons({
                 <TabPanel h="full" p={0}>
                   <DefineEntity
                     chainId={chainId}
-                    onSubmit={onClose}
                   />
                 </TabPanel>
               </TabPanels>

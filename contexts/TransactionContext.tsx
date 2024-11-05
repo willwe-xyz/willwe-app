@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+// TransactionContext.tsx
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  ReactNode,
+  FunctionComponent,
+} from 'react';
 import { ethers, ContractTransactionResponse } from 'ethers';
 import { UseToastOptions } from '@chakra-ui/react';
 import { Check, ExternalLink, AlertTriangle } from 'lucide-react';
@@ -6,10 +14,27 @@ import { deployments, ABIs } from '../config/contracts';
 import { getChainById } from '../config/deployments';
 import { usePrivy } from '@privy-io/react-auth';
 
+// Transaction state and types
 interface TransactionState {
   isTransacting: boolean;
   currentHash: string | null;
   error: Error | null;
+}
+
+interface TransactionReceipt {
+  blockNumber: number;
+  blockHash: string;
+  transactionIndex: number;
+  hash: string;
+  logs: Array<{
+    address: string;
+    topics: string[];
+    data: string;
+    blockNumber: number;
+    transactionIndex: number;
+    logIndex: number;
+  }>;
+  status: number;
 }
 
 interface TransactionContextType {
@@ -17,7 +42,7 @@ interface TransactionContextType {
     chainId: string,
     transactionFn: () => Promise<T>,
     options?: TransactionOptions
-  ) => Promise<T | null>;
+  ) => Promise<{ tx: T; receipt: TransactionReceipt } | null>;
   isTransacting: boolean;
   currentHash: string | null;
   error: Error | null;
@@ -36,21 +61,17 @@ interface TransactionProviderProps {
   toast: (options: UseToastOptions) => void | string | number;
 }
 
-const TransactionContext = createContext<TransactionContextType>({
-  executeTransaction: async () => null,
-  isTransacting: false,
-  currentHash: null,
-  error: null
-});
+// Creating the Transaction Context
+const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
 
-export const TransactionProvider: React.FC<TransactionProviderProps> = ({
+export const TransactionProvider: FunctionComponent<TransactionProviderProps> = ({
   children,
-  toast
+  toast,
 }) => {
   const [state, setState] = useState<TransactionState>({
     isTransacting: false,
     currentHash: null,
-    error: null
+    error: null,
   });
 
   const executeTransaction = useCallback(
@@ -58,17 +79,16 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
       chainId: string,
       transactionFn: () => Promise<T>,
       options: TransactionOptions = {}
-    ): Promise<T | null> => {
+    ): Promise<{ tx: T; receipt: TransactionReceipt } | null> => {
       setState({
         isTransacting: true,
         currentHash: null,
-        error: null
+        error: null,
       });
 
       const toastId = 'transaction-status';
 
       try {
-        // Initial toast for transaction submission
         toast({
           id: toastId,
           title: 'Confirm Transaction',
@@ -78,14 +98,10 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
           isClosable: false,
         });
 
-        // Execute transaction
-        const response = await transactionFn();
-        const hash = response.hash;
-        
-        // Update state with transaction hash
-        setState(prev => ({ ...prev, currentHash: hash }));
+        const tx = await transactionFn();
+        const hash = tx.hash;
+        setState((prev) => ({ ...prev, currentHash: hash }));
 
-        // Update toast to show pending status
         toast.update(toastId, {
           title: 'Transaction Pending',
           description: (
@@ -99,7 +115,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   color: 'blue.500',
-                  marginTop: '8px'
+                  marginTop: '8px',
                 }}
               >
                 View on Explorer <ExternalLink size={14} style={{ marginLeft: 4 }} />
@@ -110,14 +126,12 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
           duration: null,
         });
 
-        // Get transaction object and wait for receipt
-        const tx = await response.getTransaction();
-        const receipt = await tx.wait(1);
+        const transaction = await tx.getTransaction()
+        const receipt = await transaction?.wait(1);
 
-        // Close the pending toast
         toast.close(toastId);
 
-        if (receipt.status === 1) {
+        if (receipt && receipt.status === 1) {
           toast({
             title: 'Transaction Confirmed',
             description: options.successMessage || 'Transaction successful',
@@ -129,19 +143,34 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
           if (options.onSuccess) {
             options.onSuccess();
           }
-          return response;
+
+          const formattedReceipt: TransactionReceipt = {
+            blockNumber: receipt.blockNumber,
+            blockHash: receipt.blockHash,
+            transactionIndex: receipt.transactionIndex,
+            hash: receipt.hash,
+            logs: receipt.logs.map((log) => ({
+              address: log.address,
+              topics: log.topics,
+              data: log.data,
+              blockNumber: log.blockNumber,
+              transactionIndex: log.transactionIndex,
+              logIndex: log.logIndex,
+            })),
+            status: receipt.status,
+          };
+
+          return { tx, receipt: formattedReceipt };
         } else {
           throw new Error('Transaction failed');
         }
       } catch (error: any) {
         console.error('Transaction error:', error);
-        
-        // Close pending toast if it exists
+
         toast.close(toastId);
 
-        // Handle user rejection specifically
         if (
-          error.code === 'ACTION_REJECTED' || 
+          error.code === 'ACTION_REJECTED' ||
           error.code === 4001 ||
           error.message?.toLowerCase().includes('user rejected') ||
           error.message?.toLowerCase().includes('user denied')
@@ -157,7 +186,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
         }
 
         const errorMessage = formatTransactionError(error);
-        setState(prev => ({ ...prev, error: new Error(errorMessage) }));
+        setState((prev) => ({ ...prev, error: new Error(errorMessage) }));
 
         toast({
           title: 'Transaction Failed',
@@ -169,10 +198,10 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
 
         return null;
       } finally {
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
           isTransacting: false,
-          currentHash: null
+          currentHash: null,
         }));
       }
     },
@@ -185,67 +214,11 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
         executeTransaction,
         isTransacting: state.isTransacting,
         currentHash: state.currentHash,
-        error: state.error
+        error: state.error,
       }}
     >
       {children}
     </TransactionContext.Provider>
-  );
-};
-
-export const useContractOperation = (contractName: keyof typeof deployments) => {
-  const { getEthersProvider } = usePrivy();
-  const context = useContext(TransactionContext);
-
-  return useCallback(
-    async (
-      chainId: string,
-      methodName: string,
-      args: any[],
-      options?: TransactionOptions
-    ) => {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments[contractName][cleanChainId];
-
-      if (!contractAddress) {
-        console.error(`No ${contractName} contract found for chain ${chainId}`);
-        return null;
-      }
-
-      return context.executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs[contractName],
-            signer
-          );
-
-          // Prepare transaction options
-          let txOptions = {};
-          if (options?.gasLimit) {
-            txOptions = { gasLimit: options.gasLimit };
-          } else {
-            try {
-              const estimatedGas = await contract[methodName].estimateGas(...args);
-              const multiplier = options?.gasLimitMultiplier || 1.2;
-              txOptions = {
-                gasLimit: Math.floor(Number(estimatedGas) * multiplier)
-              };
-            } catch (error) {
-              console.warn('Gas estimation failed, using default gas limit');
-              txOptions = { gasLimit: 500000 }; // Default fallback
-            }
-          }
-
-          return await contract[methodName](...args, txOptions);
-        },
-        options
-      );
-    },
-    [contractName, getEthersProvider]
   );
 };
 
@@ -258,9 +231,8 @@ export const useTransaction = () => {
 };
 
 const formatTransactionError = (error: any): string => {
-  // Handle user rejection cases
   if (
-    error?.code === 'ACTION_REJECTED' || 
+    error?.code === 'ACTION_REJECTED' ||
     error?.code === 4001 ||
     error?.message?.toLowerCase().includes('user rejected') ||
     error?.message?.toLowerCase().includes('user denied')
@@ -268,7 +240,6 @@ const formatTransactionError = (error: any): string => {
     return 'Transaction was rejected';
   }
 
-  // Handle specific error codes
   switch (error?.code) {
     case 'INSUFFICIENT_FUNDS':
       return 'Insufficient funds to complete the transaction';
@@ -280,7 +251,6 @@ const formatTransactionError = (error: any): string => {
       break;
   }
 
-  // Handle common error messages
   const message = error?.message?.toLowerCase() || '';
   if (message.includes('gas required exceeds allowance')) {
     return 'Transaction would exceed gas limit';
@@ -294,17 +264,8 @@ const formatTransactionError = (error: any): string => {
   if (message.includes('replacement fee too low')) {
     return 'Gas price too low. Please try again with a higher gas price';
   }
-  
+
   return error?.message || 'An error occurred while processing the transaction';
 };
 
-const getExplorerLink = (chainId: string, hash: string): string => {
-  const chain = getChainById(chainId);
-  return `${chain.blockExplorers?.default.url}/tx/${hash}`;
-};
-
-export {
-  TransactionContext,
-  formatTransactionError,
-  getExplorerLink
-};
+export { TransactionContext };
