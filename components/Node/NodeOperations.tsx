@@ -23,8 +23,7 @@ import {
   ChevronDown,
   UserPlus,
   RefreshCw,
-  Check,
-  AlertTriangle,
+  Shield,
   Activity,
   Users,
 } from 'lucide-react';
@@ -44,13 +43,6 @@ interface NodeOperationsProps {
   onSuccess?: () => void;
 }
 
-interface TransactionLog {
-  operation: string;
-  hash?: string;
-  status: 'pending' | 'success' | 'error';
-  error?: string;
-}
-
 export const NodeOperations: React.FC<NodeOperationsProps> = ({
   nodeId,
   chainId,
@@ -64,7 +56,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentOperation, setCurrentOperation] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [transactionLogs, setTransactionLogs] = useState<TransactionLog[]>([]);
 
   // Contract interaction helper
   const getContract = useCallback(async () => {
@@ -89,128 +80,89 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     }
   }, [chainId, getEthersProvider, user?.wallet?.address]);
 
-  // Transaction handler with fixed confirmation pattern
-  const executeTransaction = useCallback(async (
-    contract: ethers.Contract,
-    methodName: string,
-    args: any[],
-    options: any = {}
-  ) => {
-    // Execute transaction and get response
-    const response = await contract[methodName](...args, options);
-    const hash = response.hash;
-    
-    // Get transaction object
-    const tx = await response.getTransaction();
-    
-    // Wait for confirmation
-    const receipt = await tx.wait();
-    
-    return { hash, receipt };
-  }, []);
-
   // Generic operation handler
   const handleOperation = useCallback(async (
     operationName: string,
-    operation: () => Promise<{ hash: string; receipt: any }>
+    operation: () => Promise<any>
   ) => {
-    const log: TransactionLog = {
-      operation: operationName,
-      status: 'pending'
-    };
+    if (!user?.wallet?.address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        status: "error",
+        duration: 3000,
+      });
+      return;
+    }
 
     setIsProcessing(true);
-    setTransactionLogs(prev => [...prev, log]);
-
     try {
-      const { hash, receipt } = await operation();
-      log.hash = hash;
-
-      if (receipt && receipt.status === 1) {
-        log.status = 'success';
-        setTransactionLogs(prev => [...prev, log]);
-        
-        toast({
-          title: "Success",
-          description: `${operationName} completed successfully`,
-          status: "success",
-          duration: 5000,
-          icon: <Check size={16} />,
-        });
-
-        onSuccess?.();
-        return true;
-      } else {
-        throw new Error("Transaction failed");
-      }
-    } catch (error) {
-      console.error(`${operationName} error:`, error);
-      log.status = 'error';
-      log.error = error instanceof Error ? error.message : 'Transaction failed';
-      setTransactionLogs(prev => [...prev, log]);
-
+      const result = await operation();
+      
       toast({
-        title: `${operationName} Failed`,
-        description: log.error,
+        title: "Success",
+        description: `${operationName} completed successfully`,
+        status: "success",
+        duration: 5000,
+      });
+
+      if (onSuccess) {
+        onSuccess();
+      }
+
+      return result;
+    } catch (error: any) {
+      console.error(`${operationName} error:`, error);
+      toast({
+        title: "Error",
+        description: error.message,
         status: "error",
         duration: 5000,
-        icon: <AlertTriangle size={16} />,
       });
-      return false;
     } finally {
       setIsProcessing(false);
     }
-  }, [toast, onSuccess]);
+  }, [user?.wallet?.address, toast, onSuccess]);
 
-  // Operation handlers
+  // Node operations
   const handleSpawn = useCallback(async () => {
-    const contract = await getContract();
     return handleOperation('Spawn Node', async () => {
-      return executeTransaction(
-        contract,
-        'spawnBranch',
-        [nodeId],
-        { gasLimit: 400000 }
-      );
+      const contract = await getContract();
+      const tx = await contract.spawnBranch(nodeId, { gasLimit: 400000 });
+      await tx.wait();
     });
-  }, [nodeId, getContract, handleOperation, executeTransaction]);
+  }, [nodeId, getContract, handleOperation]);
+
+  const handleSpawnWithMembrane = useCallback(() => {
+    setCurrentOperation('spawnWithMembrane');
+    setIsModalOpen(true);
+  }, []);
 
   const handleMintMembership = useCallback(async () => {
-    const contract = await getContract();
     return handleOperation('Mint Membership', async () => {
-      return executeTransaction(
-        contract,
-        'mintMembership',
-        [nodeId],
-        { gasLimit: 200000 }
-      );
+      const contract = await getContract();
+      const tx = await contract.mintMembership(nodeId, { gasLimit: 200000 });
+      await tx.wait();
     });
-  }, [nodeId, getContract, handleOperation, executeTransaction]);
+  }, [nodeId, getContract, handleOperation]);
 
   const handleRedistribute = useCallback(async () => {
-    const contract = await getContract();
     return handleOperation('Redistribute', async () => {
-      return executeTransaction(
-        contract,
-        'redistributePath',
-        [nodeId],
-        { gasLimit: 500000 }
-      );
+      const contract = await getContract();
+      const tx = await contract.redistributePath(nodeId, { gasLimit: 500000 });
+      await tx.wait();
     });
-  }, [nodeId, getContract, handleOperation, executeTransaction]);
+  }, [nodeId, getContract, handleOperation]);
 
   const handleSignal = useCallback(async (signals: number[] = []) => {
-    const contract = await getContract();
     return handleOperation('Send Signal', async () => {
-      return executeTransaction(
-        contract,
-        'sendSignal',
-        [nodeId, signals],
-        { gasLimit: 300000 }
-      );
+      const contract = await getContract();
+      const tx = await contract.sendSignal(nodeId, signals, { gasLimit: 300000 });
+      await tx.wait();
     });
-  }, [nodeId, getContract, handleOperation, executeTransaction]);
+  }, [nodeId, getContract, handleOperation]);
 
+  // Modal operation handler
   const handleOperationSubmit = useCallback(async (params: any) => {
     const contract = await getContract();
 
@@ -218,49 +170,30 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       let success = false;
       
       switch (currentOperation) {
+        case 'spawnWithMembrane':
+          success = await handleOperation('Spawn With Membrane', async () => {
+            const tx = await contract.spawnBranchWithMembrane(nodeId, params.membraneId, { gasLimit: 600000 });
+            await tx.wait();
+          });
+          break;
+
         case 'mint':
           success = await handleOperation('Mint Tokens', async () => {
-            return executeTransaction(
-              contract,
-              'mint',
-              [nodeId, ethers.parseUnits(params.amount, 18)],
-              { gasLimit: 300000 }
-            );
+            const parsedAmount = ethers.parseUnits(params.amount, 18);
+            const tx = await contract.mint(nodeId, parsedAmount, { gasLimit: 300000 });
+            await tx.wait();
           });
           break;
 
         case 'burn':
           success = await handleOperation('Burn Tokens', async () => {
-            return executeTransaction(
-              contract,
-              'burn',
-              [nodeId, ethers.parseUnits(params.amount, 18)],
-              { gasLimit: 300000 }
-            );
+            const parsedAmount = ethers.parseUnits(params.amount, 18);
+            const tx = await contract.burn(nodeId, parsedAmount, { gasLimit: 300000 });
+            await tx.wait();
           });
           break;
 
-        case 'mintPath':
-          success = await handleOperation('Mint Path', async () => {
-            return executeTransaction(
-              contract,
-              'mintPath',
-              [params.targetNodeId, ethers.parseUnits(params.amount, 18)],
-              { gasLimit: 400000 }
-            );
-          });
-          break;
-
-        case 'burnPath':
-          success = await handleOperation('Burn Path', async () => {
-            return executeTransaction(
-              contract,
-              'burnPath',
-              [params.targetNodeId, ethers.parseUnits(params.amount, 18)],
-              { gasLimit: 400000 }
-            );
-          });
-          break;
+        // ... other operations ...
 
         default:
           throw new Error('Unknown operation');
@@ -276,12 +209,11 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         description: error instanceof Error ? error.message : 'An error occurred',
         status: "error",
         duration: 5000,
-        icon: <AlertTriangle size={16} />,
       });
     }
-  }, [currentOperation, nodeId, getContract, handleOperation, executeTransaction, toast]);
+  }, [currentOperation, nodeId, getContract, handleOperation, toast]);
 
-  // Calculate stats
+  // Stats for display
   const nodeStats = {
     value: formatBalance(node?.basicInfo?.[4] || '0'),
     memberCount: node?.membersOfNode?.length || 0,
@@ -311,40 +243,17 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 setCurrentOperation('mint');
                 setIsModalOpen(true);
               }}
-              isDisabled={isProcessing}
             >
               Mint Tokens
             </MenuItem>
-            <MenuItem
-              icon={<Plus size={16} />}
-              onClick={() => {
-                setCurrentOperation('mintPath');
-                setIsModalOpen(true);
-              }}
-              isDisabled={isProcessing}
-            >
-              Mint Along Path
-            </MenuItem>
-            <Divider />
             <MenuItem
               icon={<Minus size={16} />}
               onClick={() => {
                 setCurrentOperation('burn');
                 setIsModalOpen(true);
               }}
-              isDisabled={isProcessing}
             >
               Burn Tokens
-            </MenuItem>
-            <MenuItem
-              icon={<Minus size={16} />}
-              onClick={() => {
-                setCurrentOperation('burnPath');
-                setIsModalOpen(true);
-              }}
-              isDisabled={isProcessing}
-            >
-              Burn Along Path
             </MenuItem>
           </MenuList>
         </Menu>
@@ -364,9 +273,14 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             <MenuItem
               icon={<GitBranch size={16} />}
               onClick={handleSpawn}
-              isDisabled={isProcessing}
             >
               Spawn Sub-Node
+            </MenuItem>
+            <MenuItem
+              icon={<Shield size={16} />}
+              onClick={handleSpawnWithMembrane}
+            >
+              Spawn with Membrane
             </MenuItem>
           </MenuList>
         </Menu>
@@ -421,25 +335,17 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           <HStack justify="space-between">
             <HStack>
               <Activity size={16} color={selectedTokenColor} />
-              <Text fontSize="sm" fontWeight="medium">
-                Value:
-              </Text>
+              <Text fontSize="sm" fontWeight="medium">Value:</Text>
             </HStack>
-            <Text fontSize="sm">
-              {nodeStats.value}
-            </Text>
+            <Text fontSize="sm">{nodeStats.value}</Text>
           </HStack>
 
           <HStack justify="space-between">
             <HStack>
               <Users size={16} color={selectedTokenColor} />
-              <Text fontSize="sm" fontWeight="medium">
-                Members:
-              </Text>
+              <Text fontSize="sm" fontWeight="medium">Members:</Text>
             </HStack>
-            <Text fontSize="sm">
-              {nodeStats.memberCount}
-            </Text>
+            <Text fontSize="sm">{nodeStats.memberCount}</Text>
           </HStack>
 
           {nodeStats.hasSignals && (
@@ -447,13 +353,9 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
               <HStack justify="space-between" mb={2}>
                 <HStack>
                   <Signal size={16} color={selectedTokenColor} />
-                  <Text fontSize="sm" fontWeight="medium">
-                    Active Signals:
-                  </Text>
+                  <Text fontSize="sm" fontWeight="medium">Active Signals:</Text>
                 </HStack>
-                <Text fontSize="sm">
-                  {nodeStats.signalCount}
-                </Text>
+                <Text fontSize="sm">{nodeStats.signalCount}</Text>
               </HStack>
               <Progress 
                 size="xs" 

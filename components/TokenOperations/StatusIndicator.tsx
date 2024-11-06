@@ -5,61 +5,137 @@ import {
   Text,
   Alert,
   AlertIcon,
+  HStack,
+  Spinner,
+  VStack,
 } from '@chakra-ui/react';
 
 interface StatusIndicatorProps {
   isValidating: boolean;
   isLoadingTokens: boolean;
-  error?: string | null;
-  deploymentState?: 'idle' | 'deploying' | 'complete';
+  error: string | null;
+  processingStage?: 'validating' | 'loading' | 'deploying' | null;
 }
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   isValidating,
   isLoadingTokens,
   error,
-  deploymentState
+  processingStage
 }) => {
+  const getStatusMessage = () => {
+    switch (processingStage) {
+      case 'validating':
+        return 'Validating membrane requirements...';
+      case 'loading':
+        return 'Loading token information...';
+      case 'deploying':
+        return 'Deploying membrane configuration...';
+      default:
+        return isValidating ? 'Validating membrane...' : 'Loading token details...';
+    }
+  };
+
+  if (isValidating || isLoadingTokens || processingStage) {
+    return (
+      <Box width="100%">
+        <VStack spacing={2} align="stretch">
+          <Progress 
+            size="xs" 
+            isIndeterminate 
+            colorScheme="purple" 
+            borderRadius="full" 
+          />
+          <HStack justify="center" spacing={3}>
+            <Spinner size="sm" color="purple.500" />
+            <Text 
+              fontSize="sm" 
+              color="gray.600" 
+              textAlign="center"
+            >
+              {getStatusMessage()}
+            </Text>
+          </HStack>
+        </VStack>
+      </Box>
+    );
+  }
+
   if (error) {
     return (
-      <Alert status="error">
+      <Alert status="error" borderRadius="md">
         <AlertIcon />
-        <Text fontSize="sm">{error}</Text>
+        <VStack align="start" spacing={1}>
+          <Text fontWeight="medium">Error</Text>
+          <Text fontSize="sm">{error}</Text>
+        </VStack>
       </Alert>
     );
   }
 
-  if (isValidating || isLoadingTokens) {
-    return (
-      <Box w="100%">
-        <Progress 
-          size="xs" 
-          isIndeterminate 
-          colorScheme="purple" 
-          borderRadius="full"
-        />
-        <Text 
-          mt={2} 
-          fontSize="sm" 
-          color="gray.600" 
-          textAlign="center"
-        >
-          {isValidating ? 'Validating membrane...' : 'Loading token details...'}
-        </Text>
-      </Box>
-    );
-  }
-
-  if (deploymentState === 'deploying') {
-    return (
-      <Box>
-        <Progress size="xs" isIndeterminate colorScheme="blue" />
-        <Text mt={2} textAlign="center" fontSize="sm">
-          Deploying your token...
-        </Text>
-      </Box>
-    );
-  }
-
   return null;
+};
+
+export default StatusIndicator;
+
+// Optional loading steps component for more detailed progress tracking
+interface LoadingStepProps {
+  step: number;
+  totalSteps: number;
+  currentStep: number;
+  label: string;
+}
+
+export const LoadingStep: React.FC<LoadingStepProps> = ({
+  step,
+  totalSteps,
+  currentStep,
+  label
+}) => {
+  const isComplete = step < currentStep;
+  const isActive = step === currentStep;
+
+  return (
+    <HStack spacing={3} opacity={isComplete || isActive ? 1 : 0.5}>
+      <Box
+        w="20px"
+        h="20px"
+        borderRadius="full"
+        bg={isComplete ? "green.500" : isActive ? "purple.500" : "gray.200"}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        color="white"
+        fontSize="xs"
+      >
+        {step + 1}
+      </Box>
+      <Text
+        fontSize="sm"
+        color={isComplete ? "green.700" : isActive ? "purple.700" : "gray.500"}
+        fontWeight={isActive ? "medium" : "normal"}
+      >
+        {label}
+      </Text>
+    </HStack>
+  );
+};
+
+export const LoadingSteps: React.FC<{
+  currentStep: number;
+  steps: string[];
+}> = ({ currentStep, steps }) => {
+  return (
+    <VStack spacing={2} align="stretch" width="100%">
+      {steps.map((step, index) => (
+        <LoadingStep
+          key={index}
+          step={index}
+          totalSteps={steps.length}
+          currentStep={currentStep}
+          label={step}
+        />
+      ))}
+    </VStack>
+  );
 };

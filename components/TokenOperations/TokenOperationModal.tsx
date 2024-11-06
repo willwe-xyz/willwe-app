@@ -3,9 +3,7 @@ import {
   Modal,
   ModalOverlay,
   ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
+  Box,
   Button,
   VStack,
   FormControl,
@@ -13,20 +11,38 @@ import {
   Input,
   Alert,
   AlertIcon,
-  useToast,
-  RadioGroup,
-  Radio,
-  Stack,
+  Progress,
   Text,
-  Box
+  Badge,
+  InputGroup,
+  InputRightElement,
+  Tooltip,
+  HStack,
+  Link,
+  Card,
+  CardBody,
+  CardHeader,
+  Divider,
+  useToast,
 } from '@chakra-ui/react';
+import {
+  Shield,
+  AlertTriangle,
+  Info,
+  XCircle,
+  CheckCircle,
+  ExternalLink,
+  Link as LinkIcon,
+} from 'lucide-react';
 import { ethers } from 'ethers';
+import { usePrivy } from "@privy-io/react-auth";
+import { RequirementsTable } from './RequirementsTable';
+import { OperationConfirmation } from './OperationConfirmation';
+import { StatusIndicator } from './StatusIndicator';
+import { deployments, ABIs } from '../../config/contracts';
+import { NodeState, MembraneMetadata, MembraneRequirement } from '../../types/chainData';
 
-interface OperationParams {
-  amount?: string;
-  membraneId?: string;
-  targetNodeId?: string;
-}
+const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
 interface TokenOperationModalProps {
   isOpen: boolean;
@@ -35,7 +51,14 @@ interface TokenOperationModalProps {
   operation: string;
   isLoading: boolean;
   nodeId: string;
-  chainId?: string;
+  chainId: string;
+  node: NodeState;
+}
+
+interface OperationParams {
+  amount?: string;
+  membraneId?: string;
+  targetNodeId?: string;
 }
 
 export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
@@ -45,104 +68,132 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   operation,
   isLoading,
   nodeId,
-  chainId
+  chainId,
+  node,
 }) => {
-  // State
-  const [amount, setAmount] = useState('');
   const [membraneId, setMembraneId] = useState('');
-  const [targetNodeId, setTargetNodeId] = useState('');
-  const [membraneInputType, setMembraneInputType] = useState<'manual' | 'dropdown'>('manual');
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [isValidInput, setIsValidInput] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
+  const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const { getEthersProvider } = usePrivy();
   const toast = useToast();
 
-  // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setAmount('');
       setMembraneId('');
-      setTargetNodeId('');
+      setMembraneMetadata(null);
+      setRequirements([]);
       setError(null);
+      setInputError(null);
+      setIsValidInput(false);
     }
   }, [isOpen]);
 
-  // Get operation title
-  const getOperationTitle = useCallback(() => {
-    switch (operation) {
-      case 'mint':
-        return 'Mint Tokens';
-      case 'burn':
-        return 'Burn Tokens';
-      case 'mintPath':
-        return 'Mint Along Path';
-      case 'burnPath':
-        return 'Burn Along Path';
-      case 'spawn':
-        return 'Spawn Sub-Node';
-      case 'spawnWithMembrane':
-        return 'Spawn With Membrane';
-      case 'mintMembership':
-        return 'Mint Membership';
-      default:
-        return 'Perform Operation';
-    }
-  }, [operation]);
+  const validateMembraneIdFormat = useCallback((value: string) => {
+    setInputError(null);
+    setIsValidInput(false);
 
-  // Validate form based on operation
-  const validateForm = useCallback(() => {
-    if (['mint', 'burn', 'mintPath', 'burnPath'].includes(operation)) {
-      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-        return 'Please enter a valid amount';
-      }
+    if (!value) {
+      setInputError('Membrane ID is required');
+      return false;
     }
 
-    if (operation === 'spawnWithMembrane' && !membraneId) {
-      return 'Please enter a membrane ID';
+    try {
+      ethers.getBigInt(value);
+      setIsValidInput(true);
+      return true;
+    } catch (error) {
+      setInputError('Invalid numeric format');
+      return false;
     }
+  }, []);
 
-    if (['mintPath', 'burnPath'].includes(operation) && !targetNodeId) {
-      return 'Please select a target node';
+  const fetchMembraneMetadata = useCallback(async (membraneId: string) => {
+    try {
+      const provider = await getEthersProvider();
+      const contract = new ethers.Contract(
+        deployments.Membrane[chainId.replace('eip155:', '')],
+        ABIs.Membrane,
+        provider
+      );
+
+      const membrane = await contract.getMembraneById(membraneId);
+      if (!membrane) throw new Error('Membrane not found');
+
+      const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
+      if (!response.ok) throw new Error('Failed to fetch membrane metadata');
+      
+      const metadata = await response.json();
+      setMembraneMetadata(metadata);
+
+      setIsLoadingTokens(true);
+      const requirements = await Promise.all(
+        membrane.tokens.map(async (tokenAddress: string, index: number) => {
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+            provider
+          );
+
+          const [symbol, decimals] = await Promise.all([
+            tokenContract.symbol(),
+            tokenContract.decimals()
+          ]);
+
+          return {
+            tokenAddress,
+            symbol,
+            requiredBalance: membrane.balances[index].toString(),
+            formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
+          };
+        })
+      );
+
+      setRequirements(requirements);
+    } catch (error) {
+      console.error('Error fetching membrane data:', error);
+      throw error;
+    } finally {
+      setIsLoadingTokens(false);
     }
+  }, [chainId, getEthersProvider]);
 
-    return null;
-  }, [operation, amount, membraneId, targetNodeId]);
+  const handleMembraneIdChange = useCallback((value: string) => {
+    setMembraneId(value);
+    if (validateMembraneIdFormat(value)) {
+      setIsValidating(true);
+      fetchMembraneMetadata(value)
+        .catch(error => {
+          setError(error.message);
+          setMembraneMetadata(null);
+          setRequirements([]);
+        })
+        .finally(() => setIsValidating(false));
+    }
+  }, [validateMembraneIdFormat, fetchMembraneMetadata]);
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (!isValidInput || !membraneId) {
+      setError('Please enter a valid membrane ID');
+      return;
+    }
+
     try {
-      const validationError = validateForm();
-      if (validationError) {
-        setError(validationError);
-        return;
-      }
-
-      const params: OperationParams = {};
-
-      // Add parameters based on operation
-      if (['mint', 'burn', 'mintPath', 'burnPath'].includes(operation)) {
-        params.amount = amount;
-      }
-
-      if (operation === 'spawnWithMembrane') {
-        params.membraneId = membraneId;
-      }
-
-      if (['mintPath', 'burnPath'].includes(operation)) {
-        params.targetNodeId = targetNodeId;
-      }
-
-      await onSubmit(params);
+      await onSubmit({ membraneId });
       onClose();
-
     } catch (err) {
-      console.error('Operation error:', err);
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       setError(errorMessage);
       toast({
-        title: 'Operation Failed',
+        title: "Operation Failed",
         description: errorMessage,
-        status: 'error',
+        status: "error",
         duration: 5000,
         isClosable: true,
       });
@@ -150,93 +201,159 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="md">
-      <ModalOverlay />
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      size="xl"
+    >
+      <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent>
-        <form onSubmit={handleSubmit}>
-          <ModalHeader>{getOperationTitle()}</ModalHeader>
-          
-          <ModalBody>
-            <VStack spacing={4}>
-              {/* Amount Input */}
-              {['mint', 'burn', 'mintPath', 'burnPath'].includes(operation) && (
-                <FormControl isRequired>
-                  <FormLabel>Amount</FormLabel>
-                  <Input
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    type="number"
-                    step="any"
-                    placeholder="Enter amount"
-                  />
-                </FormControl>
-              )}
+        <Box maxH="85vh" overflowY="auto" p={6}>
+          <VStack spacing={6} align="stretch" width="100%">
+            {/* Title Section */}
+            <Box borderBottomWidth="1px" pb={4}>
+              <Text fontSize="2xl" fontWeight="bold">Design Cornerm</Text>
+              <Text fontSize="sm" color="gray.600">Configure membrane requirements</Text>
+            </Box>
 
-              {/* Membrane Input */}
-              {operation === 'spawnWithMembrane' && (
-                <>
-                  <FormControl>
-                    <FormLabel>Input Method</FormLabel>
-                    <RadioGroup
-                      onChange={(value: 'manual' | 'dropdown') => setMembraneInputType(value)}
-                      value={membraneInputType}
-                    >
-                      <Stack direction="row">
-                        <Radio value="manual">Enter ID</Radio>
-                        <Radio value="dropdown" isDisabled>Select from List</Radio>
-                      </Stack>
-                    </RadioGroup>
-                  </FormControl>
+            {/* Input Section */}
+            <FormControl isRequired isInvalid={!!inputError}>
+              <FormLabel>
+                <HStack>
+                  <Text>Membrane ID</Text>
+                  <Tooltip label="Enter a numeric membrane identifier">
+                    <span><Info size={14} /></span>
+                  </Tooltip>
+                </HStack>
+              </FormLabel>
+              
+              <InputGroup>
+                <Input
+                  value={membraneId}
+                  onChange={(e) => handleMembraneIdChange(e.target.value)}
+                  placeholder="Enter numeric membrane ID"
+                  isDisabled={isValidating || isLoading}
+                  pattern="\d*"
+                  inputMode="numeric"
+                />
+                <InputRightElement>
+                  {membraneId && (
+                    isValidInput ? (
+                      <CheckCircle size={18} color="green" />
+                    ) : (
+                      <XCircle size={18} color="red" />
+                    )
+                  )}
+                </InputRightElement>
+              </InputGroup>
 
-                  <FormControl isRequired>
-                    <FormLabel>
-                      {membraneInputType === 'manual' ? 'Membrane ID' : 'Select Membrane'}
-                    </FormLabel>
-                    <Input
-                      value={membraneId}
-                      onChange={(e) => setMembraneId(e.target.value)}
-                      placeholder="Enter membrane ID"
-                    />
-                  </FormControl>
-                </>
-              )}
-
-              {/* Target Node Input */}
-              {['mintPath', 'burnPath'].includes(operation) && (
-                <FormControl isRequired>
-                  <FormLabel>Target Node</FormLabel>
-                  <Input
-                    value={targetNodeId}
-                    onChange={(e) => setTargetNodeId(e.target.value)}
-                    placeholder="Enter target node ID"
-                  />
-                </FormControl>
-              )}
-
-              {error && (
-                <Alert status="error">
-                  <AlertIcon />
-                  {error}
+              {inputError && (
+                <Alert status="error" mt={2} size="sm">
+                  <AlertIcon as={AlertTriangle} size={14} />
+                  {inputError}
                 </Alert>
               )}
-            </VStack>
-          </ModalBody>
+            </FormControl>
 
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              colorScheme="purple"
-              type="submit"
-              isLoading={isLoading}
-              loadingText="Processing..."
-              isDisabled={!!error || isLoading}
+            {/* Loading Indicator */}
+            {(isValidating || isLoadingTokens) && (
+              <Box>
+                <Progress size="xs" isIndeterminate colorScheme="purple" />
+                <Text mt={2} textAlign="center" fontSize="sm" color="gray.600">
+                  {isValidating ? 'Validating membrane...' : 'Loading token details...'}
+                </Text>
+              </Box>
+            )}
+
+            {/* Error Display */}
+            {error && (
+              <Alert status="error">
+                <AlertIcon />
+                {error}
+              </Alert>
+            )}
+
+            {/* Membrane Data Display */}
+            {membraneMetadata && !error && (
+              <VStack spacing={4} align="stretch">
+                <Card variant="outline" bg="purple.50" mb={4}>
+                  <CardHeader pb={2}>
+                    <HStack justify="space-between">
+                      <Text fontSize="lg" fontWeight="bold">{membraneMetadata.name}</Text>
+                      <Badge colorScheme="purple">ID: {membraneId.slice(0, 6)}...</Badge>
+                    </HStack>
+                  </CardHeader>
+                  <CardBody>
+                    <VStack align="stretch" spacing={3}>
+                      {membraneMetadata.characteristics?.map((char, idx) => (
+                        <Box
+                          key={idx}
+                          p={3}
+                          bg="white"
+                          borderRadius="md"
+                          border="1px solid"
+                          borderColor="purple.100"
+                        >
+                          <HStack justify="space-between">
+                            <Text>{char.title}</Text>
+                            {char.link && (
+                              <Link 
+                                href={char.link} 
+                                isExternal 
+                                color="purple.500"
+                                fontSize="sm"
+                              >
+                                <HStack spacing={1}>
+                                  <LinkIcon size={14} />
+                                  <ExternalLink size={14} />
+                                </HStack>
+                              </Link>
+                            )}
+                          </HStack>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </CardBody>
+                </Card>
+
+                <RequirementsTable
+                  requirements={requirements}
+                  membraneMetadata={membraneMetadata}
+                />
+
+                <OperationConfirmation
+                  membraneMetadata={membraneMetadata}
+                  membraneId={membraneId}
+                  requirementsCount={requirements.length}
+                />
+              </VStack>
+            )}
+
+            {/* Action Buttons */}
+            <Box 
+              borderTopWidth="1px" 
+              pt={4} 
+              mt={4}
+              background="white"
             >
-              Confirm
-            </Button>
-          </ModalFooter>
-        </form>
+              <HStack justify="flex-end" spacing={3}>
+                <Button variant="ghost" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  colorScheme="purple"
+                  onClick={handleSubmit}
+                  isLoading={isLoading || isValidating || isLoadingTokens}
+                  loadingText="Processing..."
+                  isDisabled={!!error || !membraneMetadata || !isValidInput}
+                  leftIcon={<Shield size={16} />}
+                >
+                  Apply Membrane
+                </Button>
+              </HStack>
+            </Box>
+          </VStack>
+        </Box>
       </ModalContent>
     </Modal>
   );
