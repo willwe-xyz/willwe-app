@@ -9,7 +9,7 @@ import {
   Spinner,
   VStack,
 } from '@chakra-ui/react';
-import { useTransactionContext } from '../../contexts/TransactionContext';
+import { useTransaction } from '../../contexts/TransactionContext';
 
 interface StatusIndicatorProps {
   error: string | null;
@@ -22,7 +22,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   processingStage,
   customMessage
 }) => {
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
 
   const getStatusMessage = () => {
     if (customMessage) return customMessage;

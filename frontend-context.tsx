@@ -149,16 +149,27 @@ module.exports = {
 
 
 // File: ./pages/dashboard.tsx
-// File: /pages/dashboard.tsx
+// File: ./pages/dashboard.tsx
+
 import { useRouter } from 'next/router';
 import { usePrivy } from "@privy-io/react-auth";
-import { Box, useToast } from '@chakra-ui/react';
-import AppLayout from '../components/Layout/AppLayout';
+import { 
+  Box, 
+  VStack, 
+  Text, 
+  Spinner, 
+  Alert, 
+  AlertIcon, 
+  useToast 
+} from '@chakra-ui/react';
+import { MainLayout } from '../components/Layout/MainLayout';
 import RootNodeDetails from '../components/RootNodeDetails';
+import ActivityFeed from '../components/ActivityFeed/ActivityFeed';
 import { useNode } from '../contexts/NodeContext';
 import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
 import { useChainId } from '../hooks/useChainId';
+import { useActivityFeed } from '../hooks/useActivityFeed';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -166,9 +177,10 @@ export default function DashboardPage() {
   
   // Hooks
   const { colorState, cycleColors } = useColorManagement();
-  const { user, ready, authenticated } = usePrivy();
+  const { user, ready, authenticated, logout, login } = usePrivy();
   const { selectedToken, selectToken } = useNode();
   const { chainId } = useChainId();
+  const { activities, isLoading: activitiesLoading } = useActivityFeed(chainId);
 
   // Get token from URL or context
   const tokenAddress = router.query.token as string || selectedToken;
@@ -176,8 +188,8 @@ export default function DashboardPage() {
   // Fetch nodes data
   const { 
     data: nodes, 
-    isLoading, 
-    error, 
+    isLoading: nodesLoading, 
+    error: nodesError, 
     refetch: refreshNodes 
   } = useRootNodes(
     chainId,
@@ -185,26 +197,94 @@ export default function DashboardPage() {
     user?.wallet?.address || ''
   );
 
+  // Handle token selection
+  const handleTokenSelect = (tokenAddress: string) => {
+    selectToken(tokenAddress);
+    router.push({
+      pathname: '/dashboard',
+      query: { token: tokenAddress }
+    }, undefined, { shallow: true });
+  };
+
+  // Handle node selection
+  const handleNodeSelect = (nodeId: string) => {
+    router.push(`/nodes/${chainId}/${nodeId}`);
+  };
+
+  // Prepare header props
+  const headerProps = {
+    userAddress: user?.wallet?.address,
+    chainId: chainId,
+    logout,
+    login,
+    isTransacting: false,
+    contrastingColor: colorState.contrastingColor,
+    reverseColor: colorState.reverseColor,
+    cycleColors,
+  };
+
+  // Empty dashboard state
+  const renderEmptyDashboard = () => (
+    <Box className="flex flex-col items-center justify-center h-full max-w-3xl mx-auto w-full p-8">
+      <Box className="w-full bg-white rounded-lg shadow-sm p-8 border border-gray-100">
+        <Text className="text-2xl font-semibold mb-6 text-center">
+          Welcome to WillWe
+        </Text>
+        <Text className="text-gray-600 text-center mb-8">
+          Select a token from above to explore its value network
+        </Text>
+        
+        <ActivityFeed
+          activities={activities}
+          isLoading={activitiesLoading}
+          onRefresh={refreshNodes}
+        />
+      </Box>
+    </Box>
+  );
+
+  // Loading state
+  if (!ready || nodesLoading) {
+    return (
+      <MainLayout headerProps={headerProps}>
+        <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+          <Spinner size="xl" color={colorState.contrastingColor} />
+        </Box>
+      </MainLayout>
+    );
+  }
+
+  // Authentication check
+  if (!authenticated) {
+    return (
+      <MainLayout headerProps={headerProps}>
+        <Alert status="warning" variant="subtle">
+          <AlertIcon />
+          Please connect your wallet to continue
+        </Alert>
+      </MainLayout>
+    );
+  }
+
   return (
-    <AppLayout>
+    <MainLayout headerProps={headerProps}>
       <Box flex={1} overflow="auto" bg="gray.50" p={6}>
         {!tokenAddress ? (
-          <Box className="flex flex-col items-center justify-center h-full">
-            {/* Empty state UI */}
-          </Box>
+          renderEmptyDashboard()
         ) : (
           <RootNodeDetails 
             nodes={nodes || []}
-            isLoading={isLoading}
-            error={error}
+            isLoading={nodesLoading}
+            error={nodesError}
             onRefresh={refreshNodes}
             selectedTokenColor={colorState.contrastingColor}
             chainId={chainId}
             selectedToken={tokenAddress}
+            onNodeSelect={handleNodeSelect}
           />
         )}
       </Box>
-    </AppLayout>
+    </MainLayout>
   );
 }
 
@@ -637,12 +717,14 @@ export default Custom404;
 
 
 // File: ./pages/_app.tsx
+// File: ./pages/_app.tsx
+
 import '../styles/globals.css';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { PrivyProvider } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
 import { ChakraProvider, useToast } from '@chakra-ui/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { 
   localhost, 
   base, 
@@ -654,23 +736,12 @@ import {
 } from 'viem/chains';
 import { TransactionProvider } from '../contexts/TransactionContext';
 import { NodeProvider } from '../contexts/NodeContext';
-import { TokenProvider } from '../contexts/TokenContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { customTheme } from '../config/theme';
 
-// Initialize React Query client
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 2,
-      staleTime: 30000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
-
 // App wrapper to provide toast context
 function AppContent({ Component, pageProps }: AppProps) {
+  const router = useRouter();
   const toast = useToast();
 
   return (
@@ -685,55 +756,85 @@ function AppContent({ Component, pageProps }: AppProps) {
 }
 
 function MyApp(props: AppProps) {
+  const router = useRouter();
+  const toast = useToast();
+
   // Configure Privy login success callback
-  const handleLogin = async (user: any) => {
-    try {
-      // Add any post-login logic here
-      console.log('User logged in:', user);
-    } catch (error) {
-      console.error('Login error:', error);
-    }
+  const handlePrivyLoginSuccess = async () => {
+    await router.push('/dashboard');
+    toast({
+      title: "Welcome!",
+      description: "You've successfully logged in",
+      status: "success",
+      duration: 5000,
+      isClosable: true,
+    });
+  };
+
+  // Configure Privy login error handling
+  const handlePrivyLoginError = (error: Error) => {
+    toast({
+      title: "Login Failed",
+      description: error.message,
+      status: "error",
+      duration: 5000,
+      isClosable: true,
+    });
   };
 
   return (
     <>
       <Head>
-        <title>WillWe</title>
+        {/* Preload fonts */}
+        <link rel="preload" href="/fonts/AdelleSans-Regular.woff" as="font" crossOrigin="" />
+        <link rel="preload" href="/fonts/AdelleSans-Regular.woff2" as="font" crossOrigin="" />
+        <link rel="preload" href="/fonts/AdelleSans-Semibold.woff" as="font" crossOrigin="" />
+        <link rel="preload" href="/fonts/AdelleSans-Semibold.woff2" as="font" crossOrigin="" />
+
+        {/* Favicon and manifest configuration */}
+        <link rel="icon" href="/favicons/favicon.ico" sizes="any" />
+        <link rel="icon" href="/favicons/icon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/favicons/apple-touch-icon.png" />
+        <link rel="manifest" href="/favicons/manifest.json" />
+
+        {/* Meta tags */}
+        <title>WillWe · Token Coordination Protocol</title>
+        <meta name="description" content="Decentralized Token Coordination Protocol" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#ffffff" />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="WillWe" />
+        <meta property="og:description" content="Token Coordination Protocol" />
+        <meta property="og:site_name" content="WillWe" />
       </Head>
       
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <PrivyProvider
-            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
-            config={{
-              loginMethods: ['wallet', 'farcaster', 'email'],
-              defaultChain: taikoHekla,
-              supportedChains: [
-                localhost,
-                baseSepolia,
-                base,
-                taikoHekla,
-                taiko,
-                optimismSepolia,
-                optimism
-              ],
-              appearance: {
-                theme: 'light',
-                accentColor: customTheme.colors.brand[600],
-                showWalletLoginFirst: true,
-              },
-              onSuccess: handleLogin,
-            }}
-          >
-            <ChakraProvider theme={customTheme}>
-              <TokenProvider>
-                <AppContent {...props} />
-              </TokenProvider>
-            </ChakraProvider>
-          </PrivyProvider>
-        </QueryClientProvider>
-      </ErrorBoundary>
+      <PrivyProvider
+        appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
+        config={{
+          loginMethods: ['wallet', 'farcaster', 'email'],
+          defaultChain: taikoHekla,
+          supportedChains: [
+            localhost,
+            baseSepolia,
+            base,
+            taikoHekla,
+            taiko,
+            optimismSepolia,
+            optimism
+          ],
+          appearance: {
+            theme: 'light',
+            accentColor: customTheme.colors.brand[600],
+            showWalletLoginFirst: true,
+          },
+        }}
+        onSuccess={handlePrivyLoginSuccess}
+        onError={handlePrivyLoginError}
+      >
+        <ChakraProvider theme={customTheme}>
+          <AppContent {...props} />
+        </ChakraProvider>
+      </PrivyProvider>
     </>
   );
 }
@@ -767,7 +868,7 @@ import {
 import { usePrivy } from "@privy-io/react-auth";
 import { useContractOperations } from '../../hooks/useContractOperations';
 import { TokenOperationModal } from '../TokenOperations/TokenOperationModal';
-import { useTransactionContext } from '../../contexts/TransactionContext';
+import { useTransaction } from '../../contexts/TransactionContext';
 
 interface NodeOperationsProps {
   nodeId: string;
@@ -784,7 +885,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 }) => {
   const router = useRouter();
   const { user } = usePrivy();
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentOperation, setCurrentOperation] = useState('');
 
@@ -2972,7 +3073,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { RequirementsTable } from './RequirementsTable';
 import { StatusIndicator } from './StatusIndicator';
 import { useContractOperations } from '../../hooks/useContractOperations';
-import { useTransactionContext } from '../../contexts/TransactionContext';
+import { useTransaction } from '../../contexts/TransactionContext';
 import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
@@ -3006,7 +3107,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
 
   // Hooks
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
   const { getMembraneData, getTokenInfo } = useContractOperations(chainId);
 
   // Reset on close
@@ -3350,7 +3451,7 @@ import {
   Spinner,
   VStack,
 } from '@chakra-ui/react';
-import { useTransactionContext } from '../../contexts/TransactionContext';
+import { useTransaction } from '../../contexts/TransactionContext';
 
 interface StatusIndicatorProps {
   error: string | null;
@@ -3363,7 +3464,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   processingStage,
   customMessage
 }) => {
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
 
   const getStatusMessage = () => {
     if (customMessage) return customMessage;
@@ -5057,8 +5158,269 @@ export default function HeaderButtons({
 
 
 
+// File: ./components/ActivityFeed/ActivityFeed.tsx
+// File: ./components/ActivityFeed/ActivityFeed.tsx
+
+import React, { useMemo } from 'react';
+import { 
+  Box, 
+  VStack, 
+  Text, 
+  Badge, 
+  Spinner, 
+  Button, 
+  HStack,
+  useColorModeValue
+} from '@chakra-ui/react';
+import { 
+  Activity, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  RefreshCw,
+  GitBranch,
+  Signal,
+  Users
+} from 'lucide-react';
+import { formatDistance } from 'date-fns';
+
+interface ActivityItem {
+  id: string;
+  type: 'mint' | 'burn' | 'transfer' | 'signal' | 'spawn' | 'membership';
+  timestamp: number;
+  description: string;
+  account: string;
+  nodeId?: string;
+  amount?: string;
+  tokenSymbol?: string;
+  status: 'success' | 'pending' | 'failed';
+  transactionHash?: string;
+}
+
+interface ActivityFeedProps {
+  activities?: ActivityItem[];
+  isLoading?: boolean;
+  error?: Error | null;
+  onRefresh?: () => void;
+  selectedToken?: string;
+}
+
+export const ActivityFeed: React.FC<ActivityFeedProps> = ({
+  activities = [],
+  isLoading = false,
+  error = null,
+  onRefresh,
+  selectedToken
+}) => {
+  // Theme colors
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.100', 'gray.700');
+  const textColor = useColorModeValue('gray.600', 'gray.400');
+  const hoverBg = useColorModeValue('gray.50', 'gray.700');
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'success':
+        return 'green';
+      case 'pending':
+        return 'yellow';
+      case 'failed':
+        return 'red';
+      default:
+        return 'gray';
+    }
+  };
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'mint':
+        return <ArrowUpRight className="text-green-500" size={16} />;
+      case 'burn':
+        return <ArrowDownRight className="text-red-500" size={16} />;
+      case 'spawn':
+        return <GitBranch className="text-purple-500" size={16} />;
+      case 'signal':
+        return <Signal className="text-blue-500" size={16} />;
+      case 'membership':
+        return <Users className="text-orange-500" size={16} />;
+      default:
+        return <Activity className="text-gray-500" size={16} />;
+    }
+  };
+
+  const sortedActivities = useMemo(() => {
+    return [...activities].sort((a, b) => b.timestamp - a.timestamp);
+  }, [activities]);
+
+  if (isLoading) {
+    return (
+      <Box
+        p={8}
+        bg={bgColor}
+        borderRadius="xl"
+        border="1px solid"
+        borderColor={borderColor}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        minH="400px"
+      >
+        <Spinner size="xl" color="purple.500" />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box
+        p={8}
+        bg={bgColor}
+        borderRadius="xl"
+        border="1px solid"
+        borderColor={borderColor}
+      >
+        <VStack spacing={4} align="center">
+          <Text color="red.500" fontWeight="medium">
+            Error loading activities: {error.message}
+          </Text>
+          {onRefresh && (
+            <Button
+              leftIcon={<RefreshCw size={16} />}
+              onClick={onRefresh}
+              colorScheme="purple"
+              size="sm"
+            >
+              Retry
+            </Button>
+          )}
+        </VStack>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      p={6}
+      bg={bgColor}
+      borderRadius="xl"
+      border="1px solid"
+      borderColor={borderColor}
+      height="100%"
+      minH="400px"
+    >
+      <VStack spacing={6} align="stretch">
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Text fontSize="xl" fontWeight="bold">
+            Recent Activity
+          </Text>
+          {onRefresh && (
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={<RefreshCw size={16} />}
+              onClick={onRefresh}
+              colorScheme="purple"
+            >
+              Refresh
+            </Button>
+          )}
+        </Box>
+
+        {sortedActivities.length === 0 ? (
+          <Box
+            py={12}
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            bg={useColorModeValue('gray.50', 'gray.700')}
+            borderRadius="lg"
+          >
+            <Activity size={32} className="text-gray-400 mb-4" />
+            <Text color={textColor}>No recent activity</Text>
+            {selectedToken && (
+              <Text color={textColor} fontSize="sm" mt={2}>
+                Select a token to view its activity
+              </Text>
+            )}
+          </Box>
+        ) : (
+          <VStack spacing={4} align="stretch">
+            {sortedActivities.map((activity) => (
+              <Box
+                key={activity.id}
+                p={4}
+                borderRadius="lg"
+                border="1px solid"
+                borderColor={borderColor}
+                transition="all 0.2s"
+                _hover={{
+                  transform: 'translateY(-2px)',
+                  shadow: 'sm',
+                  bg: hoverBg
+                }}
+              >
+                <VStack spacing={2} align="stretch">
+                  <HStack justify="space-between">
+                    <HStack spacing={3}>
+                      {getActivityIcon(activity.type)}
+                      <Text fontWeight="medium">
+                        {activity.type.charAt(0).toUpperCase() + activity.type.slice(1)}
+                      </Text>
+                    </HStack>
+                    <Badge colorScheme={getStatusColor(activity.status)}>
+                      {activity.status}
+                    </Badge>
+                  </HStack>
+                  
+                  <Text color={textColor} fontSize="sm">
+                    {activity.description}
+                  </Text>
+                  
+                  {activity.amount && (
+                    <Text fontSize="sm" fontWeight="medium">
+                      Amount: {activity.amount} {activity.tokenSymbol}
+                    </Text>
+                  )}
+                  
+                  <HStack justify="space-between" fontSize="xs" color={textColor}>
+                    <Text>
+                      {formatDistance(activity.timestamp, new Date(), { addSuffix: true })}
+                    </Text>
+                    <HStack spacing={4}>
+                      {activity.nodeId && (
+                        <Text fontFamily="mono">
+                          Node: {activity.nodeId.slice(0, 6)}...{activity.nodeId.slice(-4)}
+                        </Text>
+                      )}
+                      <Text fontFamily="mono">
+                        {activity.account.slice(0, 6)}...{activity.account.slice(-4)}
+                      </Text>
+                    </HStack>
+                  </HStack>
+
+                  {activity.transactionHash && (
+                    <Text fontSize="xs" color="purple.500" fontFamily="mono">
+                      Tx: {activity.transactionHash.slice(0, 10)}...
+                    </Text>
+                  )}
+                </VStack>
+              </Box>
+            ))}
+          </VStack>
+        )}
+      </VStack>
+    </Box>
+  );
+};
+
+export default ActivityFeed;
+
+
+
 // File: ./components/RootNodeDetails.tsx
-import React, { useMemo, useCallback } from 'react';
+// File: ./components/RootNodeDetails.tsx
+
+import React, { useMemo, useCallback, useState } from 'react';
 import {
   Box,
   VStack,
@@ -5066,8 +5428,10 @@ import {
   Text,
   Badge,
   Button,
+  useToast,
   Alert,
   AlertIcon,
+  Spinner,
   Grid,
   Tooltip,
 } from '@chakra-ui/react';
@@ -5078,16 +5442,18 @@ import {
   Signal,
   Plus,
   GitBranchPlus,
+  Check,
+  AlertTriangle,
   RefreshCw,
 } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
+import { ethers } from 'ethers';
+import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance } from '../utils/formatters';
-import { useContractOperations } from '../hooks/useContractOperations';
-import { useTransactionContext } from '../contexts/TransactionContext';
+import { useTransaction } from '../contexts/TransactionContext';
+import { useContractOperation } from '../hooks/useContractOperation';
 import { NodeCard } from './Node/NodeCard';
-import { LoadingState } from './shared/LoadingState';
-import { ErrorState } from './shared/ErrorState';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -5110,9 +5476,10 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   error,
   onRefresh
 }) => {
-  const { user } = usePrivy();
-  const { isTransacting } = useTransactionContext();
-  const { spawnRootBranch } = useContractOperations(chainId);
+  const toast = useToast();
+  const { getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Calculate stats and organize nodes
   const {
@@ -5120,108 +5487,214 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     derivedNodes,
     totalValue,
     nodeValues,
-    stats
+    totalMembers,
+    maxDepth,
+    totalSignals
   } = useMemo(() => {
-    if (!nodes?.length) return {
+    if (!nodes?.length || !selectedToken) return {
       baseNodes: [],
       derivedNodes: [],
       totalValue: BigInt(0),
       nodeValues: {},
-      stats: {
-        totalMembers: 0,
-        maxDepth: 0,
-        totalSignals: 0
-      }
+      totalMembers: 0,
+      maxDepth: 0,
+      totalSignals: 0
     };
 
-    // Separate base and derived nodes
-    const base = nodes.filter(node => node?.rootPath?.length === 1);
-    const derived = nodes.filter(node => node?.rootPath?.length > 1);
+    const tokenBigInt = ethers.toBigInt(selectedToken);
+    const tokenId = tokenBigInt.toString();
 
-    // Calculate totals
-    const total = nodes.reduce((sum, node) => {
-      if (!node?.basicInfo?.[4]) return sum;
-      return sum + BigInt(node.basicInfo[4]);
-    }, BigInt(0));
+    // Filter base and derived nodes
+    const base = nodes.filter(node => 
+      node?.rootPath?.length === 1 && 
+      BigInt(node.rootPath[0]).toString() === tokenId
+    );
 
-    // Calculate node percentages
-    const values: Record<string, number> = {};
-    nodes.forEach(node => {
-      if (!node?.basicInfo?.[0] || !node?.basicInfo?.[4]) return;
-      const nodeValue = BigInt(node.basicInfo[4]);
-      values[node.basicInfo[0]] = total > 0 
-        ? Number((nodeValue * BigInt(10000)) / total) / 100 
-        : 0;
-    });
+    const derived = nodes.filter(node =>
+      node?.rootPath?.length > 1 && 
+      BigInt(node.rootPath[0]).toString() === tokenId
+    );
 
     // Calculate stats
-    const nodeStats = nodes.reduce((acc, node) => ({
-      totalMembers: acc.totalMembers + (node.membersOfNode?.length || 0),
-      maxDepth: Math.max(acc.maxDepth, node.rootPath?.length || 0),
-      totalSignals: acc.totalSignals + (node.signals?.length || 0)
-    }), {
+    const stats = nodes.reduce((acc, node) => {
+      if (!node?.basicInfo?.[4]) return acc;
+
+      try {
+        const nodeValue = BigInt(node.basicInfo[4]);
+        return {
+          totalValue: acc.totalValue + nodeValue,
+          totalMembers: acc.totalMembers + (node.membersOfNode?.length || 0),
+          maxDepth: Math.max(acc.maxDepth, node.rootPath?.length || 0),
+          totalSignals: acc.totalSignals + (node.signals?.length || 0)
+        };
+      } catch {
+        return acc;
+      }
+    }, {
+      totalValue: BigInt(0),
       totalMembers: 0,
       maxDepth: 0,
       totalSignals: 0
     });
 
+    // Calculate node value percentages
+    const values: Record<string, number> = {};
+    if (stats.totalValue > BigInt(0)) {
+      nodes.forEach(node => {
+        if (!node?.basicInfo?.[0] || !node?.basicInfo?.[4]) return;
+        try {
+          const nodeValue = BigInt(node.basicInfo[4]);
+          values[node.basicInfo[0]] = Number((nodeValue * BigInt(10000)) / stats.totalValue) / 100;
+        } catch {
+          values[node.basicInfo[0]] = 0;
+        }
+      });
+    }
+
     return {
       baseNodes: base,
       derivedNodes: derived,
-      totalValue: total,
+      ...stats,
       nodeValues: values,
-      stats: nodeStats
     };
-  }, [nodes]);
+  }, [nodes, selectedToken]);
 
   // Handle spawning a new root node
   const handleSpawnNode = useCallback(async () => {
-    if (!selectedToken) return;
-    
-    const result = await spawnRootBranch(selectedToken);
-    if (result && onRefresh) {
-      onRefresh();
+    if (!selectedToken) {
+      toast({
+        title: "Error",
+        description: "Please select a token first",
+        status: "error",
+        duration: 3000
+      });
+      return;
     }
-  }, [selectedToken, spawnRootBranch, onRefresh]);
+
+    setIsProcessing(true);
+
+    try {
+      const result = await executeTransaction(
+        chainId,
+        async () => {
+          const cleanChainId = chainId.replace('eip155:', '');
+          const contractAddress = deployments.WillWe[cleanChainId];
+          
+          if (!contractAddress) {
+            throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+          }
+
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer
+          );
+
+          return contract.spawnRootBranch(selectedToken, { gasLimit: 500000 });
+        },
+        {
+          successMessage: 'New root node created successfully',
+          errorMessage: 'Failed to create root node',
+          onSuccess: onRefresh
+        }
+      );
+
+      if (!result) {
+        throw new Error('Transaction failed');
+      }
+
+    } catch (error: any) {
+      console.error('Error spawning root node:', error);
+      toast({
+        title: "Failed to Create Node",
+        description: error.message || 'Transaction failed',
+        status: "error",
+        duration: 5000,
+        icon: <AlertTriangle size={16} />,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, selectedToken, executeTransaction, getEthersProvider, toast, onRefresh]);
 
   // Stats cards configuration
   const statsCards = [
     {
       title: 'Total Value',
       value: formatBalance(totalValue),
-      icon: Activity,
+      icon: <Activity size={16} />,
       color: 'purple',
       tooltip: 'Total value locked in all nodes'
     },
     {
       title: 'Members',
-      value: stats.totalMembers.toString(),
-      icon: Users,
+      value: totalMembers.toString(),
+      icon: <Users size={16} />,
       color: 'blue',
       tooltip: 'Total unique members across all nodes'
     },
     {
       title: 'Max Depth',
-      value: stats.maxDepth.toString(),
-      icon: GitBranch,
+      value: maxDepth.toString(),
+      icon: <GitBranch size={16} />,
       color: 'green',
-      tooltip: 'Maximum depth of node hierarchy'
+      tooltip: 'Maximum depth of the node hierarchy'
     },
     {
       title: 'Active Signals',
-      value: stats.totalSignals.toString(),
-      icon: Signal,
+      value: totalSignals.toString(),
+      icon: <Signal size={16} />,
       color: 'orange',
       tooltip: 'Total active signals across all nodes'
     }
   ];
 
   if (isLoading) {
-    return <LoadingState color={selectedTokenColor} />;
+    return (
+      <Box p={6} bg="white" rounded="xl" shadow="sm">
+        <VStack spacing={4} align="center" justify="center" minH="400px">
+          <Spinner size="xl" color={selectedTokenColor} />
+          <Text color="gray.600">Loading node data...</Text>
+        </VStack>
+      </Box>
+    );
   }
 
   if (error) {
-    return <ErrorState error={error} onRetry={onRefresh} />;
+    return (
+      <Box p={6} bg="white" rounded="xl" shadow="sm">
+        <Alert
+          status="error"
+          variant="subtle"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          textAlign="center"
+          height="400px"
+          rounded="md"
+        >
+          <AlertIcon boxSize="40px" mr={0} />
+          <Text mt={4} mb={2} fontSize="lg">
+            Error loading node data
+          </Text>
+          <Text color="gray.600">
+            {error.message}
+          </Text>
+          {onRefresh && (
+            <Button
+              mt={4}
+              size="sm"
+              colorScheme="purple"
+              onClick={onRefresh}
+            >
+              Retry
+            </Button>
+          )}
+        </Alert>
+      </Box>
+    );
   }
 
   return (
@@ -5235,9 +5708,9 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             onClick={handleSpawnNode}
             variant="outline"
             colorScheme="purple"
-            isLoading={isTransacting}
+            isLoading={isProcessing}
             loadingText="Creating Node..."
-            isDisabled={!selectedToken || isTransacting || !user?.wallet?.address}
+            isDisabled={!selectedToken || isProcessing}
           >
             New Root Node
           </Button>
@@ -5247,7 +5720,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
               variant="ghost"
               colorScheme="purple"
               onClick={onRefresh}
-              isDisabled={isTransacting}
+              isDisabled={isProcessing}
             >
               Refresh
             </Button>
@@ -5270,39 +5743,36 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         gap={4}
         mb={8}
       >
-        {statsCards.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <Tooltip key={index} label={stat.tooltip}>
-              <Box
-                p={4}
-                bg={`${stat.color}.50`}
-                rounded="lg"
-                border="1px solid"
-                borderColor={`${stat.color}.100`}
-                transition="all 0.2s"
-                _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
-              >
-                <HStack color={`${stat.color}.600`} mb={2}>
-                  <Icon size={20} />
-                  <Text fontSize="sm" fontWeight="medium">
-                    {stat.title}
-                  </Text>
-                </HStack>
-                <Text 
-                  fontSize="2xl" 
-                  fontWeight="bold"
-                  color={`${stat.color}.900`}
-                >
-                  {stat.value}
+        {statsCards.map((stat, index) => (
+          <Tooltip key={index} label={stat.tooltip}>
+            <Box
+              p={4}
+              bg={`${stat.color}.50`}
+              rounded="lg"
+              border="1px solid"
+              borderColor={`${stat.color}.100`}
+              transition="all 0.2s"
+              _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
+            >
+              <HStack color={`${stat.color}.600`} mb={2}>
+                {stat.icon}
+                <Text fontSize="sm" fontWeight="medium">
+                  {stat.title}
                 </Text>
-              </Box>
-            </Tooltip>
-          );
-        })}
+              </HStack>
+              <Text 
+                fontSize="2xl" 
+                fontWeight="bold"
+                color={`${stat.color}.900`}
+              >
+                {stat.value}
+              </Text>
+            </Box>
+          </Tooltip>
+        ))}
       </Grid>
 
-      {/* Empty State */}
+      {/* Node Sections */}
       {baseNodes.length === 0 && derivedNodes.length === 0 ? (
         <Box 
           p={8} 
@@ -5320,8 +5790,8 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
               leftIcon={<Plus size={16} />}
               onClick={handleSpawnNode}
               colorScheme="purple"
-              isLoading={isTransacting}
-              isDisabled={!selectedToken || isTransacting || !user?.wallet?.address}
+              isLoading={isProcessing}
+              isDisabled={!selectedToken || isProcessing}
             >
               Create Root Node
             </Button>
@@ -5339,7 +5809,22 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
                 overflowX="auto" 
                 overflowY="hidden" 
                 pb={4}
-                className="custom-scrollbar"
+                sx={{
+                  '&::-webkit-scrollbar': {
+                    height: '8px',
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    bg: 'gray.100',
+                    borderRadius: 'full',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    bg: 'purple.200',
+                    borderRadius: 'full',
+                    '&:hover': {
+                      bg: 'purple.300',
+                    },
+                  },
+                }}
               >
                 <HStack spacing={4}>
                   {baseNodes.map((node, index) => (
@@ -5368,7 +5853,22 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
                 overflowX="auto" 
                 overflowY="hidden" 
                 pb={4}
-                className="custom-scrollbar"
+                sx={{
+                  '&::-webkit-scrollbar': {
+                    height: '8px',
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    bg: 'gray.100',
+                    borderRadius: 'full',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    bg: 'purple.200',
+                    borderRadius: 'full',
+                    '&:hover': {
+                      bg: 'purple.300',
+                    },
+                  },
+                }}
               >
                 <HStack spacing={4}>
                   {derivedNodes.map((node, index) => (
@@ -6016,7 +6516,7 @@ import {
 import { NodeState } from '../types/chainData';
 import NodeOperations from './Node/NodeOperations';
 import { useNodeData, getNodeValue, getNodeInflation, isNodeMember } from '../hooks/useNodeData';
-import { useTransactionContext } from '../contexts/TransactionContext';
+import { useTransaction } from '../contexts/TransactionContext';
 import { formatEther, formatUnits } from 'ethers';
 import { usePrivy } from '@privy-io/react-auth';
 import { MembersList } from './Node/MembersList';
@@ -6039,7 +6539,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 }) => {
   const { user } = usePrivy();
   const userAddress = user?.wallet?.address || '';
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
   const toast = useToast();
   
   const { 
@@ -11576,17 +12076,139 @@ export function useNodeHierarchy(nodes: NodeState[]): NodeHierarchyResult {
 
 
 
+// File: ./hooks/useActivityFeed.tsx
+// File: ./hooks/useActivityFeed.ts
+
+import { useState, useCallback, useEffect } from 'react';
+import { usePrivy } from "@privy-io/react-auth";
+import { useTransaction } from '../contexts/TransactionContext';
+
+export interface ActivityItem {
+  id: string;
+  type: 'mint' | 'burn' | 'transfer' | 'signal' | 'spawn' | 'membership';
+  timestamp: number;
+  description: string;
+  account: string;
+  nodeId?: string;
+  amount?: string;
+  tokenSymbol?: string;
+  status: 'success' | 'pending' | 'failed';
+  transactionHash?: string;
+}
+
+interface UseActivityFeedResult {
+  activities: ActivityItem[];
+  isLoading: boolean;
+  error: Error | null;
+  refresh: () => Promise<void>;
+}
+
+export function useActivityFeed(chainId: string): UseActivityFeedResult {
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  
+  const { user } = usePrivy();
+  const { currentHash, isTransacting } = useTransaction();
+
+  // Add new activity
+  const addActivity = useCallback((activity: ActivityItem) => {
+    setActivities(prev => [activity, ...prev]);
+  }, []);
+
+  // Update activity status
+  const updateActivityStatus = useCallback((hash: string, status: 'success' | 'failed') => {
+    setActivities(prev => 
+      prev.map(activity => 
+        activity.transactionHash === hash 
+          ? { ...activity, status }
+          : activity
+      )
+    );
+  }, []);
+
+  // Watch for new transactions
+  useEffect(() => {
+    if (currentHash && isTransacting) {
+      addActivity({
+        id: currentHash,
+        type: 'transfer',
+        timestamp: Date.now(),
+        description: 'Transaction pending...',
+        account: user?.wallet?.address || '',
+        status: 'pending',
+        transactionHash: currentHash
+      });
+    }
+  }, [currentHash, isTransacting, addActivity, user?.wallet?.address]);
+
+  // Fetch activities
+  const fetchActivities = useCallback(async () => {
+    if (!user?.wallet?.address || !chainId) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Simulate fetching activities - replace with actual API call
+      const mockActivities: ActivityItem[] = [
+        {
+          id: '1',
+          type: 'mint',
+          timestamp: Date.now() - 1000 * 60 * 5,
+          description: 'Minted 100 tokens',
+          account: user.wallet.address,
+          amount: '100',
+          tokenSymbol: 'TKN',
+          status: 'success'
+        },
+        {
+          id: '2',
+          type: 'signal',
+          timestamp: Date.now() - 1000 * 60 * 30,
+          description: 'Signaled preference',
+          account: user.wallet.address,
+          nodeId: '123',
+          status: 'success'
+        }
+      ];
+
+      setActivities(mockActivities);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to fetch activities'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.wallet?.address, chainId]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchActivities();
+  }, [fetchActivities]);
+
+  return {
+    activities,
+    isLoading,
+    error,
+    refresh: fetchActivities
+  };
+}
+
+export default useActivityFeed;
+
+
+
 // File: ./hooks/useContractOperations.ts
 import { useCallback } from 'react';
 import { ethers } from 'ethers';
 import { usePrivy } from "@privy-io/react-auth";
-import { useTransactionContext } from '../contexts/TransactionContext';
+import { useTransaction } from '../contexts/TransactionContext';
 import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 
 export function useContractOperations(chainId: string) {
   const { ready, authenticated, getEthersProvider } = usePrivy();
-  const { executeTransaction } = useTransactionContext();
+  const { executeTransaction } = useTransaction();
 
   // Helper to get contract instance
   const getContract = useCallback(async (contractName: keyof typeof deployments) => {
@@ -12615,68 +13237,87 @@ export const TokenProvider: React.FC<TokenProviderProps> = ({ children }) => {
 // File: ./contexts/TransactionContext.tsx
 // File: ./contexts/TransactionContext.tsx
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Box, Text, Link, UseToastOptions } from '@chakra-ui/react';
-import { ethers } from 'ethers';
-import { CheckCircle, ExternalLink, AlertTriangle } from 'lucide-react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  ReactNode,
+  FunctionComponent,
+} from 'react';
+import { ethers, ContractTransactionResponse } from 'ethers';
+import { UseToastOptions } from '@chakra-ui/react';
+import { Check, ExternalLink, AlertTriangle } from 'lucide-react';
 import { getChainById } from '../config/contracts';
 
-type TransactionState = {
-  isTransacting: boolean;
-  currentHash: string | null;
-  error: Error | null;
-};
-
-type TransactionOptions = {
-  successMessage?: string;
-  errorMessage?: string;
-  onSuccess?: () => void;
-  gasLimitMultiplier?: number;
-};
-
-type TransactionProviderProps = {
-  children: ReactNode;
-  toast: (options: UseToastOptions) => string | number | void;
-};
-
-type TransactionResponse = ethers.ContractTransactionResponse;
-type TransactionReceipt = ethers.TransactionReceipt;
-
-interface TransactionContextType {
-  executeTransaction: (
-    chainId: string,
-    transactionFn: () => Promise<TransactionResponse>,
-    options?: TransactionOptions
-  ) => Promise<{ tx: TransactionResponse; receipt: TransactionReceipt } | null>;
+// Define types
+interface TransactionState {
   isTransacting: boolean;
   currentHash: string | null;
   error: Error | null;
 }
 
-const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
+interface TransactionReceipt {
+  blockNumber: number;
+  blockHash: string;
+  transactionIndex: number;
+  hash: string;
+  status: number;
+  logs: Array<{
+    address: string;
+    topics: string[];
+    data: string;
+    blockNumber: number;
+    transactionIndex: number;
+    logIndex: number;
+  }>;
+}
 
-const TransactionStatusMessage = ({ hash, chainId }: { hash: string; chainId: string }) => {
-  const explorerUrl = getChainById(chainId).blockExplorers?.default.url;
-  return (
-    <Box display="flex" flexDirection="column" gap={2}>
-      <Text>Waiting for confirmation...</Text>
-      <Link
-        href={`${explorerUrl}/tx/${hash}`}
-        isExternal
-        display="flex"
-        alignItems="center"
-        color="blue.500"
-      >
-        View on Explorer <ExternalLink style={{ marginLeft: '4px' }} size={14} />
-      </Link>
-    </Box>
-  );
+interface TransactionOptions {
+  successMessage?: string;
+  errorMessage?: string;
+  onSuccess?: () => void;
+  gasLimitMultiplier?: number;
+}
+
+interface TransactionContextValue {
+  executeTransaction: <T extends ContractTransactionResponse>(
+    chainId: string,
+    transactionFn: () => Promise<T>,
+    options?: TransactionOptions
+  ) => Promise<{ tx: T; receipt: TransactionReceipt } | null>;
+  isTransacting: boolean;
+  currentHash: string | null;
+  error: Error | null;
+}
+
+interface TransactionProviderProps {
+  children: ReactNode;
+  toast: (options: UseToastOptions) => void | string | number;
+}
+
+// Create context with default value
+const TransactionContext = createContext<TransactionContextValue>({
+  executeTransaction: async () => null,
+  isTransacting: false,
+  currentHash: null,
+  error: null,
+});
+
+// Export hook with proper type checking
+export const useTransaction = (): TransactionContextValue => {
+  const context = useContext(TransactionContext);
+  if (!context) {
+    throw new Error('useTransaction must be used within a TransactionProvider');
+  }
+  return context;
 };
 
-export const TransactionProvider = ({
+// Provider component
+export const TransactionProvider: FunctionComponent<TransactionProviderProps> = ({
   children,
   toast,
-}: TransactionProviderProps) => {
+}) => {
   const [state, setState] = useState<TransactionState>({
     isTransacting: false,
     currentHash: null,
@@ -12684,18 +13325,18 @@ export const TransactionProvider = ({
   });
 
   const executeTransaction = useCallback(
-    async (
+    async <T extends ContractTransactionResponse>(
       chainId: string,
-      transactionFn: () => Promise<TransactionResponse>,
+      transactionFn: () => Promise<T>,
       options: TransactionOptions = {}
-    ) => {
-      const toastId = 'transaction-status';
-      
+    ): Promise<{ tx: T; receipt: TransactionReceipt } | null> => {
       setState({
         isTransacting: true,
         currentHash: null,
         error: null,
       });
+
+      const toastId = 'transaction-status';
 
       try {
         // Show initial toast
@@ -12711,13 +13352,30 @@ export const TransactionProvider = ({
         // Send transaction
         const tx = await transactionFn();
         const hash = tx.hash;
-
+        
         setState(prev => ({ ...prev, currentHash: hash }));
 
         // Update toast to pending state
         toast.update(toastId, {
           title: 'Transaction Pending',
-          description: React.createElement(TransactionStatusMessage, { hash, chainId }),
+          description: (
+            <div>
+              <p>Waiting for confirmation...</p>
+              <a
+                href={`${getChainById(chainId).blockExplorers?.default.url}/tx/${hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'blue.500',
+                  marginTop: '8px',
+                }}
+              >
+                View on Explorer <ExternalLink size={14} style={{ marginLeft: 4 }} />
+              </a>
+            </div>
+          ),
           status: 'loading',
           duration: null,
         });
@@ -12726,33 +13384,52 @@ export const TransactionProvider = ({
         try {
           const receipt = await tx.wait();
           
-          // Important: Close the pending toast before showing success
+          if (!receipt) {
+            throw new Error('Failed to get transaction receipt');
+          }
+
+          // Close pending toast
           toast.close(toastId);
 
           if (receipt.status === 1) {
+            // Transaction successful
             toast({
               title: 'Transaction Confirmed',
               description: options.successMessage || 'Transaction successful',
               status: 'success',
               duration: 5000,
-              icon: React.createElement(CheckCircle, { size: 16 }),
+              icon: <Check size={16} />,
             });
 
             if (options.onSuccess) {
               options.onSuccess();
             }
 
-            return { tx, receipt };
+            const formattedReceipt: TransactionReceipt = {
+              blockNumber: receipt.blockNumber,
+              blockHash: receipt.blockHash,
+              transactionIndex: receipt.transactionIndex,
+              hash: receipt.hash,
+              status: receipt.status,
+              logs: receipt.logs.map(log => ({
+                address: log.address,
+                topics: log.topics,
+                data: log.data,
+                blockNumber: log.blockNumber,
+                transactionIndex: log.transactionIndex,
+                logIndex: log.logIndex,
+              })),
+            };
+
+            return { tx, receipt: formattedReceipt };
           } else {
             throw new Error('Transaction failed');
           }
         } catch (error: any) {
-          // Close pending toast before showing error
-          toast.close(toastId);
-
           // Handle specific error cases
           if (error.code === 'TRANSACTION_REPLACED') {
             if (error.reason === 'repriced') {
+              // Transaction was repriced/speeded up
               if (error.receipt.status === 1) {
                 toast({
                   title: 'Transaction Confirmed',
@@ -12775,10 +13452,8 @@ export const TransactionProvider = ({
           throw error;
         }
       } catch (error: any) {
-        // Ensure pending toast is closed
-        toast.close(toastId);
-
         console.error('Transaction error:', error);
+        toast.close(toastId);
 
         // Handle user rejection separately
         if (
@@ -12792,7 +13467,7 @@ export const TransactionProvider = ({
             description: 'You rejected the transaction',
             status: 'warning',
             duration: 5000,
-            icon: React.createElement(AlertTriangle, { size: 16 }),
+            icon: <AlertTriangle size={16} />,
           });
           return null;
         }
@@ -12805,7 +13480,7 @@ export const TransactionProvider = ({
           description: options.errorMessage || errorMessage,
           status: 'error',
           duration: 5000,
-          icon: React.createElement(AlertTriangle, { size: 16 }),
+          icon: <AlertTriangle size={16} />,
         });
 
         return null;
@@ -12834,17 +13509,14 @@ export const TransactionProvider = ({
   );
 };
 
+// Helper function to format transaction errors
 const formatTransactionError = (error: any): string => {
-  if (
-    error?.code === 'ACTION_REJECTED' ||
-    error?.code === 4001 ||
-    error?.message?.toLowerCase().includes('user rejected') ||
-    error?.message?.toLowerCase().includes('user denied')
-  ) {
+  if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
     return 'Transaction was rejected';
   }
 
-  switch (error?.code) {
+  // Standard error codes
+  switch (error.code) {
     case 'INSUFFICIENT_FUNDS':
       return 'Insufficient funds to complete the transaction';
     case 'UNPREDICTABLE_GAS_LIMIT':
@@ -12855,7 +13527,8 @@ const formatTransactionError = (error: any): string => {
       break;
   }
 
-  const message = error?.message?.toLowerCase() || '';
+  // Message pattern matching
+  const message = error.message?.toLowerCase() || '';
   if (message.includes('gas required exceeds allowance')) {
     return 'Transaction would exceed gas limit';
   }
@@ -12869,15 +13542,7 @@ const formatTransactionError = (error: any): string => {
     return 'Gas price too low. Please try again with a higher gas price';
   }
 
-  return error?.message || 'An error occurred while processing the transaction';
-};
-
-export const useTransaction = () => {
-  const context = useContext(TransactionContext);
-  if (!context) {
-    throw new Error('useTransaction must be used within a TransactionProvider');
-  }
-  return context;
+  return error.message || 'An error occurred while processing the transaction';
 };
 
 export { TransactionContext };

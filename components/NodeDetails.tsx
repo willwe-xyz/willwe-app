@@ -23,7 +23,7 @@ import {
 import { NodeState } from '../types/chainData';
 import NodeOperations from './Node/NodeOperations';
 import { useNodeData, getNodeValue, getNodeInflation, isNodeMember } from '../hooks/useNodeData';
-import { useTransactionContext } from '../contexts/TransactionContext';
+import { useTransaction } from '../contexts/TransactionContext';
 import { formatEther, formatUnits } from 'ethers';
 import { usePrivy } from '@privy-io/react-auth';
 import { MembersList } from './Node/MembersList';
@@ -46,7 +46,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 }) => {
   const { user } = usePrivy();
   const userAddress = user?.wallet?.address || '';
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
   const toast = useToast();
   
   const { 

@@ -22,7 +22,7 @@ import {
 import { usePrivy } from "@privy-io/react-auth";
 import { useContractOperations } from '../../hooks/useContractOperations';
 import { TokenOperationModal } from '../TokenOperations/TokenOperationModal';
-import { useTransactionContext } from '../../contexts/TransactionContext';
+import { useTransaction } from '../../contexts/TransactionContext';
 
 interface NodeOperationsProps {
   nodeId: string;
@@ -39,7 +39,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 }) => {
   const router = useRouter();
   const { user } = usePrivy();
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentOperation, setCurrentOperation] = useState('');
 

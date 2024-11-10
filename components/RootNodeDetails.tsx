@@ -31,7 +31,7 @@ import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance } from '../utils/formatters';
-import { useTransactionContext } from '../contexts/TransactionContext';
+import { useTransaction } from '../contexts/TransactionContext';
 import { useContractOperation } from '../hooks/useContractOperation';
 import { NodeCard } from './Node/NodeCard';
 
@@ -58,7 +58,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
 }) => {
   const toast = useToast();
   const { getEthersProvider } = usePrivy();
-  const { executeTransaction } = useTransactionContext();
+  const { executeTransaction } = useTransaction();
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Calculate stats and organize nodes

@@ -32,7 +32,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { RequirementsTable } from './RequirementsTable';
 import { StatusIndicator } from './StatusIndicator';
 import { useContractOperations } from '../../hooks/useContractOperations';
-import { useTransactionContext } from '../../contexts/TransactionContext';
+import { useTransaction } from '../../contexts/TransactionContext';
 import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
@@ -66,7 +66,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
 
   // Hooks
-  const { isTransacting } = useTransactionContext();
+  const { isTransacting } = useTransaction();
   const { getMembraneData, getTokenInfo } = useContractOperations(chainId);
 
   // Reset on close
