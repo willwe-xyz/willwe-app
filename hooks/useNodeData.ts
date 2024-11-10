@@ -9,36 +9,41 @@ import {
 import { deployments, ABIs, getRPCUrl } from '../config/contracts';
 
 interface UseNodeDataResult {
-  data: TransformedNodeData | null;
-  rawData: NodeState | null;
+  data: NodeState | null;
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
-  // Convenience getters
-  nodeId: string;
-  value: string;
-  inflation: string;
-  balanceAnchor: string;
-  balanceBudget: string;
-  membraneId: string;
-  memberCount: number;
-  childCount: number;
-  hasSignals: boolean;
-  signalCount: number;
 }
+
+// Convert address to uint256 ID format
+const addressToUint256 = (address: string): string => {
+  try {
+    // Ensure address is properly formatted
+    const formattedAddress = address.toLowerCase().startsWith('0x') 
+      ? address.toLowerCase()
+      : `0x${address.toLowerCase()}`;
+
+    // Remove '0x' prefix and convert to decimal string
+    const withoutPrefix = formattedAddress.slice(2);
+    return BigInt(`0x${withoutPrefix}`).toString();
+  } catch (error) {
+    console.error('Error converting address to uint256:', error);
+    throw error;
+  }
+};
 
 export function useNodeData(
   chainId: string | undefined, 
-  nodeId: string | undefined
+  nodeIdOrAddress: string | undefined,
+  isRootNode: boolean = false // Add flag to indicate if this is a root node
 ): UseNodeDataResult {
-  const [data, setData] = useState<TransformedNodeData | null>(null);
-  const [rawData, setRawData] = useState<NodeState | null>(null);
+  const [data, setData] = useState<NodeState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!chainId || !nodeId) {
-      setError(new Error('Invalid chainId or nodeId'));
+    if (!chainId || !nodeIdOrAddress) {
+      setError(new Error('Invalid chainId or node identifier'));
       setIsLoading(false);
       return;
     }
@@ -48,120 +53,111 @@ export function useNodeData(
       setError(null);
 
       const cleanChainId = chainId.replace('eip155:', '');
-      const willWeAddress = deployments.WillWe[cleanChainId];
+      const contractAddress = deployments.WillWe[cleanChainId];
       
-      if (!willWeAddress) {
+      if (!contractAddress) {
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
 
       const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
-      const contract = new ethers.Contract(willWeAddress, ABIs.WillWe, provider);
+      const contract = new ethers.Contract(contractAddress, ABIs.WillWe, provider);
 
-      console.log('Fetching data for:', {
-        chainId: cleanChainId,
-        nodeId,
-        contract: willWeAddress
-      });
-
-      const rawNodeData = await contract.getNodeData(nodeId);
-
-      // Validate the raw data
-      if (!isValidNodeState(rawNodeData)) {
-        throw new Error('Invalid node data received from contract');
+      // Convert input to appropriate format based on whether it's a root node
+      let formattedId: string;
+      if (isRootNode) {
+        // For root nodes, we need to convert the token address to uint256
+        formattedId = addressToUint256(nodeIdOrAddress);
+      } else {
+        // For regular nodes, use the nodeId directly
+        formattedId = BigInt(nodeIdOrAddress).toString();
       }
 
-      // Store raw data
-      setRawData(rawNodeData);
-
-      // Transform and store processed data
-      const transformedData = transformNodeData(rawNodeData);
-      setData(transformedData);
-
-      console.log('Node data fetched:', {
-        raw: rawNodeData,
-        transformed: transformedData
+      console.log('Fetching node data:', {
+        chainId: cleanChainId,
+        nodeIdOrAddress,
+        formattedId,
+        isRootNode,
+        contractAddress
       });
+
+      // Get node data using the formatted ID
+      const nodeData = await contract.getNodeData(formattedId);
+
+      // Validate the received data
+      if (!nodeData?.basicInfo) {
+        throw new Error('Invalid node data received');
+      }
+
+      // Transform data to ensure all BigInt values are converted to strings
+      const transformedData: NodeState = {
+        basicInfo: nodeData.basicInfo.map((item: any) => item.toString()),
+        membraneMeta: nodeData.membraneMeta || '',
+        membersOfNode: nodeData.membersOfNode || [],
+        childrenNodes: (nodeData.childrenNodes || []).map((node: any) => node.toString()),
+        rootPath: (nodeData.rootPath || []).map((path: any) => path.toString()),
+        signals: (nodeData.signals || []).map((signal: any) => ({
+          MembraneInflation: (signal.MembraneInflation || []).map((mi: any[]) => 
+            mi.map(item => item.toString())
+          ),
+          lastRedistSignal: (signal.lastRedistSignal || []).map((item: any) => 
+            item.toString()
+          )
+        }))
+      };
+
+      setData(transformedData);
+      setError(null);
+
+      console.log('Node data fetched successfully:', transformedData);
 
     } catch (err) {
       console.error('Error fetching node data:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch node data'));
       setData(null);
-      setRawData(null);
     } finally {
       setIsLoading(false);
     }
-  }, [chainId, nodeId]);
+  }, [chainId, nodeIdOrAddress, isRootNode]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Reset state when chainId or nodeId changes
   useEffect(() => {
     setData(null);
-    setRawData(null);
     setError(null);
     setIsLoading(true);
-  }, [chainId, nodeId]);
-
-  // Compute derived values from the transformed data
-  const derivedData = {
-    nodeId: data?.basicInfo.nodeId || '0',
-    value: data?.basicInfo.value || '0',
-    inflation: data?.basicInfo.inflation || '0',
-    balanceAnchor: data?.basicInfo.balanceAnchor || '0',
-    balanceBudget: data?.basicInfo.balanceBudget || '0',
-    membraneId: data?.basicInfo.membraneId || '0',
-    memberCount: data?.membersOfNode.length || 0,
-    childCount: data?.childrenNodes.length || 0,
-    hasSignals: (data?.signals.length || 0) > 0,
-    signalCount: data?.signals.length || 0
-  };
+  }, [chainId, nodeIdOrAddress, isRootNode]);
 
   return {
     data,
-    rawData,
     isLoading,
     error,
-    refetch: fetchData,
-    ...derivedData
+    refetch: fetchData
   };
 }
 
-// Helper hook for node permissions
-export function useNodePermissions(
-  nodeData: TransformedNodeData | null,
-  userAddress: string | undefined
-) {
-  const [permissions, setPermissions] = useState({
-    isMember: false,
-    canSignal: false,
-    canRedistribute: false,
-    canSpawn: false
-  });
+// Helper functions for working with node data
+export const isNodeMember = (nodeData: NodeState | null, address: string): boolean => {
+  if (!nodeData?.membersOfNode || !address) return false;
+  return nodeData.membersOfNode
+    .map(addr => addr.toLowerCase())
+    .includes(address.toLowerCase());
+};
 
-  useEffect(() => {
-    if (!nodeData || !userAddress) {
-      setPermissions({
-        isMember: false,
-        canSignal: false,
-        canRedistribute: false,
-        canSpawn: false
-      });
-      return;
-    }
+export const getNodeValue = (nodeData: NodeState | null): string => {
+  if (!nodeData?.basicInfo?.[4]) return '0';
+  return nodeData.basicInfo[4];
+};
 
-    const isMember = nodeData.membersOfNode
-      .map(addr => addr.toLowerCase())
-      .includes(userAddress.toLowerCase());
+export const getNodeInflation = (nodeData: NodeState | null): string => {
+  if (!nodeData?.basicInfo?.[1]) return '0';
+  return nodeData.basicInfo[1];
+};
 
-    setPermissions({
-      isMember,
-      canSignal: isMember,
-      canRedistribute: isMember,
-      canSpawn: isMember
-    });
-  }, [nodeData, userAddress]);
+export const getNodeMembraneId = (nodeData: NodeState | null): string => {
+  if (!nodeData?.basicInfo?.[5]) return '0';
+  return nodeData.basicInfo[5];
+};
 
-  return permissions;
-}
+export default useNodeData;

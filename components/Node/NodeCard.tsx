@@ -1,5 +1,6 @@
-// components/Node/NodeCard.tsx
-import { VStack } from '@chakra-ui/react';
+import React from 'react';
+import { useRouter } from 'next/router';
+import { Box, HStack, Text, VStack } from '@chakra-ui/react';
 import { Activity, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatBalance } from '../../utils/formatters';
@@ -9,8 +10,9 @@ interface NodeCardProps {
   node: NodeState;
   index: number;
   selectedTokenColor: string;
-  onNodeSelect: (nodeId: string) => void;
+  onNodeSelect?: (nodeId: string) => void;
   nodeValues: Record<string, number>;
+  chainId: string;
 }
 
 export const NodeCard: React.FC<NodeCardProps> = ({
@@ -18,15 +20,33 @@ export const NodeCard: React.FC<NodeCardProps> = ({
   index,
   selectedTokenColor,
   onNodeSelect,
-  nodeValues
+  nodeValues,
+  chainId
 }) => {
+  const router = useRouter();
+
+  // Guard against invalid node data
   if (!node?.basicInfo?.[0]) return null;
   
   const nodeId = node.basicInfo[0];
   const memberCount = node.membersOfNode?.length || 0;
   const signalCount = node.signals?.length || 0;
-  const nodeValue = node.basicInfo[4];
+  const nodeValue = node.basicInfo[4] || '0';
   const percentage = nodeValues[nodeId] || 0;
+
+  // Handle node click with fallback to direct navigation
+  const handleNodeClick = () => {
+    if (onNodeSelect && typeof onNodeSelect === 'function') {
+      onNodeSelect(nodeId);
+    } else {
+      // Direct navigation fallback
+      const cleanChainId = chainId.replace('eip155:', '');
+      router.push({
+        pathname: '/nodes/[chainId]/[nodeId]',
+        query: { chainId: cleanChainId, nodeId }
+      });
+    }
+  };
 
   return (
     <motion.div
@@ -43,9 +63,15 @@ export const NodeCard: React.FC<NodeCardProps> = ({
         borderColor={selectedTokenColor}
         minW="240px"
         cursor="pointer"
-        onClick={() => onNodeSelect(nodeId)}
-        _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
+        onClick={handleNodeClick}
+        _hover={{ 
+          transform: 'translateY(-2px)', 
+          shadow: 'md',
+          borderColor: `${selectedTokenColor}`,
+          bg: `${selectedTokenColor}05`
+        }}
         transition="all 0.2s"
+        position="relative"
       >
         <HStack justify="space-between" mb={3}>
           <Text fontWeight="medium">
@@ -57,7 +83,14 @@ export const NodeCard: React.FC<NodeCardProps> = ({
               h="2"
               rounded="full"
               bg={selectedTokenColor}
-              animation="pulse 2s infinite"
+              sx={{
+                '@keyframes pulse': {
+                  '0%': { transform: 'scale(0.95)', opacity: 0.5 },
+                  '50%': { transform: 'scale(1.05)', opacity: 0.8 },
+                  '100%': { transform: 'scale(0.95)', opacity: 0.5 }
+                },
+                animation: 'pulse 2s infinite'
+              }}
             />
           )}
         </HStack>
@@ -65,18 +98,25 @@ export const NodeCard: React.FC<NodeCardProps> = ({
         <VStack align="stretch" spacing={2}>
           <HStack justify="space-between">
             <HStack>
-              <Activity size={14} />
-              <Text fontSize="sm">
+              <Activity size={14} color={selectedTokenColor} />
+              <Text fontSize="sm" color={selectedTokenColor}>
                 {formatBalance(nodeValue)}
               </Text>
             </HStack>
             <HStack>
-              <Users size={14} />
-              <Text fontSize="sm">{memberCount}</Text>
+              <Users size={14} color={selectedTokenColor} />
+              <Text fontSize="sm" color={selectedTokenColor}>
+                {memberCount}
+              </Text>
             </HStack>
           </HStack>
 
-          <Box bg="gray.100" rounded="full" h="2" overflow="hidden">
+          <Box 
+            bg={`${selectedTokenColor}10`}
+            rounded="full" 
+            h="2"
+            overflow="hidden"
+          >
             <Box
               bg={selectedTokenColor}
               h="full"
@@ -84,7 +124,12 @@ export const NodeCard: React.FC<NodeCardProps> = ({
               transition="width 0.3s ease"
             />
           </Box>
-          <Text fontSize="xs" color="gray.500" textAlign="right">
+          
+          <Text 
+            fontSize="xs" 
+            color="gray.500" 
+            textAlign="right"
+          >
             {percentage.toFixed(1)}%
           </Text>
         </VStack>
@@ -93,49 +138,11 @@ export const NodeCard: React.FC<NodeCardProps> = ({
   );
 };
 
-// components/Node/StatsCard.tsx
-import React from 'react';
-import { Box, HStack, Text, Tooltip } from '@chakra-ui/react';
-import { IconType } from 'lucide-react';
-
-interface StatsCardProps {
-  title: string;
-  value: string;
-  icon: IconType;
-  bgColor: string;
-  textColor: string;
-  tooltip: string;
-}
-
-export const StatsCard: React.FC<StatsCardProps> = ({
-  title,
-  value,
-  icon: Icon,
-  bgColor,
-  textColor,
-  tooltip
-}) => (
-  <Tooltip label={tooltip}>
-    <Box
-      p={4}
-      bg={bgColor}
-      rounded="lg"
-      flex="1"
-      minW="200px"
-      role="group"
-      transition="all 0.2s"
-      _hover={{
-        transform: 'translateY(-2px)',
-        shadow: 'md'
-      }}
-    >
-      <HStack color={textColor} mb={1}>
-        <Icon size={16} />
-        <Text fontSize="sm">{title}</Text>
-      </HStack>
-      <Text fontSize="2xl" fontWeight="semibold">
-        {value}
-      </Text>
-    </Box>
-  </Tooltip>
-);
+export default React.memo(NodeCard, (prevProps, nextProps) => {
+  return (
+    prevProps.node?.basicInfo?.[0] === nextProps.node?.basicInfo?.[0] &&
+    prevProps.nodeValues[prevProps.node?.basicInfo?.[0]] === nextProps.nodeValues[nextProps.node?.basicInfo?.[0]] &&
+    prevProps.selectedTokenColor === nextProps.selectedTokenColor &&
+    prevProps.chainId === nextProps.chainId
+  );
+});

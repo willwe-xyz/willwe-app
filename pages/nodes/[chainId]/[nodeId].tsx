@@ -1,78 +1,59 @@
 import { useRouter } from 'next/router';
-import { usePrivy } from "@privy-io/react-auth";
-import { MainLayout } from '../../../components/Layout/MainLayout';
-import ContentLayout from '../../../components/Layout/ContentLayout';
-import { NodeContentView } from '../../../components/Node/NodeContentView';
+import { useEffect } from 'react';
+import { Box, Spinner, useToast } from '@chakra-ui/react';
+import AppLayout from '../../../components/Layout/AppLayout';
+import NodeDetails from '../../../components/NodeDetails';
+import { useNodeData } from '../../../hooks/useNodeData';
 import { useColorManagement } from '../../../hooks/useColorManagement';
-import { useNode } from '../../../contexts/NodeContext';
-import { Box, Spinner } from '@chakra-ui/react';
 
-export default function NodePage() {
+const NodePage = () => {
   const router = useRouter();
-  const { colorState, cycleColors } = useColorManagement();
-  const { ready, authenticated, user, logout, login } = usePrivy();
-  const { selectNode, selectedToken } = useNode();
+  const { colorState } = useColorManagement();
+  const toast = useToast();
+
   const { chainId, nodeId } = router.query;
 
-  // Handle navigation to different nodes
-  const handleNodeSelect = (selectedNodeId: string) => {
-    if (chainId) {
-      selectNode(selectedNodeId, chainId as string);
-      router.push(`/nodes/${chainId}/${selectedNodeId}`);
+  useEffect(() => {
+    if (router.isReady && (!chainId || !nodeId)) {
+      toast({
+        title: "Error",
+        description: "Invalid node or chain ID",
+        status: "error",
+        duration: 5000,
+      });
+      router.push('/dashboard');
     }
-  };
+  }, [router.isReady, chainId, nodeId, router, toast]);
 
-  // Handle compose panel submission
-  const handleComposeSubmit = async (data: any) => {
-    // Handle token creation or entity definition
-    // This will be handled by the ComposePanel component in MainLayout
-  };
+  const { data: nodeData, isLoading, error } = useNodeData(
+    chainId as string,
+    nodeId as string
+  );
 
-  // Handle loading state
-  if (!router.isReady || !ready) {
+  if (!router.isReady || !chainId || !nodeId) {
     return (
-      <Box minH="100vh" display="flex" alignItems="center" justifyContent="center">
-        <Spinner size="xl" color={colorState.contrastingColor} />
-      </Box>
+      <AppLayout>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+          <Spinner size="xl" color={colorState.contrastingColor} />
+        </Box>
+      </AppLayout>
     );
   }
 
-  // Prepare header props
-  const headerProps = {
-    userAddress: user?.wallet?.address,
-    chainId: chainId as string,
-    logout,
-    login,
-    selectedNodeId: nodeId as string,
-    onNodeSelect: handleNodeSelect,
-    isTransacting: false,
-    contrastingColor: colorState.contrastingColor,
-    reverseColor: colorState.reverseColor,
-    cycleColors,
-    onComposeSubmit: handleComposeSubmit
-  };
-
-  // Prepare sidebar props
-  const sidebarProps = {
-    selectedToken,
-    handleTokenSelect: (tokenAddress: string) => {
-      router.push('/dashboard?token=' + tokenAddress);
-    },
-    ...colorState,
-    userAddress: user?.wallet?.address || '',
-    chainId: chainId as string,
-  };
-
   return (
-    <MainLayout headerProps={headerProps}>
-      <ContentLayout sidebarProps={sidebarProps}>
-        <NodeContentView
-          nodeId={nodeId as string}
-          chainId={chainId as string}
-          colorState={colorState}
-          onNodeSelect={handleNodeSelect}
+    <AppLayout>
+      <Box flex={1} overflow="auto" bg="gray.50" p={6}>
+        <NodeDetails
+          chainId={chainId.toString()}
+          nodeId={nodeId.toString()}
+          selectedTokenColor={colorState.contrastingColor}
+          nodeData={nodeData}
+          isLoading={isLoading}
+          error={error}
         />
-      </ContentLayout>
-    </MainLayout>
+      </Box>
+    </AppLayout>
   );
-}
+};
+
+export default NodePage;

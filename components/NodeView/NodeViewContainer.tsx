@@ -221,20 +221,7 @@ const NodeViewContainer = ({
   ]);
 
   return (
-    <MainLayout
-      headerProps={{
-        userAddress,
-        chainId: chainId || '',
-        logout,
-        login,
-        selectedNodeId: selectedNodeId || initialNodeId,
-        onNodeSelect: handleNodeSelect,
-        isTransacting: false,
-        contrastingColor: colorState.contrastingColor,
-        reverseColor: colorState.reverseColor,
-        cycleColors
-      }}
-    >
+
       <ContentLayout
         sidebarProps={{
           selectedToken: currentToken,
@@ -247,7 +234,7 @@ const NodeViewContainer = ({
       >
         {renderContent()}
       </ContentLayout>
-    </MainLayout>
+
   );
 };
 

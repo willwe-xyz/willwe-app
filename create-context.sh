@@ -1,83 +1,131 @@
 #!/bin/bash
 
-# Create the context-files directory if it doesn't exist
-mkdir -p context-files
+# Create temp directory for processing
+mkdir -p .context-temp
 
-# Remove the existing frontend-context.tsx if it exists
-rm -f context-files/frontend-context.tsx
+# Output file
+CONTEXT_FILE=".context-temp/frontend-context.tsx"
 
-# Function to append content to the context file with a section header
-append_file_content() {
-    local file_path=$1
-    local context_file=$2
+# Colors for logging
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-    echo "// File: $file_path" >> "$context_file"
-    cat "$file_path" >> "$context_file"
-    echo -e "\n\n" >> "$context_file"
+log() {
+    echo -e "${GREEN}[Context Generator]${NC} $1"
 }
 
-# Append package.json contents to the context file
-context_file="context-files/frontend-context.tsx"
-echo "// Consolidated context file for LLM" > "$context_file"
+error() {
+    echo -e "${RED}[Error]${NC} $1"
+}
 
-if [ -f "package.json" ]; then
-    append_file_content "package.json" "$context_file"
-else
-    echo "// Warning: package.json not found" >> "$context_file"
-    echo -e "\n\n" >> "$context_file"
-fi
+# Smart content appender that removes duplicate exports and combines similar declarations
+append_smart() {
+    local file=$1
+    local section_name=$2
 
-# Add core configuration files if they exist
-config_files=("next.config.js" "tsconfig.json" ".eslintrc")
-for config_file in "${config_files[@]}"; do
-    if [ -f "$config_file" ]; then
-        append_file_content "$config_file" "$context_file"
-    fi
-done
+    # Skip if file doesn't exist
+    [[ ! -f "$file" ]] && return
 
-# Append full file content from core directories (pages, components, config, hooks, contracts-source)
-find ./pages ./components ./config ./hooks ./contracts-source ./contexts ./lib ./utils ./types ./const \
-     -type f \
-     \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) | \
-while read -r file; do
-    append_file_content "$file" "$context_file"
-done
-
-# Extract and append only type definitions and utility functions from lib, utils, const, types, styles directories
-declare -A types_to_import
-find . \( -path './types/*' -o -path './styles/*' \) \
-     -type f \
-     \( -name '*.ts' -o -name '*.tsx' \) \
-     -not -path '*/node_modules/*' | \
-while read -r file; do
-    echo "// File: $file (Extracted Types and Utilities)" >> "$context_file"
+    echo "// File: $file" >> "$CONTEXT_FILE"
     
-    # Extract function signatures, utility functions, and JSDoc comments only
-    awk '/\/\*\*/,/\*\// {print} /^export function|^export const|^export async function|^async function|^function/ {print}' "$file" >> "$context_file"
-    echo -e "\n\n" >> "$context_file"
+    # Process file content to remove duplicates and combine similar declarations
+    awk '
+    # Store lines and track exports
+    {
+        if ($0 ~ /^export/) {
+            # Extract export name
+            match($0, /export[[:space:]]+(type|interface|const|function|class)[[:space:]]+([a-zA-Z0-9_]+)/)
+            if (RSTART) {
+                name = substr($0, RSTART+length(RLENGTH), RLENGTH)
+                if (!(name in seen)) {
+                    seen[name] = 1
+                    print $0
+                }
+            } else {
+                print $0
+            }
+        } else {
+            print $0
+        }
+    }' "$file" >> "$CONTEXT_FILE"
 
-    # Extract types and interfaces
-    grep -Pzo "(?s)^export\s+(type|interface)\s+\w+.*?\{.*?\n\}" "$file" >> "$context_file" || true
-    echo -e "\n\n" >> "$context_file"
+    echo -e "\n\n" >> "$CONTEXT_FILE"
+}
+
+# Initialize context file with XML wrapper
+{
+    echo "<documents><document index=\"1\">"
+    echo "<source>frontend-context.tsx</source>"
+    echo "<document_content>"
+} > "$CONTEXT_FILE"
+
+# Core configuration files
+log "Processing configuration files..."
+for config in package.json next.config.js tsconfig.json; do
+    [[ -f $config ]] && append_smart "$config" "Configuration"
 done
 
-# Locate and copy relevant type definitions from node_modules
-for type_name in "${!types_to_import[@]}"; do
-    lib_path="${types_to_import[$type_name]}"
+# Process core directories with smart deduplication
+CORE_DIRS=("pages" "components" "config" "hooks" "contexts" "utils" "types" "const")
+
+for dir in "${CORE_DIRS[@]}"; do
+    [[ ! -d "./$dir" ]] && continue
     
-    # Search for .d.ts files in node_modules with depth control
-    find "./node_modules/$lib_path" -type f -name "*.d.ts" -maxdepth 3 | \
-    while read -r type_file; do
-        if grep -qw "$type_name" "$type_file"; then
-            echo "// File: $type_file (Type: $type_name)" >> "$context_file"
-            awk "/export (type|interface) $type_name /,/^}/" "$type_file" >> "$context_file"
-            grep -Pzo "(export\s+(const|type|interface)\s+$type_name\s+=.*?;)" "$type_file" >> "$context_file"
-            echo -e "\n\n" >> "$context_file"
-        fi
+    log "Processing $dir directory..."
+    
+    # Find all TypeScript/JavaScript files
+    find "./$dir" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \) \
+        ! -path "*/node_modules/*" \
+        ! -path "*/.next/*" \
+        ! -name "*.test.*" \
+        ! -name "*.spec.*" | \
+    while read -r file; do
+        append_smart "$file" "$dir"
     done
 done
 
-# Cleanup: Remove all files in context-files except frontend-context.tsx
-find context-files -type f ! -name 'frontend-context.tsx' -delete
+# Smart type extraction - avoid duplicates
+log "Extracting types and utilities..."
+{
+    echo -e "\n// Extracted Types and Utilities\n"
+    
+    # Process type files with deduplication
+    find . \( -path './types/*' -o -path './utils/*' \) \
+        -type f \
+        \( -name '*.ts' -o -name '*.tsx' \) \
+        ! -path '*/node_modules/*' | \
+    while read -r file; do
+        # Extract types, interfaces, and functions without duplicates
+        awk '
+        BEGIN { in_block = 0 }
+        /^export (type|interface|class|function|const)/ {
+            if (!seen[$0]++) {
+                in_block = 1
+                print "\n" $0
+            }
+        }
+        in_block && /^}/ {
+            print $0
+            in_block = 0
+        }
+        in_block { print $0 }
+        ' "$file" >> "$CONTEXT_FILE"
+    done
+}
 
-echo "Context file created at $context_file"
+# Close XML wrapper
+{
+    echo "</document_content>"
+    echo "</document></documents>"
+} >> "$CONTEXT_FILE"
+
+# Move to final location and cleanup
+mv "$CONTEXT_FILE" "./frontend-context.tsx"
+rm -rf .context-temp
+
+log "Context generation complete!"
+
+# Output statistics
+size_kb=$(du -k frontend-context.tsx | cut -f1)
+log "Generated context file size: ${size_kb}KB"

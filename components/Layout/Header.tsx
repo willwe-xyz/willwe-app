@@ -1,3 +1,5 @@
+// File: ./components/Layout/Header.tsx
+
 import React from 'react';
 import { Flex } from '@chakra-ui/react';
 import { PaletteButton } from './PaletteButton';
@@ -28,6 +30,7 @@ const Header: React.FC<HeaderProps> = ({
   reverseColor,
   cycleColors
 }) => {
+  // Only render header components once
   return (
     <Flex 
       justify="space-between" 

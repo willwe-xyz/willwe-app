@@ -1,3 +1,5 @@
+// File: ./components/RootNodeDetails.tsx
+
 import React, { useMemo, useCallback, useState } from 'react';
 import {
   Box,
@@ -10,6 +12,8 @@ import {
   Alert,
   AlertIcon,
   Spinner,
+  Grid,
+  Tooltip,
 } from '@chakra-ui/react';
 import { 
   Users,
@@ -19,50 +23,21 @@ import {
   Plus,
   GitBranchPlus,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance } from '../utils/formatters';
-
-// Helper functions
-const getContract = async (chainId: string, getEthersProvider: () => Promise<any>) => {
-  try {
-    const provider = await getEthersProvider();
-    const signer = await provider.getSigner();
-    const cleanChainId = chainId.replace('eip155:', '');
-    const contractAddress = deployments.WillWe[cleanChainId];
-
-    if (!contractAddress) {
-      throw new Error(`No contract deployment found for chain ${chainId}`);
-    }
-
-    return new ethers.Contract(contractAddress, ABIs.WillWe, signer);
-  } catch (error) {
-    console.error('Contract initialization error:', error);
-    throw new Error('Failed to initialize contract');
-  }
-};
-
-const executeTransaction = async (
-  contract: ethers.Contract,
-  methodName: string,
-  args: any[],
-  options: any = {}
-) => {
-  const response = await contract[methodName](...args, options);
-  const hash = response.hash;
-  const tx = await response.getTransaction();
-  const receipt = await tx.wait(1);
-  return { hash, receipt };
-};
+import { useTransactionContext } from '../contexts/TransactionContext';
+import { useContractOperation } from '../hooks/useContractOperation';
+import { NodeCard } from './Node/NodeCard';
 
 interface RootNodeDetailsProps {
   chainId: string;
   selectedToken: string;
-  userAddress: string;
   selectedTokenColor: string;
   onNodeSelect: (nodeId: string) => void;
   nodes: NodeState[];
@@ -74,16 +49,16 @@ interface RootNodeDetailsProps {
 export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   chainId,
   selectedToken,
-  userAddress,
   selectedTokenColor,
   onNodeSelect,
-  nodes,
+  nodes = [],
   isLoading,
   error,
   onRefresh
 }) => {
   const toast = useToast();
   const { getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransactionContext();
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Calculate stats and organize nodes
@@ -109,21 +84,21 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     const tokenBigInt = ethers.toBigInt(selectedToken);
     const tokenId = tokenBigInt.toString();
 
-    const base = nodes.filter(node => {
-      return node.rootPath?.length > 0 && 
-             BigInt(node.rootPath[0]).toString() === tokenId &&
-             node.rootPath.length === 1;
-    });
-    
-    const derived = nodes.filter(node => {
-      return node.rootPath?.length > 0 && 
-             BigInt(node.rootPath[0]).toString() === tokenId &&
-             node.rootPath.length > 1;
-    });
+    // Filter base and derived nodes
+    const base = nodes.filter(node => 
+      node?.rootPath?.length === 1 && 
+      BigInt(node.rootPath[0]).toString() === tokenId
+    );
 
+    const derived = nodes.filter(node =>
+      node?.rootPath?.length > 1 && 
+      BigInt(node.rootPath[0]).toString() === tokenId
+    );
+
+    // Calculate stats
     const stats = nodes.reduce((acc, node) => {
       if (!node?.basicInfo?.[4]) return acc;
-      
+
       try {
         const nodeValue = BigInt(node.basicInfo[4]);
         return {
@@ -142,8 +117,9 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       totalSignals: 0
     });
 
+    // Calculate node value percentages
     const values: Record<string, number> = {};
-    if (stats.totalValue > 0) {
+    if (stats.totalValue > BigInt(0)) {
       nodes.forEach(node => {
         if (!node?.basicInfo?.[0] || !node?.basicInfo?.[4]) return;
         try {
@@ -159,15 +135,16 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       baseNodes: base,
       derivedNodes: derived,
       ...stats,
-      nodeValues: values
+      nodeValues: values,
     };
   }, [nodes, selectedToken]);
 
-  const handleSpawnBranch = useCallback(async () => {
+  // Handle spawning a new root node
+  const handleSpawnNode = useCallback(async () => {
     if (!selectedToken) {
       toast({
         title: "Error",
-        description: "No token selected",
+        description: "Please select a token first",
         status: "error",
         duration: 3000
       });
@@ -177,34 +154,42 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     setIsProcessing(true);
 
     try {
-      const tokenBigInt = ethers.toBigInt(selectedToken);
-      const tokenId = tokenBigInt.toString();
-      
-      const contract = await getContract(chainId, getEthersProvider);
-      const { hash, receipt } = await executeTransaction(
-        contract,
-        'spawnBranch',
-        [tokenId],
-        { gasLimit: 400000 }
+      const result = await executeTransaction(
+        chainId,
+        async () => {
+          const cleanChainId = chainId.replace('eip155:', '');
+          const contractAddress = deployments.WillWe[cleanChainId];
+          
+          if (!contractAddress) {
+            throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+          }
+
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer
+          );
+
+          return contract.spawnRootBranch(selectedToken, { gasLimit: 500000 });
+        },
+        {
+          successMessage: 'New root node created successfully',
+          errorMessage: 'Failed to create root node',
+          onSuccess: onRefresh
+        }
       );
 
-      if (receipt && receipt.status === 1) {
-        toast({
-          title: "Success",
-          description: "New branch created successfully",
-          status: "success",
-          duration: 5000,
-          icon: <Check size={16} />,
-        });
-        onRefresh?.();
-      } else {
-        throw new Error("Transaction failed");
+      if (!result) {
+        throw new Error('Transaction failed');
       }
-    } catch (error) {
-      console.error('Error spawning branch:', error);
+
+    } catch (error: any) {
+      console.error('Error spawning root node:', error);
       toast({
-        title: "Failed to Create Branch",
-        description: error instanceof Error ? error.message : 'Transaction failed',
+        title: "Failed to Create Node",
+        description: error.message || 'Transaction failed',
         status: "error",
         duration: 5000,
         icon: <AlertTriangle size={16} />,
@@ -212,32 +197,37 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedToken, chainId, getEthersProvider, onRefresh, toast]);
+  }, [chainId, selectedToken, executeTransaction, getEthersProvider, toast, onRefresh]);
 
+  // Stats cards configuration
   const statsCards = [
     {
       title: 'Total Value',
       value: formatBalance(totalValue),
       icon: <Activity size={16} />,
-      color: 'purple'
+      color: 'purple',
+      tooltip: 'Total value locked in all nodes'
     },
     {
       title: 'Members',
       value: totalMembers.toString(),
       icon: <Users size={16} />,
-      color: 'blue'
+      color: 'blue',
+      tooltip: 'Total unique members across all nodes'
     },
     {
       title: 'Max Depth',
       value: maxDepth.toString(),
       icon: <GitBranch size={16} />,
-      color: 'green'
+      color: 'green',
+      tooltip: 'Maximum depth of the node hierarchy'
     },
     {
       title: 'Active Signals',
       value: totalSignals.toString(),
       icon: <Signal size={16} />,
-      color: 'orange'
+      color: 'orange',
+      tooltip: 'Total active signals across all nodes'
     }
   ];
 
@@ -295,17 +285,18 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           <Button
             leftIcon={<Plus size={16} />}
             rightIcon={<GitBranchPlus size={16} />}
-            onClick={handleSpawnBranch}
+            onClick={handleSpawnNode}
             variant="outline"
             colorScheme="purple"
             isLoading={isProcessing}
-            loadingText="Creating Branch..."
+            loadingText="Creating Node..."
             isDisabled={!selectedToken || isProcessing}
           >
-            New Branch
+            New Root Node
           </Button>
           {onRefresh && (
             <Button
+              leftIcon={<RefreshCw size={16} />}
               variant="ghost"
               colorScheme="purple"
               onClick={onRefresh}
@@ -323,169 +314,160 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       </HStack>
 
       {/* Stats Cards */}
-      <Box mb={8}>
-        <HStack spacing={4} wrap="wrap">
-          {statsCards.map((stat, index) => (
+      <Grid 
+        templateColumns={{ 
+          base: "1fr", 
+          md: "repeat(2, 1fr)", 
+          lg: "repeat(4, 1fr)" 
+        }}
+        gap={4}
+        mb={8}
+      >
+        {statsCards.map((stat, index) => (
+          <Tooltip key={index} label={stat.tooltip}>
             <Box
-              key={index}
               p={4}
               bg={`${stat.color}.50`}
               rounded="lg"
-              flex="1"
-              minW="200px"
+              border="1px solid"
+              borderColor={`${stat.color}.100`}
+              transition="all 0.2s"
+              _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
             >
-              <HStack color={`${stat.color}.600`} mb={1}>
+              <HStack color={`${stat.color}.600`} mb={2}>
                 {stat.icon}
-                <Text fontSize="sm">{stat.title}</Text>
+                <Text fontSize="sm" fontWeight="medium">
+                  {stat.title}
+                </Text>
               </HStack>
-              <Text fontSize="2xl" fontWeight="semibold">
+              <Text 
+                fontSize="2xl" 
+                fontWeight="bold"
+                color={`${stat.color}.900`}
+              >
                 {stat.value}
               </Text>
             </Box>
-          ))}
-        </HStack>
-      </Box>
+          </Tooltip>
+        ))}
+      </Grid>
 
       {/* Node Sections */}
-      <Box>
-        {baseNodes.length === 0 && derivedNodes.length === 0 ? (
-          <Box 
-            p={8} 
-            bg="gray.50" 
-            rounded="lg" 
-            textAlign="center"
-            border="2px dashed"
-            borderColor="gray.200"
-          >
-            <VStack spacing={4}>
-              <Text color="gray.600">
-                No branches found. Create a new branch to get started.
+      {baseNodes.length === 0 && derivedNodes.length === 0 ? (
+        <Box 
+          p={8} 
+          bg="gray.50" 
+          rounded="lg" 
+          textAlign="center"
+          border="2px dashed"
+          borderColor="gray.200"
+        >
+          <VStack spacing={4}>
+            <Text color="gray.600">
+              No nodes found. Create a new root node to get started.
+            </Text>
+            <Button
+              leftIcon={<Plus size={16} />}
+              onClick={handleSpawnNode}
+              colorScheme="purple"
+              isLoading={isProcessing}
+              isDisabled={!selectedToken || isProcessing}
+            >
+              Create Root Node
+            </Button>
+          </VStack>
+        </Box>
+      ) : (
+        <>
+          {/* Base Nodes Section */}
+          {baseNodes.length > 0 && (
+            <VStack align="stretch" spacing={4} mb={8}>
+              <Text fontSize="lg" fontWeight="semibold" color="gray.700">
+                Base Nodes
               </Text>
-              <Button
-                leftIcon={<Plus size={16} />}
-                onClick={handleSpawnBranch}
-                variant="outline"
-                colorScheme="purple"
-                isLoading={isProcessing}
+              <Box 
+                overflowX="auto" 
+                overflowY="hidden" 
+                pb={4}
+                sx={{
+                  '&::-webkit-scrollbar': {
+                    height: '8px',
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    bg: 'gray.100',
+                    borderRadius: 'full',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    bg: 'purple.200',
+                    borderRadius: 'full',
+                    '&:hover': {
+                      bg: 'purple.300',
+                    },
+                  },
+                }}
               >
-                Create Branch
-              </Button>
+                <HStack spacing={4}>
+                  {baseNodes.map((node, index) => (
+                    <NodeCard
+                      key={node.basicInfo[0]}
+                      node={node}
+                      index={index}
+                      selectedTokenColor={selectedTokenColor}
+                      onNodeSelect={onNodeSelect}
+                      nodeValues={nodeValues}
+                      chainId={chainId}
+                    />
+                  ))}
+                </HStack>
+              </Box>
             </VStack>
-          </Box>
-        ) : (
-          <>
-            {baseNodes.length > 0 && (
-              <VStack align="stretch" spacing={4} mb={8}>
-                <Text fontSize="lg" fontWeight="semibold">Base Nodes</Text>
-                <Box overflowX="auto" overflowY="hidden" pb={4}>
-                  <HStack spacing={4}>
-                    {baseNodes.map(node => (
-                      <Box
-                        key={node.basicInfo[0]}
-                        p={4}
-                        bg="white"
-                        rounded="lg"
-                        shadow="sm"
-                        border="1px solid"
-                        borderColor={selectedTokenColor}
-                        minW="240px"
-                        cursor="pointer"
-                        onClick={() => onNodeSelect(node.basicInfo[0])}
-                        _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
-                        transition="all 0.2s"
-                      >
-                        <HStack justify="space-between" mb={3}>
-                          <Text fontWeight="medium">
-                            Node {node.basicInfo[0].slice(-6)}
-                          </Text>
-                          {node.signals?.length > 0 && (
-                            <Box
-                              w="2"
-                              h="2"
-                              rounded="full"
-                              bg={selectedTokenColor}
-                              animation="pulse 2s infinite"
-                            />
-                          )}
-                        </HStack>
-                        <HStack justify="space-between">
-                          <HStack>
-                            <Activity size={14} />
-                            <Text fontSize="sm">
-                              {formatBalance(node.basicInfo[4])}
-                            </Text>
-                          </HStack>
-                          <HStack>
-                            <Users size={14} />
-                            <Text fontSize="sm">
-                              {node.membersOfNode?.length || 0}
-                            </Text>
-                          </HStack>
-                        </HStack>
-                      </Box>
-                    ))}
-                  </HStack>
-                </Box>
-              </VStack>
-            )}
+          )}
 
-            {derivedNodes.length > 0 && (
-              <VStack align="stretch" spacing={4}>
-                <Text fontSize="lg" fontWeight="semibold">Derived Nodes</Text>
-                <Box overflowX="auto" overflowY="hidden" pb={4}>
-                  <HStack spacing={4}>
-                    {derivedNodes.map(node => (
-                      <Box
-                        key={node.basicInfo[0]}
-                        p={4}
-                        bg="white"
-                        rounded="lg"
-                        shadow="sm"
-                        border="1px solid"
-                        borderColor={selectedTokenColor}
-                        minW="240px"
-                        cursor="pointer"
-                        onClick={() => onNodeSelect(node.basicInfo[0])}
-                        _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
-                        transition="all 0.2s"
-                      >
-                        <HStack justify="space-between" mb={3}>
-                          <Text fontWeight="medium">
-                            Node {node.basicInfo[0].slice(-6)}
-                          </Text>
-                          {node.signals?.length > 0 && (
-                            <Box
-                              w="2"
-                              h="2"
-                              rounded="full"
-                              bg={selectedTokenColor}
-                              animation="pulse 2s infinite"
-                            />
-                          )}
-                        </HStack>
-                        <HStack justify="space-between">
-                          <HStack>
-                            <Activity size={14} />
-                            <Text fontSize="sm">
-                              {formatBalance(node.basicInfo[4])}
-                            </Text>
-                          </HStack>
-                          <HStack>
-                            <Users size={14} />
-                            <Text fontSize="sm">
-                              {node.membersOfNode?.length || 0}
-                            </Text>
-                          </HStack>
-                        </HStack>
-                      </Box>
-                    ))}
-                  </HStack>
-                </Box>
-              </VStack>
-            )}
-          </>
-        )}
-      </Box>
+          {/* Derived Nodes Section */}
+          {derivedNodes.length > 0 && (
+            <VStack align="stretch" spacing={4}>
+              <Text fontSize="lg" fontWeight="semibold" color="gray.700">
+                Derived Nodes
+              </Text>
+              <Box 
+                overflowX="auto" 
+                overflowY="hidden" 
+                pb={4}
+                sx={{
+                  '&::-webkit-scrollbar': {
+                    height: '8px',
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    bg: 'gray.100',
+                    borderRadius: 'full',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    bg: 'purple.200',
+                    borderRadius: 'full',
+                    '&:hover': {
+                      bg: 'purple.300',
+                    },
+                  },
+                }}
+              >
+                <HStack spacing={4}>
+                  {derivedNodes.map((node, index) => (
+                    <NodeCard
+                      key={node.basicInfo[0]}
+                      node={node}
+                      index={index}
+                      selectedTokenColor={selectedTokenColor}
+                      onNodeSelect={onNodeSelect}
+                      nodeValues={nodeValues}
+                      chainId={chainId}
+                    />
+                  ))}
+                </HStack>
+              </Box>
+            </VStack>
+          )}
+        </>
+      )}
     </Box>
   );
 };

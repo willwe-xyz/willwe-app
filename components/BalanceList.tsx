@@ -10,7 +10,7 @@ interface BalanceListProps {
   selectedToken: string;
   handleTokenSelect: (tokenAddress: string) => void;
   contrastingColor: string;
-  reverseColor: string;
+  reverseColor: string; 
   hoverColor: string;
   userAddress: string;
   chainId: string;
@@ -32,11 +32,6 @@ const BalanceList: React.FC<BalanceListProps> = ({
   const scrollContainer = useRef<HTMLDivElement>(null);
   const [showLeftScroll, setShowLeftScroll] = useState(false);
   const [showRightScroll, setShowRightScroll] = useState(true);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
-
-  // Get theme token
   const [baseColor] = useToken('colors', [contrastingColor]);
 
   // Handle scroll visibility
@@ -59,38 +54,9 @@ const BalanceList: React.FC<BalanceListProps> = ({
     }
   }, []);
 
-  // Drag handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true);
-    setStartX(e.pageX - (scrollContainer.current?.offsetLeft || 0));
-    setScrollLeft(scrollContainer.current?.scrollLeft || 0);
-  }, []);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    if (scrollContainer.current) {
-      const x = e.pageX - (scrollContainer.current.offsetLeft || 0);
-      const walk = (x - startX) * 2;
-      scrollContainer.current.scrollLeft = scrollLeft - walk;
-    }
-  }, [isDragging, startX, scrollLeft]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-
   if (isLoading) {
     return (
-      <Box 
-        height="100px" 
-        display="flex" 
-        alignItems="center" 
-        justifyContent="center" 
-        bg="white"
-        borderBottom="1px solid"
-        borderColor="gray.200"
-      >
+      <Box height="100px" display="flex" alignItems="center" justifyContent="center" bg="white">
         <div className="animate-pulse">
           <div className="h-4 w-24 bg-gray-200 rounded"></div>
         </div>
@@ -98,30 +64,8 @@ const BalanceList: React.FC<BalanceListProps> = ({
     );
   }
 
-  if (!balances.length) {
-    return (
-      <Box 
-        height="100px" 
-        display="flex" 
-        alignItems="center" 
-        justifyContent="center"
-        bg="white"
-        borderBottom="1px solid"
-        borderColor="gray.200"
-      >
-        <Box color="gray.500" fontSize="sm">No balances found</Box>
-      </Box>
-    );
-  }
-
   return (
-    <Box
-      position="relative"
-      bg="white"
-      borderBottom="1px solid"
-      borderColor="gray.200"
-      height="100px"
-    >
+    <Box position="relative" bg="white" height="100px">
       {/* Left Scroll Button */}
       {showLeftScroll && (
         <IconButton
@@ -141,27 +85,21 @@ const BalanceList: React.FC<BalanceListProps> = ({
         />
       )}
 
-      {/* Scrollable Token List */}
+      {/* Token List */}
       <Box
-  ref={scrollContainer}
-  overflowX="hidden"
-  whiteSpace="nowrap"
-  py={2}
-  px={10}
-  onScroll={checkScrollButtons}
-  cursor={isDragging ? 'grabbing' : 'grab'}
-  onMouseDown={handleMouseDown}
-  onMouseMove={handleMouseMove}
-  onMouseUp={handleMouseUp}
-  onMouseLeave={handleMouseUp}
-  height="100%"
-  css={{
-    '&::-webkit-scrollbar': { display: 'none' },
-    msOverflowStyle: 'none', // Changed from '-ms-overflow-style' to 'msOverflowStyle'
-    scrollbarWidth: 'none',  // Already in camelCase, no change needed
-  }}
->
-
+        ref={scrollContainer}
+        overflowX="hidden"
+        whiteSpace="nowrap"
+        py={2}
+        px={10}
+        onScroll={checkScrollButtons}
+        height="100%"
+        css={{
+          '&::-webkit-scrollbar': { display: 'none' },
+          msOverflowStyle: 'none',
+          scrollbarWidth: 'none',
+        }}
+      >
         <HStack spacing={4} height="100%">
           {balances.map((balance) => {
             const protocolBalance = protocolBalances.find(

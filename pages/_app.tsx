@@ -1,4 +1,5 @@
-// File: pages/_app.tsx
+// File: ./pages/_app.tsx
+
 import '../styles/globals.css';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
@@ -109,6 +110,7 @@ function MyApp(props: AppProps) {
           },
         }}
         onSuccess={handlePrivyLoginSuccess}
+        onError={handlePrivyLoginError}
       >
         <ChakraProvider theme={customTheme}>
           <AppContent {...props} />

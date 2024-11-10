@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+// File: /components/DefineEntity.tsx
+import React, { useState, useCallback } from 'react';
 import {
   Box,
   VStack,
@@ -18,14 +19,12 @@ import {
   Progress,
   Text,
   Badge,
-  useToast,
   Link,
   IconButton,
   Code,
   Tooltip,
   Divider,
 } from '@chakra-ui/react';
-import { usePrivy } from "@privy-io/react-auth";
 import {
   Trash2,
   Plus,
@@ -35,21 +34,13 @@ import {
   AlertTriangle,
   Info,
 } from 'lucide-react';
-import { ethers } from 'ethers';
-import { useMembraneOperations } from '../hooks/useMembraneOperations';
-import { validateToken } from '../utils/tokenValidation';
-import { getExplorerLink } from '../config/contracts';
+import { usePrivy } from "@privy-io/react-auth";
+import { useContractOperations } from '../hooks/useContractOperations';
+import { validateTokenWithCache } from '../utils/tokenValidation';
 
 interface DefineEntityProps {
   chainId: string;
-  onSubmit?: () => void;
-}
-
-interface CreationResult {
-  membraneId?: string;
-  tokenAddress?: string;
-  txHash: string;
-  timestamp: number;
+  onSuccess?: () => void;
 }
 
 interface Characteristic {
@@ -63,13 +54,10 @@ interface MembershipCondition {
   symbol?: string;
 }
 
-interface EntityMetadata {
-  name: string;
-  characteristics: Characteristic[];
-  membershipConditions: MembershipCondition[];
-}
-
-export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit }) => {
+export const DefineEntity: React.FC<DefineEntityProps> = ({
+  chainId,
+  onSuccess
+}) => {
   // Form state
   const [entityName, setEntityName] = useState('');
   const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
@@ -78,17 +66,10 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
   const [membershipConditions, setMembershipConditions] = useState<MembershipCondition[]>([]);
   const [newTokenAddress, setNewTokenAddress] = useState('');
   const [newTokenBalance, setNewTokenBalance] = useState('');
+  const [createdMembraneId, setCreatedMembraneId] = useState<string>('');
 
-  // Transaction state
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [creationResult, setCreationResult] = useState<CreationResult | null>(null);
-  const [validatingToken, setValidatingToken] = useState(false);
-
-  // Hooks
-  const { authenticated, ready } = usePrivy();
+  const { executeContractCall, isLoading } = useContractOperations(chainId);
   const toast = useToast();
-  const { createMembrane } = useMembraneOperations(chainId);
 
   // Token validation and handling
   const validateAndAddToken = useCallback(async () => {
@@ -102,12 +83,10 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       return;
     }
 
-    setValidatingToken(true);
     try {
-      const tokenInfo = await validateToken(newTokenAddress, chainId);
+      const tokenInfo = await validateTokenWithCache(newTokenAddress, chainId);
       if (!tokenInfo) throw new Error('Invalid token address');
 
-      // Check for duplicate token
       const isDuplicate = membershipConditions.some(
         mc => mc.tokenAddress.toLowerCase() === newTokenAddress.toLowerCase()
       );
@@ -131,7 +110,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         status: 'success',
         duration: 2000
       });
-
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -139,8 +117,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         status: 'error',
         duration: 3000
       });
-    } finally {
-      setValidatingToken(false);
     }
   }, [newTokenAddress, newTokenBalance, chainId, membershipConditions, toast]);
 
@@ -165,95 +141,72 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
     setNewCharLink('');
   }, [newCharTitle, newCharLink, toast]);
 
-  // Form submission
-  const handleSubmit = async () => {
-    if (!authenticated || !ready) {
-      toast({
-        title: 'Error',
-        description: 'Please connect your wallet first',
-        status: 'error',
-        duration: 3000,
-      });
-      return;
-    }
-
+  // Create membrane
+  const handleCreateMembrane = async () => {
     if (!entityName || membershipConditions.length === 0) {
       toast({
         title: 'Error',
         description: 'Entity name and at least one membership condition are required',
         status: 'error',
-        duration: 3000,
+        duration: 3000
       });
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-
     try {
       // Prepare metadata
-      const metadata: EntityMetadata = {
+      const metadata = {
         name: entityName,
         characteristics,
         membershipConditions
       };
 
       // Upload to IPFS
-      const response = await fetch('/api/upload-to-ipfs', {
+      const ipfsResult = await fetch('/api/upload-to-ipfs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: metadata }),
       });
 
-      if (!response.ok) throw new Error('Failed to upload metadata');
-      const { cid } = await response.json();
+      if (!ipfsResult.ok) throw new Error('Failed to upload metadata');
+      const { cid } = await ipfsResult.json();
 
-      // Prepare transaction parameters
-      const tokens = membershipConditions.map(mc => mc.tokenAddress.toLowerCase());
-      const balances = membershipConditions.map(mc => mc.requiredBalance);
-
-      // Create membrane with updated return type
-      const result = await createMembrane(tokens, balances, cid);
-      if (!result) throw new Error('Transaction failed');
-
-      const { receipt, membraneId } = result;
-
-      if (!membraneId) {
-        throw new Error('Failed to get membrane ID from transaction');
-      }
-
-      setCreationResult({
-        membraneId: membraneId,
-        txHash: receipt.hash,
-        timestamp: Date.now()
-      });
-
-      toast({
-        title: 'Success',
-        description: 'Entity created successfully',
-        status: 'success',
-        duration: 5000,
-        icon: <Check size={16} />
-      });
+      // Create membrane
+      const result = await executeContractCall(
+        'Membrane',
+        'createMembrane',
+        [
+          membershipConditions.map(mc => mc.tokenAddress),
+          membershipConditions.map(mc => 
+            ethers.parseUnits(mc.requiredBalance, 18)
+          ),
+          cid
+        ],
+        {
+          successMessage: 'Entity created successfully',
+          onSuccess: () => {
+            onSuccess?.();
+            if (result.data?.membraneId) {
+              setCreatedMembraneId(result.data.membraneId);
+            }
+          }
+        }
+      );
 
     } catch (error: any) {
       console.error('Entity creation error:', error);
-      setError(error.message);
       toast({
         title: 'Error',
         description: error.message,
         status: 'error',
-        duration: 5000,
-        icon: <AlertTriangle size={16} />
+        duration: 5000
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
   return (
     <Box display="flex" flexDirection="column" height="calc(100vh - 200px)">
-      <Box overflowY="auto" flex="1" pb="200px">
+      <Box overflowY="auto" flex={1} pb="200px">
         <Box p={6}>
           <VStack spacing={6} align="stretch">
             {/* Entity Name */}
@@ -311,7 +264,9 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
                           <IconButton
                             aria-label="Delete characteristic"
                             icon={<Trash2 size={18} />}
-                            onClick={() => setCharacteristics(prev => prev.filter((_, i) => i !== idx))}
+                            onClick={() => setCharacteristics(prev => 
+                              prev.filter((_, i) => i !== idx)
+                            )}
                           />
                         </Td>
                       </Tr>
@@ -340,7 +295,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
                 <Button
                   colorScheme="purple"
                   onClick={validateAndAddToken}
-                  isLoading={validatingToken}
                   isDisabled={!newTokenAddress || !newTokenBalance}
                 >
                   Add
@@ -367,7 +321,9 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
                           <IconButton
                             aria-label="Delete condition"
                             icon={<Trash2 size={18} />}
-                            onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
+                            onClick={() => setMembershipConditions(prev => 
+                              prev.filter((_, i) => i !== idx)
+                            )}
                           />
                         </Td>
                       </Tr>
@@ -377,30 +333,8 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
               )}
             </Box>
 
-            <Divider />
-
-            {/* Form submission */}
-            <Button
-              colorScheme="purple"
-              onClick={handleSubmit}
-              isLoading={isLoading}
-              loadingText="Creating Entity"
-              isDisabled={isLoading}
-            >
-              Submit
-            </Button>
-
-            {isLoading && <Progress size="xs" isIndeterminate colorScheme="purple" />}
-
-            {/* Display result or error */}
-            {error && (
-              <Alert status="error">
-                <AlertIcon />
-                {error}
-              </Alert>
-            )}
-
-            {creationResult && (
+            {/* Creation Result */}
+            {createdMembraneId && (
               <Alert status="success">
                 <AlertIcon />
                 <VStack align="stretch" width="100%" spacing={2}>
@@ -408,7 +342,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
                   <HStack>
                     <Text fontWeight="bold">Membrane ID:</Text>
                     <Code maxW="300px" isTruncated>
-                      {creationResult.membraneId}
+                      {createdMembraneId}
                     </Code>
                     <Tooltip label="Copy to clipboard">
                       <IconButton
@@ -417,7 +351,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
                         size="sm"
                         variant="ghost"
                         onClick={() => {
-                          navigator.clipboard.writeText(creationResult.membraneId!);
+                          navigator.clipboard.writeText(createdMembraneId);
                           toast({
                             title: "Copied",
                             status: "success",
@@ -433,6 +367,36 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
           </VStack>
         </Box>
       </Box>
+
+      {/* Footer with Create Button */}
+      <Box
+        position="fixed"
+        bottom={0}
+        left={0}
+        right={0}
+        p={6}
+        borderTop="1px solid"
+        borderColor="gray.200"
+        bg="white"
+        zIndex={2}
+      >
+        <Button
+          colorScheme="purple"
+          onClick={handleCreateMembrane}
+          isLoading={isLoading}
+          loadingText="Creating Entity"
+          isDisabled={!entityName || membershipConditions.length === 0}
+          width="100%"
+          size="lg"
+        >
+          Create Entity
+        </Button>
+        {isLoading && (
+          <Progress size="xs" isIndeterminate colorScheme="purple" mt={2} />
+        )}
+      </Box>
     </Box>
   );
 };
+
+export default DefineEntity;

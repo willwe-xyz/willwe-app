@@ -1,3 +1,4 @@
+// File: /components/CreateToken.tsx
 import React, { useState, useCallback } from 'react';
 import {
   VStack,
@@ -14,12 +15,13 @@ import {
   useToast,
   Heading,
   IconButton,
+  Link,
+  Code,
 } from '@chakra-ui/react';
-import { ethers } from 'ethers';
+import { Trash2, Plus, ExternalLink, Check } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
-import { Trash2, Plus, ExternalLink } from 'lucide-react';
+import { useContractOperations } from '../hooks/useContractOperations';
 import { ERC20Bytecode, ERC20CreateABI } from '../const/envconst';
-import { useTransaction } from '../contexts/TransactionContext';
 
 interface Recipient {
   address: string;
@@ -32,18 +34,24 @@ interface CreateTokenProps {
   onSuccess?: () => void;
 }
 
-const CreateToken: React.FC<CreateTokenProps> = ({ chainId, userAddress, onSuccess }) => {
-  const { executeTransaction } = useTransaction();
+export const CreateToken: React.FC<CreateTokenProps> = ({
+  chainId,
+  userAddress,
+  onSuccess
+}) => {
+  // Form state
   const [tokenName, setTokenName] = useState('');
   const [tokenSymbol, setTokenSymbol] = useState('');
-  const [recipients, setRecipients] = useState<Recipient[]>([{ address: '', balance: '' }]);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [recipients, setRecipients] = useState<Recipient[]>([
+    { address: '', balance: '' }
+  ]);
   const [deploymentState, setDeploymentState] = useState<'idle' | 'deploying' | 'complete'>('idle');
   const [deployedAddress, setDeployedAddress] = useState<string>('');
 
-  const { getEthersProvider } = usePrivy();
   const toast = useToast();
+  const { executeContractCall, isLoading } = useContractOperations(chainId);
 
+  // Recipients management
   const addRecipient = useCallback(() => {
     setRecipients(prev => [...prev, { address: '', balance: '' }]);
   }, []);
@@ -59,20 +67,16 @@ const CreateToken: React.FC<CreateTokenProps> = ({ chainId, userAddress, onSucce
     }));
   }, []);
 
+  // Calculate total supply
   const totalSupply = recipients.reduce((total, recipient) => {
     return total + (parseFloat(recipient.balance) || 0);
   }, 0);
 
+  // Deploy token
   const deployToken = async () => {
     try {
       setDeploymentState('deploying');
-      setErrors([]);
 
-      const provider = await getEthersProvider();
-      if (!provider) throw new Error('No provider available');
-
-      const signer = provider.getSigner();
-      
       // Validate inputs
       if (!tokenName || !tokenSymbol) {
         throw new Error('Token name and symbol are required');
@@ -83,54 +87,42 @@ const CreateToken: React.FC<CreateTokenProps> = ({ chainId, userAddress, onSucce
         throw new Error('At least one valid recipient is required');
       }
 
-      // Validate addresses
-      const invalidAddresses = validRecipients.filter(r => !ethers.isAddress(r.address));
-      if (invalidAddresses.length > 0) {
-        throw new Error('Invalid recipient address(es)');
-      }
-
-      const factory = new ethers.ContractFactory(
-        ERC20CreateABI,
-        ERC20Bytecode,
-        signer
-      );
-
-      // Execute the transaction using the context
-      const result = await executeTransaction(
-        chainId,
-        async () => {
-          // For contract deployment, use factory.deploy directly
-          const contract = await factory.deploy(
-            tokenName,
-            tokenSymbol,
-            validRecipients.map(r => r.address),
-            validRecipients.map(r => ethers.parseUnits(r.balance, 18))
-          );
-          
-          // Set the address immediately after transaction is sent
-          setDeployedAddress(contract.target as string);
-          
-          return contract.deploymentTransaction();
-        },
+      // Execute deployment
+      const result = await executeContractCall(
+        'factory',
+        'deploy',
+        [
+          tokenName,
+          tokenSymbol,
+          validRecipients.map(r => r.address),
+          validRecipients.map(r => ethers.parseUnits(r.balance, 18))
+        ],
         {
           successMessage: 'Token deployed successfully',
-          errorMessage: 'Failed to deploy token',
           onSuccess: () => {
             setDeploymentState('complete');
             onSuccess?.();
+          },
+          // Pass bytecode and ABI for contract deployment
+          deploymentData: {
+            bytecode: ERC20Bytecode,
+            abi: ERC20CreateABI
           }
         }
       );
 
-      if (!result) {
-        setDeploymentState('idle');
-        setDeployedAddress('');
+      if (result.data) {
+        setDeployedAddress(result.data.address);
       }
 
     } catch (error: any) {
-      setErrors([error.message]);
+      toast({
+        title: "Deployment Failed",
+        description: error.message,
+        status: "error",
+        duration: 5000,
+      });
       setDeploymentState('idle');
-      setDeployedAddress('');
     }
   };
 
@@ -146,118 +138,117 @@ const CreateToken: React.FC<CreateTokenProps> = ({ chainId, userAddress, onSucce
         <Text color="gray.600">Deploy a new ERC20 token with custom distribution</Text>
       </Box>
 
-      {/* Scrollable Content */}
+      {/* Form Content */}
       <Box 
         overflowY="auto"
         flex="1"
         pb="160px"
+        p={6}
       >
-        <Box p={6}>
-          <VStack spacing={6} align="stretch">
-            <FormControl isRequired>
-              <FormLabel>Token Name</FormLabel>
-              <Input
-                value={tokenName}
-                onChange={(e) => setTokenName(e.target.value)}
-                placeholder="Enter token name"
-              />
-            </FormControl>
+        <VStack spacing={6} align="stretch">
+          {/* Token Details */}
+          <FormControl isRequired>
+            <FormLabel>Token Name</FormLabel>
+            <Input
+              value={tokenName}
+              onChange={(e) => setTokenName(e.target.value)}
+              placeholder="Enter token name"
+            />
+          </FormControl>
 
-            <FormControl isRequired>
-              <FormLabel>Token Symbol</FormLabel>
-              <Input
-                value={tokenSymbol}
-                onChange={(e) => setTokenSymbol(e.target.value)}
-                placeholder="Enter token symbol"
-              />
-            </FormControl>
+          <FormControl isRequired>
+            <FormLabel>Token Symbol</FormLabel>
+            <Input
+              value={tokenSymbol}
+              onChange={(e) => setTokenSymbol(e.target.value)}
+              placeholder="Enter token symbol"
+            />
+          </FormControl>
 
-            <Box p={4} bg="gray.50" borderRadius="md">
-              <Text fontWeight="medium">Total Supply: {totalSupply.toLocaleString()}</Text>
-            </Box>
+          {/* Total Supply Display */}
+          <Box p={4} bg="gray.50" borderRadius="md">
+            <Text fontWeight="medium">
+              Total Supply: {totalSupply.toLocaleString()}
+            </Text>
+          </Box>
 
-            {recipients.map((recipient, index) => (
-              <Box 
-                key={index}
-                p={4}
-                bg="gray.50"
-                borderRadius="md"
-              >
-                <HStack spacing={4}>
-                  <FormControl isRequired>
-                    <FormLabel fontSize="sm">Address</FormLabel>
-                    <Input
-                      placeholder="0x..."
-                      value={recipient.address}
-                      onChange={(e) => handleRecipientChange(index, 'address', e.target.value)}
-                    />
-                  </FormControl>
-
-                  <FormControl isRequired>
-                    <FormLabel fontSize="sm">Balance</FormLabel>
-                    <Input
-                      placeholder="Amount"
-                      value={recipient.balance}
-                      type="number"
-                      onChange={(e) => handleRecipientChange(index, 'balance', e.target.value)}
-                    />
-                  </FormControl>
-
-                  <IconButton
-                    aria-label="Remove recipient"
-                    icon={<Trash2 size={16} />}
-                    colorScheme="red"
-                    variant="ghost"
-                    onClick={() => removeRecipient(index)}
-                    alignSelf="flex-end"
-                    mb={1}
-                  />
-                </HStack>
-              </Box>
-            ))}
-
-            <Button
-              leftIcon={<Plus size={16} />}
-              onClick={addRecipient}
-              variant="ghost"
-              size="sm"
-              mb={16}
+          {/* Recipients */}
+          {recipients.map((recipient, index) => (
+            <Box 
+              key={index}
+              p={4}
+              bg="gray.50"
+              borderRadius="md"
             >
-              Add Recipient
-            </Button>
+              <HStack spacing={4}>
+                <FormControl isRequired>
+                  <FormLabel fontSize="sm">Address</FormLabel>
+                  <Input
+                    placeholder="0x..."
+                    value={recipient.address}
+                    onChange={(e) => handleRecipientChange(index, 'address', e.target.value)}
+                  />
+                </FormControl>
 
-            {errors.length > 0 && errors.map((error, index) => (
-              <Alert key={index} status="error">
-                <AlertIcon />
-                {error}
-              </Alert>
-            ))}
+                <FormControl isRequired>
+                  <FormLabel fontSize="sm">Balance</FormLabel>
+                  <Input
+                    placeholder="Amount"
+                    value={recipient.balance}
+                    type="number"
+                    onChange={(e) => handleRecipientChange(index, 'balance', e.target.value)}
+                  />
+                </FormControl>
 
-            {deploymentState === 'complete' && deployedAddress && (
-              <Alert status="success" variant="subtle">
-                <VStack align="start" spacing={2}>
-                  <Text fontWeight="bold">Token deployed successfully!</Text>
-                  <HStack spacing={2} justify="space-between" width="100%">
-                    <Text fontFamily="mono" fontSize="sm">
-                      {deployedAddress}
-                    </Text>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      rightIcon={<ExternalLink size={16} />}
-                      onClick={() => window.open(`https://etherscan.io/address/${deployedAddress}`)}
-                    >
-                      View
-                    </Button>
-                  </HStack>
-                </VStack>
-              </Alert>
-            )}
-          </VStack>
-        </Box>
+                <IconButton
+                  aria-label="Remove recipient"
+                  icon={<Trash2 size={16} />}
+                  colorScheme="red"
+                  variant="ghost"
+                  onClick={() => removeRecipient(index)}
+                  alignSelf="flex-end"
+                  mb={1}
+                />
+              </HStack>
+            </Box>
+          ))}
+
+          <Button
+            leftIcon={<Plus size={16} />}
+            onClick={addRecipient}
+            variant="ghost"
+            size="sm"
+          >
+            Add Recipient
+          </Button>
+
+          {/* Deployment Result */}
+          {deploymentState === 'complete' && deployedAddress && (
+            <Alert status="success" variant="subtle">
+              <VStack align="start" spacing={2}>
+                <Text fontWeight="bold">Token deployed successfully!</Text>
+                <HStack spacing={2} justify="space-between" width="100%">
+                  <Code fontFamily="mono" fontSize="sm">
+                    {deployedAddress}
+                  </Code>
+                  <Link
+                    href={`https://explorer.base.org/address/${deployedAddress}`}
+                    isExternal
+                    color="purple.500"
+                  >
+                    <HStack>
+                      <Text>View on Explorer</Text>
+                      <ExternalLink size={14} />
+                    </HStack>
+                  </Link>
+                </HStack>
+              </VStack>
+            </Alert>
+          )}
+        </VStack>
       </Box>
 
-      {/* Fixed Footer */}
+      {/* Footer with Deploy Button */}
       <Box 
         position="fixed"
         bottom={0}
@@ -272,7 +263,7 @@ const CreateToken: React.FC<CreateTokenProps> = ({ chainId, userAddress, onSucce
         <Button
           colorScheme="purple"
           onClick={deployToken}
-          isLoading={deploymentState === 'deploying'}
+          isLoading={isLoading}
           loadingText="Deploying..."
           isDisabled={
             !tokenName || 
@@ -282,10 +273,11 @@ const CreateToken: React.FC<CreateTokenProps> = ({ chainId, userAddress, onSucce
           }
           width="100%"
           size="lg"
+          leftIcon={deploymentState === 'complete' ? <Check size={16} /> : undefined}
         >
           Deploy Token
         </Button>
-        {deploymentState === 'deploying' && (
+        {isLoading && (
           <Progress size="xs" isIndeterminate colorScheme="purple" mt={2} />
         )}
       </Box>

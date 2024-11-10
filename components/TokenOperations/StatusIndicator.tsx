@@ -9,21 +9,24 @@ import {
   Spinner,
   VStack,
 } from '@chakra-ui/react';
+import { useTransactionContext } from '../../contexts/TransactionContext';
 
 interface StatusIndicatorProps {
-  isValidating: boolean;
-  isLoadingTokens: boolean;
   error: string | null;
   processingStage?: 'validating' | 'loading' | 'deploying' | null;
+  customMessage?: string;
 }
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
-  isValidating,
-  isLoadingTokens,
   error,
-  processingStage
+  processingStage,
+  customMessage
 }) => {
+  const { isTransacting } = useTransactionContext();
+
   const getStatusMessage = () => {
+    if (customMessage) return customMessage;
+    
     switch (processingStage) {
       case 'validating':
         return 'Validating membrane requirements...';
@@ -32,11 +35,11 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       case 'deploying':
         return 'Deploying membrane configuration...';
       default:
-        return isValidating ? 'Validating membrane...' : 'Loading token details...';
+        return 'Processing transaction...';
     }
   };
 
-  if (isValidating || isLoadingTokens || processingStage) {
+  if (isTransacting || processingStage) {
     return (
       <Box width="100%">
         <VStack spacing={2} align="stretch">
@@ -76,9 +79,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   return null;
 };
 
-export default StatusIndicator;
-
-// Optional loading steps component for more detailed progress tracking
+// Optional loading steps component
 interface LoadingStepProps {
   step: number;
   totalSteps: number;
@@ -139,3 +140,5 @@ export const LoadingSteps: React.FC<{
     </VStack>
   );
 };
+
+export default StatusIndicator;
