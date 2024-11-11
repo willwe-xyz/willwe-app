@@ -848,13 +848,19 @@ import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import {
   ButtonGroup,
-  Button, 
+  Button,
+  useToast,
   VStack,
+  Text,
+  Box,
   Menu,
   MenuButton,
   MenuList,
   MenuItem,
+  Divider,
   Tooltip,
+  HStack,
+  Progress,
 } from '@chakra-ui/react';
 import {
   Plus,
@@ -866,98 +872,157 @@ import {
   Shield,
 } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
-import { useContractOperations } from '../../hooks/useContractOperations';
-import { TokenOperationModal } from '../TokenOperations/TokenOperationModal';
+import { ethers } from 'ethers';
 import { useTransaction } from '../../contexts/TransactionContext';
+import { TokenOperationModal } from '../TokenOperations/TokenOperationModal';
+import { deployments, ABIs } from '../../config/contracts';
 
-interface NodeOperationsProps {
+export const NodeOperations: React.FC<{
   nodeId: string;
   chainId: string;
   selectedTokenColor: string;
   onSuccess?: () => void;
-}
-
-export const NodeOperations: React.FC<NodeOperationsProps> = ({
+}> = ({
   nodeId,
   chainId,
   selectedTokenColor,
   onSuccess
 }) => {
   const router = useRouter();
-  const { user } = usePrivy();
-  const { isTransacting } = useTransaction();
+  const { user, getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentOperation, setCurrentOperation] = useState('');
 
-  const {
-    spawnBranch,
-    spawnBranchWithMembrane,
-    mintMembership,
-    redistribute,
-    signal
-  } = useContractOperations(chainId);
+  const getContract = useCallback(async () => {
+    if (!user?.wallet?.address) {
+      throw new Error('Please connect your wallet first');
+    }
 
-  // Handle spawn node
+    try {
+      const provider = await getEthersProvider();
+      if (!provider) throw new Error('Provider not available');
+
+      const signer = await provider.getSigner();
+      const cleanChainId = chainId.replace('eip155:', '');
+      const address = deployments.WillWe[cleanChainId];
+
+      if (!address) throw new Error(`No contract deployment found for chain ${chainId}`);
+      return new ethers.Contract(address, ABIs.WillWe, signer);
+    } catch (error) {
+      console.error('Contract initialization error:', error);
+      throw error;
+    }
+  }, [chainId, getEthersProvider, user?.wallet?.address]);
+
   const handleSpawnNode = useCallback(async () => {
-    const result = await spawnBranch(nodeId);
-    if (result) {
-      const { receipt } = result;
-      // Extract new node ID from events
-      const event = receipt.logs.find(
-        log => log.topics[0] === ethers.id("BranchSpawned(uint256,uint256,address)")
+    setIsProcessing(true);
+    try {
+      const result = await executeTransaction(
+        chainId,
+        async () => {
+          const contract = await getContract();
+          return await contract.spawnBranch(nodeId, { gasLimit: 400000 });
+        },
+        {
+          successMessage: 'Node spawned successfully',
+          onSuccess: () => {
+            router.push(`/nodes/${chainId}/${nodeId}`);
+            if (onSuccess) onSuccess();
+          }
+        }
       );
-      if (event) {
-        const newNodeId = ethers.toBigInt(event.topics[2]).toString();
-        router.push(`/nodes/${chainId}/${newNodeId}`);
+
+      if (!result) throw new Error('Transaction failed');
+
+      // Extract new node ID from events if needed
+      const receipt = result.receipt;
+      if (receipt.logs) {
+        const event = receipt.logs.find(log => {
+          try {
+            return log.topics[0] === ethers.id("BranchSpawned(uint256,uint256,address)");
+          } catch {
+            return false;
+          }
+        });
+        
+        if (event && event.topics[2]) {
+          const newNodeId = ethers.getBigInt(event.topics[2]).toString();
+          router.push(`/nodes/${chainId}/${newNodeId}`);
+        }
       }
-      if (onSuccess) onSuccess();
+    } catch (error: any) {
+      console.error('Failed to spawn node:', error);
+    } finally {
+      setIsProcessing(false);
     }
-  }, [chainId, nodeId, spawnBranch, router, onSuccess]);
+  }, [chainId, nodeId, getContract, executeTransaction, router, onSuccess]);
 
-  // Handle membrane spawn
-  const handleMembraneSpawn = useCallback(async (membraneId: string) => {
-    const result = await spawnBranchWithMembrane(nodeId, membraneId);
-    if (result && onSuccess) {
-      onSuccess();
-    }
-    setIsModalOpen(false);
-  }, [chainId, nodeId, spawnBranchWithMembrane, onSuccess]);
-
-  // Handle mint membership
   const handleMintMembership = useCallback(async () => {
-    const result = await mintMembership(nodeId);
-    if (result && onSuccess) {
-      onSuccess();
+    try {
+      await executeTransaction(
+        chainId,
+        async () => {
+          const contract = await getContract();
+          return contract.mintMembership(nodeId, { gasLimit: 200000 });
+        },
+        {
+          successMessage: 'Membership minted successfully',
+          onSuccess
+        }
+      );
+    } catch (error: any) {
+      console.error('Failed to mint membership:', error);
     }
-  }, [chainId, nodeId, mintMembership, onSuccess]);
+  }, [chainId, nodeId, getContract, executeTransaction, onSuccess]);
 
-  // Handle redistribute
   const handleRedistribute = useCallback(async () => {
-    const result = await redistribute(nodeId);
-    if (result && onSuccess) {
-      onSuccess(); 
+    try {
+      await executeTransaction(
+        chainId,
+        async () => {
+          const contract = await getContract();
+          return contract.redistributePath(nodeId, { gasLimit: 500000 });
+        },
+        {
+          successMessage: 'Value redistributed successfully',
+          onSuccess
+        }
+      );
+    } catch (error: any) {
+      console.error('Failed to redistribute:', error);
     }
-  }, [chainId, nodeId, redistribute, onSuccess]);
+  }, [chainId, nodeId, getContract, executeTransaction, onSuccess]);
 
-  // Handle signal
   const handleSignal = useCallback(async () => {
-    const result = await signal(nodeId, []);
-    if (result && onSuccess) {
-      onSuccess();
+    try {
+      await executeTransaction(
+        chainId,
+        async () => {
+          const contract = await getContract();
+          return contract.sendSignal(nodeId, [], { gasLimit: 300000 });
+        },
+        {
+          successMessage: 'Signal sent successfully',
+          onSuccess
+        }
+      );
+    } catch (error: any) {
+      console.error('Failed to send signal:', error);
     }
-  }, [chainId, nodeId, signal, onSuccess]);
+  }, [chainId, nodeId, getContract, executeTransaction, onSuccess]);
 
   return (
     <VStack spacing={4} align="stretch" w="100%">
       <ButtonGroup size="sm" spacing={2} flexWrap="wrap">
-        {/* Node Operations Menu */}
         <Menu>
           <MenuButton
             as={Button}
             rightIcon={<ChevronDown size={16} />}
             colorScheme="purple"
             variant="outline"
-            isDisabled={isTransacting} 
+            isDisabled={isProcessing}
           >
             Node
           </MenuButton>
@@ -980,14 +1045,13 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           </MenuList>
         </Menu>
 
-        {/* Direct Action Buttons */}
         <Tooltip label="Mint membership">
           <Button
             leftIcon={<UserPlus size={16} />}
             onClick={handleMintMembership}
             colorScheme="purple"
             variant="outline"
-            isDisabled={isTransacting}
+            isDisabled={isProcessing}
           >
             Membership
           </Button>
@@ -999,7 +1063,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             onClick={handleRedistribute}
             colorScheme="purple"
             variant="outline"
-            isDisabled={isTransacting}
+            isDisabled={isProcessing}
           >
             Redistribute
           </Button>
@@ -1011,25 +1075,72 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             onClick={handleSignal}
             colorScheme="purple"
             variant="outline"
-            isDisabled={isTransacting}
+            isDisabled={isProcessing}
           >
             Signal
           </Button>
         </Tooltip>
       </ButtonGroup>
 
-      {/* Token Operation Modal */}
+      {isProcessing && (
+        <Box 
+          position="fixed" 
+          bottom={4} 
+          right={4} 
+          bg="white" 
+          p={4} 
+          borderRadius="md" 
+          boxShadow="lg"
+          zIndex={1000}
+        >
+          <HStack spacing={3}>
+            <Progress 
+              size="xs" 
+              isIndeterminate 
+              colorScheme="purple" 
+              width="100px"
+            />
+            <Text fontSize="sm" color="gray.600">
+              Processing transaction...
+            </Text>
+          </HStack>
+        </Box>
+      )}
+
       <TokenOperationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         operation={currentOperation}
-        onSubmit={async (params: { membraneId: string }) => {
-          if (currentOperation === 'spawnWithMembrane') {
-            await handleMembraneSpawn(params.membraneId);
+        onSubmit={async (params: any) => {
+          try {
+            await executeTransaction(
+              chainId,
+              async () => {
+                const contract = await getContract();
+                switch (currentOperation) {
+                  case 'spawnWithMembrane':
+                    return contract.spawnBranchWithMembrane(nodeId, params.membraneId, {
+                      gasLimit: 600000
+                    });
+                  default:
+                    throw new Error('Unknown operation');
+                }
+              },
+              {
+                successMessage: 'Operation completed successfully',
+                onSuccess: () => {
+                  setIsModalOpen(false);
+                  if (onSuccess) onSuccess();
+                }
+              }
+            );
+          } catch (error: any) {
+            console.error('Operation error:', error);
           }
         }}
         nodeId={nodeId}
         chainId={chainId}
+        isLoading={isProcessing}
       />
     </VStack>
   );
@@ -3038,6 +3149,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const fetchMembraneData = useCallback(async (membraneId: string) => {
     try {
       // Get membrane data
+    
       const { membrane, metadata } = await getMembraneData(membraneId);
       if (!membrane) throw new Error('Membrane not found');
 
@@ -5385,8 +5497,8 @@ import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance } from '../utils/formatters';
 import { useTransaction } from '../contexts/TransactionContext';
-import { useContractOperation } from '../hooks/useContractOperation';
 import { NodeCard } from './Node/NodeCard';
+import {addressToNodeId} from '../utils/formatters';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -5525,7 +5637,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             signer
           );
 
-          return contract.spawnRootBranch(selectedToken, { gasLimit: 500000 });
+          return contract.spawnBranch(addressToNodeId(selectedToken), { gasLimit: 500000 });
         },
         {
           successMessage: 'New root node created successfully',
@@ -6672,8 +6784,6 @@ export default NodeDetails;
 
 
 // File: ./components/DefineEntity.tsx
-// File: ./components/DefineEntity.tsx
-
 import React, { useState, useCallback } from 'react';
 import {
   Box,
@@ -6699,8 +6809,10 @@ import {
   IconButton,
   Code,
   Tooltip,
+  Divider,
 } from '@chakra-ui/react';
 import { usePrivy } from "@privy-io/react-auth";
+
 import {
   Trash2,
   Plus,
@@ -6711,43 +6823,56 @@ import {
   Info,
 } from 'lucide-react';
 import { ethers } from 'ethers';
-import { useTransaction } from '../contexts/TransactionContext'; // Updated import
+import { deployments, ABIs } from '../config/contracts';
 import { validateToken } from '../utils/tokenValidation';
-import { getExplorerLink, deployments, ABIs } from '../config/contracts';
-
+import { getExplorerLink } from '../config/contracts';
 interface DefineEntityProps {
   chainId: string;
-  onSuccess?: () => void;
+  onSubmit?: () => void;
 }
 
-export const DefineEntity: React.FC<DefineEntityProps> = ({ 
-  chainId,
-  onSuccess 
-}) => {
-  // Initialize hooks
-  const toast = useToast();
-  const { authenticated, ready, getEthersProvider } = usePrivy();
-  const { executeTransaction } = useTransaction();
+interface Characteristic {
+  title: string;
+  link: string;
+}
 
+interface MembershipCondition {
+  tokenAddress: string;
+  requiredBalance: string;
+  symbol?: string;
+}
+
+interface EntityMetadata {
+  name: string;
+  characteristics: Characteristic[];
+  membershipConditions: MembershipCondition[];
+}
+
+export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit }) => {
   // Form state
   const [entityName, setEntityName] = useState('');
-  const [characteristics, setCharacteristics] = useState<Array<{title: string; link: string}>>([]);
+  const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
   const [newCharTitle, setNewCharTitle] = useState('');
   const [newCharLink, setNewCharLink] = useState('');
-  const [membershipConditions, setMembershipConditions] = useState<Array<{
-    tokenAddress: string;
-    requiredBalance: string;
-    symbol?: string;
-  }>>([]);
+  const [membershipConditions, setMembershipConditions] = useState<MembershipCondition[]>([]);
   const [newTokenAddress, setNewTokenAddress] = useState('');
   const [newTokenBalance, setNewTokenBalance] = useState('');
 
-  // UI state
+  // Transaction state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creationResult, setCreationResult] = useState<{ 
+    membraneId?: string;
+    txHash: string;
+    timestamp: number;
+  } | null>(null);
   const [validatingToken, setValidatingToken] = useState(false);
 
-  // Handle token validation and addition
+  // Hooks
+  const { authenticated, ready, getEthersProvider } = usePrivy();
+  const toast = useToast();
+
+  // Token validation and handling
   const validateAndAddToken = useCallback(async () => {
     if (!newTokenAddress || !newTokenBalance) {
       toast({
@@ -6760,6 +6885,8 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
     }
 
     setValidatingToken(true);
+    console.log('Validating token:', { address: newTokenAddress, balance: newTokenBalance });
+
     try {
       const tokenInfo = await validateToken(newTokenAddress, chainId);
       if (!tokenInfo) throw new Error('Invalid token address');
@@ -6788,7 +6915,10 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
         duration: 2000
       });
 
+      console.log('Token validated and added:', tokenInfo);
+
     } catch (error: any) {
+      console.error('Token validation error:', error);
       toast({
         title: 'Error',
         description: error.message,
@@ -6800,7 +6930,28 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
     }
   }, [newTokenAddress, newTokenBalance, chainId, membershipConditions, toast]);
 
-  // Handle form submission
+  // Characteristic handling
+  const addCharacteristic = useCallback(() => {
+    if (!newCharTitle || !newCharLink) {
+      toast({
+        title: 'Error',
+        description: 'Both title and link are required',
+        status: 'error',
+        duration: 3000
+      });
+      return;
+    }
+
+    setCharacteristics(prev => [...prev, {
+      title: newCharTitle,
+      link: newCharLink
+    }]);
+
+    setNewCharTitle('');
+    setNewCharLink('');
+  }, [newCharTitle, newCharLink, toast]);
+
+  // Form submission
   const handleSubmit = async () => {
     if (!authenticated || !ready) {
       toast({
@@ -6826,14 +6977,21 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
     setError(null);
 
     try {
+      console.log('Starting membrane creation...', {
+        entityName,
+        membershipConditions,
+        characteristics
+      });
+
       // Prepare metadata
-      const metadata = {
+      const metadata: EntityMetadata = {
         name: entityName,
         characteristics,
         membershipConditions
       };
 
       // Upload to IPFS
+      console.log('Uploading metadata to IPFS...');
       const response = await fetch('/api/upload-to-ipfs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6842,62 +7000,124 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
 
       if (!response.ok) throw new Error('Failed to upload metadata');
       const { cid } = await response.json();
+      console.log('Metadata uploaded to IPFS:', { cid });
 
-      // Create membrane using transaction context
-      const result = await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const cleanChainId = chainId.replace('eip155:', '');
-          const membraneAddress = deployments.Membrane[cleanChainId];
+      // Get contract instance
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const cleanChainId = chainId.replace('eip155:', '');
+      const membraneAddress = deployments.Membrane[cleanChainId];
 
-          if (!membraneAddress) {
-            throw new Error(`No Membrane contract found for chain ${chainId}`);
-          }
+      if (!membraneAddress) {
+        throw new Error(`No Membrane contract found for chain ${chainId}`);
+      }
 
-          const contract = new ethers.Contract(
-            membraneAddress,
-            ABIs.Membrane,
-            signer
-          );
-
-          const tokens = membershipConditions.map(mc => mc.tokenAddress);
-          const balances = membershipConditions.map(mc => 
-            ethers.parseUnits(mc.requiredBalance, 18).toString()
-          );
-
-          return contract.createMembrane(tokens, balances, cid);
-        },
-        {
-          successMessage: 'Entity created successfully',
-          errorMessage: 'Failed to create entity',
-          onSuccess
-        }
+      const contract = new ethers.Contract(
+        membraneAddress,
+        ABIs.Membrane,
+        signer
       );
 
-      if (result) {
-        // Clear form
-        setEntityName('');
-        setCharacteristics([]);
-        setMembershipConditions([]);
+      // Prepare transaction parameters
+      const tokens = membershipConditions.map(mc => mc.tokenAddress.toLowerCase());
+      const balances = membershipConditions.map(mc => 
+        ethers.parseUnits(mc.requiredBalance, 18)
+      );
+
+      console.log('Creating membrane with parameters:', {
+        tokens,
+        balances,
+        cid
+      });
+
+      // Send transaction
+      const tx = await contract.createMembrane(tokens, balances, cid);
+      console.log('Transaction sent:', tx.hash);
+
+      // Show pending toast
+      const pendingToastId = toast({
+        title: 'Transaction Pending',
+        description: 'Creating membrane...',
+        status: 'info',
+        duration: null,
+        isClosable: false,
+      });
+
+      try {
+        // Wait for confirmation differently
+        const receipt = await provider.waitForTransaction(tx.hash);
+        console.log('Transaction confirmed:', receipt);
+
+        // Close pending toast
+        toast.close(pendingToastId);
+
+        // Find MembraneCreated event
+        const membraneCreatedEvent = receipt.logs
+          .find(log => {
+            try {
+              return log.topics[0] === ethers.id("MembraneCreated(uint256,string)");
+            } catch {
+              return false;
+            }
+          });
+
+        if (!membraneCreatedEvent) {
+          throw new Error('Could not find membrane ID in transaction logs');
+        }
+
+        const membraneId = ethers.toBigInt(membraneCreatedEvent.topics[1]).toString();
+        console.log('Membrane created with ID:', membraneId);
+
+        setCreationResult({
+          membraneId,
+          txHash: receipt.hash,
+          timestamp: Date.now()
+        });
+
+        toast({
+          title: 'Success',
+          description: 'Entity created successfully',
+          status: 'success',
+          duration: 5000,
+          icon: <Check size={16} />,
+        });
+
+        if (onSubmit) {
+          onSubmit();
+        }
+
+      } catch (waitError) {
+        console.error('Transaction confirmation error:', waitError);
+        toast.close(pendingToastId);
+        throw new Error('Transaction failed during confirmation');
       }
 
     } catch (error: any) {
       console.error('Entity creation error:', error);
       setError(error.message);
+      toast({
+        title: 'Failed to Create Entity',
+        description: error.message || 'Transaction failed',
+        status: 'error',
+        duration: 5000,
+        icon: <AlertTriangle size={16} />,
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Rest of the component remains the same...
   return (
     <Box display="flex" flexDirection="column" height="calc(100vh - 200px)">
-      <Box overflowY="auto" flex="1" pb="200px">
+      <Box p={6} borderBottom="1px solid" borderColor="gray.200">
+        <Text fontSize="2xl" fontWeight="bold">Define Entity</Text>
+        <Text color="gray.600">Configure membrane requirements</Text>
+      </Box>
+
+      <Box overflowY="auto" flex="1" pb="160px">
         <Box p={6}>
           <VStack spacing={6} align="stretch">
-            {/* Entity Name Input */}
+            {/* Entity Name */}
             <FormControl isRequired>
               <FormLabel>Entity Name</FormLabel>
               <Input
@@ -6921,18 +7141,12 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                   value={newCharLink}
                   onChange={(e) => setNewCharLink(e.target.value)}
                 />
-                <Button
-                  colorScheme="purple"
-                  onClick={() => {
-                    if (newCharTitle && newCharLink) {
-                      setCharacteristics([...characteristics, { title: newCharTitle, link: newCharLink }]);
-                      setNewCharTitle('');
-                      setNewCharLink('');
-                    }
-                  }}
-                >
-                  Add
-                </Button>
+                <IconButton
+                  aria-label="Add characteristic"
+                  icon={<Plus size={20} />}
+                  onClick={addCharacteristic}
+                  isDisabled={!newCharTitle || !newCharLink}
+                />
               </HStack>
 
               {characteristics.length > 0 && (
@@ -6956,11 +7170,9 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                         </Td>
                         <Td>
                           <IconButton
-                            aria-label="Remove characteristic"
-                            icon={<Trash2 size={16} />}
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setCharacteristics(chars => chars.filter((_, i) => i !== idx))}
+                            aria-label="Delete characteristic"
+                            icon={<Trash2 size={18} />}
+                            onClick={() => setCharacteristics(prev => prev.filter((_, i) => i !== idx))}
                           />
                         </Td>
                       </Tr>
@@ -6969,6 +7181,8 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                 </Table>
               )}
             </Box>
+
+            <Divider />
 
             {/* Membership Conditions Section */}
             <Box>
@@ -6988,6 +7202,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                   colorScheme="purple"
                   onClick={validateAndAddToken}
                   isLoading={validatingToken}
+                  isDisabled={!newTokenAddress || !newTokenBalance}
                 >
                   Add
                 </Button>
@@ -7003,24 +7218,17 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {membershipConditions.map((condition, idx) => (
+                    {membershipConditions.map((mc, idx) => (
                       <Tr key={idx}>
                         <Td>
-                          <HStack>
-                            <Badge colorScheme="purple">{condition.symbol || 'Unknown'}</Badge>
-                            <Code>{condition.tokenAddress.slice(0, 6)}...{condition.tokenAddress.slice(-4)}</Code>
-                          </HStack>
+                          <Code>{mc.symbol ? `${mc.symbol} (${mc.tokenAddress})` : mc.tokenAddress}</Code>
                         </Td>
-                        <Td>{condition.requiredBalance}</Td>
+                        <Td>{mc.requiredBalance}</Td>
                         <Td>
                           <IconButton
-                            aria-label="Remove condition"
-                            icon={<Trash2 size={16} />}
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setMembershipConditions(conditions => 
-                              conditions.filter((_, i) => i !== idx)
-                            )}
+                            aria-label="Delete condition"
+                            icon={<Trash2 size={18} />}
+                            onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
                           />
                         </Td>
                       </Tr>
@@ -7030,7 +7238,22 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
               )}
             </Box>
 
-            {/* Error Display */}
+            <Divider />
+
+            {/* Form submission */}
+            <Button
+              colorScheme="purple"
+              onClick={handleSubmit}
+              isLoading={isLoading}
+              loadingText="Creating Entity"
+              isDisabled={!entityName || membershipConditions.length === 0 || isLoading}
+            >
+              Submit
+            </Button>
+
+            {isLoading && <Progress size="xs" isIndeterminate colorScheme="purple" />}
+
+            {/* Display result or error */}
             {error && (
               <Alert status="error">
                 <AlertIcon />
@@ -7038,19 +7261,47 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
               </Alert>
             )}
 
-            {/* Submit Button */}
-            <Button
-              colorScheme="purple"
-              onClick={handleSubmit}
-              isLoading={isLoading}
-              loadingText="Creating Entity..."
-              isDisabled={!entityName || membershipConditions.length === 0}
-            >
-              Create Entity
-            </Button>
-
-            {isLoading && (
-              <Progress size="xs" isIndeterminate colorScheme="purple" />
+            {creationResult && (
+              <Alert status="success">
+                <AlertIcon />
+                <VStack align="stretch" width="100%" spacing={2}>
+                  <Text>Entity successfully created</Text>
+                  <HStack>
+                    <Text fontWeight="bold">Membrane ID:</Text>
+                    <Code maxW="300px" isTruncated>
+                      {creationResult.membraneId}
+                    </Code>
+                    <Tooltip label="Copy to clipboard">
+                      <IconButton
+                        aria-label="Copy membrane ID"
+                        icon={<Copy size={14} />}
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          navigator.clipboard.writeText(creationResult.membraneId!);
+                          toast({
+                            title: "Copied",
+                            status: "success",
+                            duration: 2000,
+                          });
+                        }}
+                      />
+                    </Tooltip>
+                  </HStack>
+                  {creationResult.txHash && (
+                    <Link 
+                      href={getExplorerLink(chainId, creationResult.txHash)}
+                      isExternal
+                      color="purple.500"
+                      fontSize="sm"
+                      display="flex"
+                      alignItems="center"
+                    >
+                      View transaction <ExternalLink size={14} style={{ marginLeft: 4 }} />
+                    </Link>
+                  )}
+                </VStack>
+              </Alert>
             )}
           </VStack>
         </Box>
@@ -11910,6 +12161,155 @@ export function formatBalance(balance: string | bigint): string {
 
 
 
+// File: ./hooks/useMembraneOperations.tsx
+// File: ./hooks/useMembraneOperations.ts
+
+import { useCallback } from 'react';
+import { ethers } from 'ethers';
+import { usePrivy } from '@privy-io/react-auth';
+import { useTransaction } from '../contexts/TransactionContext';
+import { deployments, ABIs } from '../config/contracts';
+
+export function useMembraneOperations(chainId: string) {
+  const { executeTransaction } = useTransaction();
+  const { getEthersProvider } = usePrivy();
+
+  const createMembrane = useCallback(async (
+    tokens: string[],
+    balances: string[],
+    metadataCid: string
+  ) => {
+    try {
+      const result = await executeTransaction(
+        chainId,
+        async () => {
+          const cleanChainId = chainId.replace('eip155:', '');
+          const contractAddress = deployments.Membrane[cleanChainId];
+          
+          if (!contractAddress) {
+            throw new Error(`No contract found for chain ${chainId}`);
+          }
+
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.Membrane,
+            signer
+          );
+
+          // Parse balances to proper format
+          const parsedBalances = balances.map(b => ethers.parseUnits(b, 18));
+          
+          // Create membrane
+          const tx = await contract.createMembrane(
+            tokens, 
+            parsedBalances, 
+            metadataCid,
+            { gasLimit: 500000 }
+          );
+
+          const receipt = await tx.wait();
+
+          // Find MembraneCreated event
+          const membraneCreatedLog = receipt.logs.find((log: any) => {
+            try {
+              return log.topics[0] === ethers.id("MembraneCreated(uint256,string)");
+            } catch {
+              return false;
+            }
+          });
+          
+          if (!membraneCreatedLog) {
+            throw new Error('Failed to find MembraneCreated event in logs');
+          }
+
+          const membraneId = ethers.toBigInt(membraneCreatedLog.topics[1]).toString();
+
+          return {
+            tx,
+            receipt,
+            membraneId
+          };
+        },
+        {
+          successMessage: 'Membrane created successfully',
+          errorMessage: 'Failed to create membrane'
+        }
+      );
+      
+      if (!result) {
+        throw new Error('Transaction failed');
+      }
+
+      return result;
+
+    } catch (error) {
+      console.error('Create membrane error:', error);
+      throw error;
+    }
+  }, [chainId, executeTransaction, getEthersProvider]);
+
+  const checkMembrane = useCallback(async (
+    address: string,
+    membraneId: string
+  ) => {
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.Membrane[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No Membrane contract found for chain ${chainId}`);
+      }
+
+      const provider = await getEthersProvider();
+      const contract = new ethers.Contract(
+        contractAddress,
+        ABIs.Membrane,
+        provider
+      );
+
+      return await contract.gCheck(address, membraneId);
+    } catch (error) {
+      console.error('Error checking membrane:', error);
+      throw error;
+    }
+  }, [chainId, getEthersProvider]);
+
+  const getMembraneById = useCallback(async (membraneId: string) => {
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.Membrane[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No Membrane contract found for chain ${chainId}`);
+      }
+
+      const provider = await getEthersProvider();
+      const contract = new ethers.Contract(
+        contractAddress,
+        ABIs.Membrane,
+        provider
+      );
+
+      return await contract.getMembraneById(membraneId);
+    } catch (error) {
+      console.error('Error fetching membrane:', error);
+      throw error;
+    }
+  }, [chainId, getEthersProvider]);
+
+  return {
+    createMembrane,
+    checkMembrane,
+    getMembraneById
+  };
+}
+
+export default useMembraneOperations;
+
+
+
 // File: ./hooks/useNodeHierarchy.tsx
 // File: ./hooks/useNodeHierarchy.ts
 import { useMemo } from 'react';
@@ -12155,8 +12555,12 @@ export function useContractOperations(chainId: string) {
     if (!address) {
       throw new Error(`No ${contractName} contract found for chain ${chainId}`);
     }
-
-    const provider = await getEthersProvider();
+    let provider;
+    if (requireSigner) {
+     provider = await getEthersProvider();
+    } else {
+     provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+    }
     if (!provider) {
       throw new Error('Provider not available');
     }
@@ -12265,6 +12669,7 @@ export function useContractOperations(chainId: string) {
     try {
       const contract = await getContract('Membrane', false);
       const data = await contract.getMembraneById(membraneId);
+      console.log(data);
       return {
         tokens: data.tokens,
         balances: data.balances.map((b: bigint) => b.toString()),
@@ -13241,8 +13646,6 @@ export const TokenProvider: React.FC<TokenProviderProps> = ({ children }) => {
 
 
 // File: ./contexts/TransactionContext.tsx
-// File: ./contexts/TransactionContext.tsx
-
 import {
   createContext,
   useContext,
@@ -13256,7 +13659,6 @@ import { UseToastOptions } from '@chakra-ui/react';
 import { Check, ExternalLink, AlertTriangle } from 'lucide-react';
 import { getChainById } from '../config/contracts';
 
-// Define types
 interface TransactionState {
   isTransacting: boolean;
   currentHash: string | null;
@@ -13279,14 +13681,7 @@ interface TransactionReceipt {
   }>;
 }
 
-interface TransactionOptions {
-  successMessage?: string;
-  errorMessage?: string;
-  onSuccess?: () => void;
-  gasLimitMultiplier?: number;
-}
-
-interface TransactionContextValue {
+interface TransactionContextType {
   executeTransaction: <T extends ContractTransactionResponse>(
     chainId: string,
     transactionFn: () => Promise<T>,
@@ -13297,29 +13692,20 @@ interface TransactionContextValue {
   error: Error | null;
 }
 
+interface TransactionOptions {
+  successMessage?: string;
+  errorMessage?: string;
+  onSuccess?: () => void;
+  gasLimitMultiplier?: number;
+}
+
 interface TransactionProviderProps {
   children: ReactNode;
   toast: (options: UseToastOptions) => void | string | number;
 }
 
-// Create context with default value
-const TransactionContext = createContext<TransactionContextValue>({
-  executeTransaction: async () => null,
-  isTransacting: false,
-  currentHash: null,
-  error: null,
-});
+const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
 
-// Export hook with proper type checking
-export const useTransaction = (): TransactionContextValue => {
-  const context = useContext(TransactionContext);
-  if (!context) {
-    throw new Error('useTransaction must be used within a TransactionProvider');
-  }
-  return context;
-};
-
-// Provider component
 export const TransactionProvider: FunctionComponent<TransactionProviderProps> = ({
   children,
   toast,
@@ -13386,19 +13772,28 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
           duration: null,
         });
 
-        // Wait for transaction confirmation
         try {
-          const receipt = await tx.wait();
+          // Wait for the transaction receipt using provider's waitForTransaction
+          const provider = tx.provider;
           
+          // First wait for initial confirmation
+          let receipt = await provider.waitForTransaction(tx.hash, 1, 60000); // 60 second timeout
+
           if (!receipt) {
             throw new Error('Failed to get transaction receipt');
+          }
+
+          // Then wait for additional confirmations if needed
+          try {
+            receipt = await provider.waitForTransaction(tx.hash, 2, 120000); // 2 minute timeout for full confirmation
+          } catch (confirmError) {
+            console.warn('Additional confirmation timeout, proceeding with single confirmation');
           }
 
           // Close pending toast
           toast.close(toastId);
 
           if (receipt.status === 1) {
-            // Transaction successful
             toast({
               title: 'Transaction Confirmed',
               description: options.successMessage || 'Transaction successful',
@@ -13414,7 +13809,7 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
             const formattedReceipt: TransactionReceipt = {
               blockNumber: receipt.blockNumber,
               blockHash: receipt.blockHash,
-              transactionIndex: receipt.transactionIndex,
+              transactionIndex: receipt.index || 0,
               hash: receipt.hash,
               status: receipt.status,
               logs: receipt.logs.map(log => ({
@@ -13422,8 +13817,8 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
                 topics: log.topics,
                 data: log.data,
                 blockNumber: log.blockNumber,
-                transactionIndex: log.transactionIndex,
-                logIndex: log.logIndex,
+                transactionIndex: log.index || 0,
+                logIndex: log.logIndex || 0,
               })),
             };
 
@@ -13432,11 +13827,53 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
             throw new Error('Transaction failed');
           }
         } catch (error: any) {
-          // Handle specific error cases
+          // Handle timeout specifically
+          if (error.code === 'TIMEOUT') {
+            console.warn('Transaction confirmation timeout - checking final status');
+            try {
+              // One final attempt to get transaction status
+              const finalReceipt = await tx.provider.getTransactionReceipt(tx.hash);
+              if (finalReceipt && finalReceipt.status === 1) {
+                // Transaction actually succeeded despite timeout
+                toast({
+                  title: 'Transaction Confirmed',
+                  description: options.successMessage || 'Transaction successful (confirmed late)',
+                  status: 'success',
+                  duration: 5000,
+                  icon: <Check size={16} />,
+                });
+                
+                if (options.onSuccess) {
+                  options.onSuccess();
+                }
+
+                const formattedReceipt: TransactionReceipt = {
+                  blockNumber: finalReceipt.blockNumber,
+                  blockHash: finalReceipt.blockHash,
+                  transactionIndex: finalReceipt.index || 0,
+                  hash: finalReceipt.hash,
+                  status: finalReceipt.status,
+                  logs: finalReceipt.logs.map(log => ({
+                    address: log.address,
+                    topics: log.topics,
+                    data: log.data,
+                    blockNumber: log.blockNumber,
+                    transactionIndex: log.index || 0,
+                    logIndex: log.logIndex || 0,
+                  })),
+                };
+
+                return { tx, receipt: formattedReceipt };
+              }
+            } catch (finalCheckError) {
+              console.error('Final status check failed:', finalCheckError);
+            }
+          }
+
           if (error.code === 'TRANSACTION_REPLACED') {
             if (error.reason === 'repriced') {
-              // Transaction was repriced/speeded up
-              if (error.receipt.status === 1) {
+              const replacementReceipt = error.receipt;
+              if (replacementReceipt.status === 1) {
                 toast({
                   title: 'Transaction Confirmed',
                   description: options.successMessage || 'Transaction successful (speed up)',
@@ -13446,10 +13883,22 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
                 if (options.onSuccess) {
                   options.onSuccess();
                 }
-                return {
-                  tx,
-                  receipt: error.receipt as TransactionReceipt
+                const formattedReceipt: TransactionReceipt = {
+                  blockNumber: replacementReceipt.blockNumber,
+                  blockHash: replacementReceipt.blockHash,
+                  transactionIndex: replacementReceipt.index || 0,
+                  hash: replacementReceipt.hash,
+                  status: replacementReceipt.status,
+                  logs: replacementReceipt.logs.map(log => ({
+                    address: log.address,
+                    topics: log.topics,
+                    data: log.data,
+                    blockNumber: log.blockNumber,
+                    transactionIndex: log.index || 0,
+                    logIndex: log.logIndex || 0,
+                  })),
                 };
+                return { tx, receipt: formattedReceipt };
               }
             } else if (error.reason === 'cancelled') {
               throw new Error('Transaction was cancelled');
@@ -13461,7 +13910,6 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
         console.error('Transaction error:', error);
         toast.close(toastId);
 
-        // Handle user rejection separately
         if (
           error.code === 'ACTION_REJECTED' ||
           error.code === 4001 ||
@@ -13515,26 +13963,38 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
   );
 };
 
-// Helper function to format transaction errors
+export const useTransaction = () => {
+  const context = useContext(TransactionContext);
+  if (!context) {
+    throw new Error('useTransaction must be used within a TransactionProvider');
+  }
+  return context;
+};
+
 const formatTransactionError = (error: any): string => {
-  if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+  if (
+    error?.code === 'ACTION_REJECTED' ||
+    error?.code === 4001 ||
+    error?.message?.toLowerCase().includes('user rejected') ||
+    error?.message?.toLowerCase().includes('user denied')
+  ) {
     return 'Transaction was rejected';
   }
 
-  // Standard error codes
-  switch (error.code) {
+  switch (error?.code) {
     case 'INSUFFICIENT_FUNDS':
       return 'Insufficient funds to complete the transaction';
     case 'UNPREDICTABLE_GAS_LIMIT':
       return 'Unable to estimate gas limit. The transaction may fail';
     case 'CALL_EXCEPTION':
       return 'Transaction would fail. Please check your inputs';
+    case 'TIMEOUT':
+      return 'Transaction confirmation timed out. Check explorer for status.';
     default:
       break;
   }
 
-  // Message pattern matching
-  const message = error.message?.toLowerCase() || '';
+  const message = error?.message?.toLowerCase() || '';
   if (message.includes('gas required exceeds allowance')) {
     return 'Transaction would exceed gas limit';
   }
@@ -13548,7 +14008,7 @@ const formatTransactionError = (error: any): string => {
     return 'Gas price too low. Please try again with a higher gas price';
   }
 
-  return error.message || 'An error occurred while processing the transaction';
+  return error?.message || 'An error occurred while processing the transaction';
 };
 
 export { TransactionContext };

@@ -35,8 +35,12 @@ export function useContractOperations(chainId: string) {
     if (!address) {
       throw new Error(`No ${contractName} contract found for chain ${chainId}`);
     }
-
-    const provider = await getEthersProvider();
+    let provider;
+    if (requireSigner) {
+     provider = await getEthersProvider();
+    } else {
+     provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+    }
     if (!provider) {
       throw new Error('Provider not available');
     }
@@ -145,6 +149,7 @@ export function useContractOperations(chainId: string) {
     try {
       const contract = await getContract('Membrane', false);
       const data = await contract.getMembraneById(membraneId);
+      console.log(data);
       return {
         tokens: data.tokens,
         balances: data.balances.map((b: bigint) => b.toString()),

@@ -32,8 +32,8 @@ import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance } from '../utils/formatters';
 import { useTransaction } from '../contexts/TransactionContext';
-import { useContractOperation } from '../hooks/useContractOperation';
 import { NodeCard } from './Node/NodeCard';
+import {addressToNodeId} from '../utils/formatters';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -172,7 +172,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             signer
           );
 
-          return contract.spawnRootBranch(selectedToken, { gasLimit: 500000 });
+          return contract.spawnBranch(addressToNodeId(selectedToken), { gasLimit: 500000 });
         },
         {
           successMessage: 'New root node created successfully',
