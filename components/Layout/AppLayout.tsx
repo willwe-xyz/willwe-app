@@ -61,20 +61,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         cycleColors,
       }}
     >
-      <Box width="100%" borderBottom="1px solid" borderColor="gray.200">
-        <BalanceList
-          selectedToken={selectedToken}
-          handleTokenSelect={handleTokenSelect}
-          contrastingColor={colorState.contrastingColor}
-          reverseColor={colorState.reverseColor}
-          hoverColor={`${colorState.contrastingColor}20`}
-          userAddress={user?.wallet?.address || ''}
-          chainId={user?.wallet?.chainId || ''}
-          balances={balances || []}
-          protocolBalances={protocolBalances || []}
-          isLoading={balancesLoading}
-        />
-      </Box>
       {children}
     </MainLayout>
   );

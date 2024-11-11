@@ -1,5 +1,3 @@
-// File: ./contexts/TransactionContext.tsx
-
 import {
   createContext,
   useContext,
@@ -13,7 +11,6 @@ import { UseToastOptions } from '@chakra-ui/react';
 import { Check, ExternalLink, AlertTriangle } from 'lucide-react';
 import { getChainById } from '../config/contracts';
 
-// Define types
 interface TransactionState {
   isTransacting: boolean;
   currentHash: string | null;
@@ -36,14 +33,7 @@ interface TransactionReceipt {
   }>;
 }
 
-interface TransactionOptions {
-  successMessage?: string;
-  errorMessage?: string;
-  onSuccess?: () => void;
-  gasLimitMultiplier?: number;
-}
-
-interface TransactionContextValue {
+interface TransactionContextType {
   executeTransaction: <T extends ContractTransactionResponse>(
     chainId: string,
     transactionFn: () => Promise<T>,
@@ -54,29 +44,20 @@ interface TransactionContextValue {
   error: Error | null;
 }
 
+interface TransactionOptions {
+  successMessage?: string;
+  errorMessage?: string;
+  onSuccess?: () => void;
+  gasLimitMultiplier?: number;
+}
+
 interface TransactionProviderProps {
   children: ReactNode;
   toast: (options: UseToastOptions) => void | string | number;
 }
 
-// Create context with default value
-const TransactionContext = createContext<TransactionContextValue>({
-  executeTransaction: async () => null,
-  isTransacting: false,
-  currentHash: null,
-  error: null,
-});
+const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
 
-// Export hook with proper type checking
-export const useTransaction = (): TransactionContextValue => {
-  const context = useContext(TransactionContext);
-  if (!context) {
-    throw new Error('useTransaction must be used within a TransactionProvider');
-  }
-  return context;
-};
-
-// Provider component
 export const TransactionProvider: FunctionComponent<TransactionProviderProps> = ({
   children,
   toast,
@@ -143,19 +124,28 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
           duration: null,
         });
 
-        // Wait for transaction confirmation
         try {
-          const receipt = await tx.wait();
+          // Wait for the transaction receipt using provider's waitForTransaction
+          const provider = tx.provider;
           
+          // First wait for initial confirmation
+          let receipt = await provider.waitForTransaction(tx.hash, 1, 60000); // 60 second timeout
+
           if (!receipt) {
             throw new Error('Failed to get transaction receipt');
+          }
+
+          // Then wait for additional confirmations if needed
+          try {
+            receipt = await provider.waitForTransaction(tx.hash, 2, 120000); // 2 minute timeout for full confirmation
+          } catch (confirmError) {
+            console.warn('Additional confirmation timeout, proceeding with single confirmation');
           }
 
           // Close pending toast
           toast.close(toastId);
 
           if (receipt.status === 1) {
-            // Transaction successful
             toast({
               title: 'Transaction Confirmed',
               description: options.successMessage || 'Transaction successful',
@@ -171,7 +161,7 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
             const formattedReceipt: TransactionReceipt = {
               blockNumber: receipt.blockNumber,
               blockHash: receipt.blockHash,
-              transactionIndex: receipt.transactionIndex,
+              transactionIndex: receipt.index || 0,
               hash: receipt.hash,
               status: receipt.status,
               logs: receipt.logs.map(log => ({
@@ -179,8 +169,8 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
                 topics: log.topics,
                 data: log.data,
                 blockNumber: log.blockNumber,
-                transactionIndex: log.transactionIndex,
-                logIndex: log.logIndex,
+                transactionIndex: log.index || 0,
+                logIndex: log.logIndex || 0,
               })),
             };
 
@@ -189,11 +179,53 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
             throw new Error('Transaction failed');
           }
         } catch (error: any) {
-          // Handle specific error cases
+          // Handle timeout specifically
+          if (error.code === 'TIMEOUT') {
+            console.warn('Transaction confirmation timeout - checking final status');
+            try {
+              // One final attempt to get transaction status
+              const finalReceipt = await tx.provider.getTransactionReceipt(tx.hash);
+              if (finalReceipt && finalReceipt.status === 1) {
+                // Transaction actually succeeded despite timeout
+                toast({
+                  title: 'Transaction Confirmed',
+                  description: options.successMessage || 'Transaction successful (confirmed late)',
+                  status: 'success',
+                  duration: 5000,
+                  icon: <Check size={16} />,
+                });
+                
+                if (options.onSuccess) {
+                  options.onSuccess();
+                }
+
+                const formattedReceipt: TransactionReceipt = {
+                  blockNumber: finalReceipt.blockNumber,
+                  blockHash: finalReceipt.blockHash,
+                  transactionIndex: finalReceipt.index || 0,
+                  hash: finalReceipt.hash,
+                  status: finalReceipt.status,
+                  logs: finalReceipt.logs.map(log => ({
+                    address: log.address,
+                    topics: log.topics,
+                    data: log.data,
+                    blockNumber: log.blockNumber,
+                    transactionIndex: log.index || 0,
+                    logIndex: log.logIndex || 0,
+                  })),
+                };
+
+                return { tx, receipt: formattedReceipt };
+              }
+            } catch (finalCheckError) {
+              console.error('Final status check failed:', finalCheckError);
+            }
+          }
+
           if (error.code === 'TRANSACTION_REPLACED') {
             if (error.reason === 'repriced') {
-              // Transaction was repriced/speeded up
-              if (error.receipt.status === 1) {
+              const replacementReceipt = error.receipt;
+              if (replacementReceipt.status === 1) {
                 toast({
                   title: 'Transaction Confirmed',
                   description: options.successMessage || 'Transaction successful (speed up)',
@@ -203,10 +235,22 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
                 if (options.onSuccess) {
                   options.onSuccess();
                 }
-                return {
-                  tx,
-                  receipt: error.receipt as TransactionReceipt
+                const formattedReceipt: TransactionReceipt = {
+                  blockNumber: replacementReceipt.blockNumber,
+                  blockHash: replacementReceipt.blockHash,
+                  transactionIndex: replacementReceipt.index || 0,
+                  hash: replacementReceipt.hash,
+                  status: replacementReceipt.status,
+                  logs: replacementReceipt.logs.map(log => ({
+                    address: log.address,
+                    topics: log.topics,
+                    data: log.data,
+                    blockNumber: log.blockNumber,
+                    transactionIndex: log.index || 0,
+                    logIndex: log.logIndex || 0,
+                  })),
                 };
+                return { tx, receipt: formattedReceipt };
               }
             } else if (error.reason === 'cancelled') {
               throw new Error('Transaction was cancelled');
@@ -218,7 +262,6 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
         console.error('Transaction error:', error);
         toast.close(toastId);
 
-        // Handle user rejection separately
         if (
           error.code === 'ACTION_REJECTED' ||
           error.code === 4001 ||
@@ -272,26 +315,38 @@ export const TransactionProvider: FunctionComponent<TransactionProviderProps> = 
   );
 };
 
-// Helper function to format transaction errors
+export const useTransaction = () => {
+  const context = useContext(TransactionContext);
+  if (!context) {
+    throw new Error('useTransaction must be used within a TransactionProvider');
+  }
+  return context;
+};
+
 const formatTransactionError = (error: any): string => {
-  if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+  if (
+    error?.code === 'ACTION_REJECTED' ||
+    error?.code === 4001 ||
+    error?.message?.toLowerCase().includes('user rejected') ||
+    error?.message?.toLowerCase().includes('user denied')
+  ) {
     return 'Transaction was rejected';
   }
 
-  // Standard error codes
-  switch (error.code) {
+  switch (error?.code) {
     case 'INSUFFICIENT_FUNDS':
       return 'Insufficient funds to complete the transaction';
     case 'UNPREDICTABLE_GAS_LIMIT':
       return 'Unable to estimate gas limit. The transaction may fail';
     case 'CALL_EXCEPTION':
       return 'Transaction would fail. Please check your inputs';
+    case 'TIMEOUT':
+      return 'Transaction confirmation timed out. Check explorer for status.';
     default:
       break;
   }
 
-  // Message pattern matching
-  const message = error.message?.toLowerCase() || '';
+  const message = error?.message?.toLowerCase() || '';
   if (message.includes('gas required exceeds allowance')) {
     return 'Transaction would exceed gas limit';
   }
@@ -305,7 +360,7 @@ const formatTransactionError = (error: any): string => {
     return 'Gas price too low. Please try again with a higher gas price';
   }
 
-  return error.message || 'An error occurred while processing the transaction';
+  return error?.message || 'An error occurred while processing the transaction';
 };
 
 export { TransactionContext };

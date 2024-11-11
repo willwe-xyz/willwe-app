@@ -1579,113 +1579,6 @@ export const SignalHistory: React.FC<SignalHistoryProps> = ({
 
 
 
-// File: ./components/Node/NodeContentView.tsx
-
-// import React from 'react';
-// import { useRouter } from 'next/router';
-// import { usePrivy } from '@privy-io/react-auth';
-// import { Box, useToast } from '@chakra-ui/react';
-// import { useNode } from '../../contexts/NodeContext';
-// import { useCovalentBalances } from '../../hooks/useCovalentBalances';
-// import { useNodeData } from '../../hooks/useNodeData';
-// import { MainLayout } from '../Layout/MainLayout'; // Update import to match export
-// import ContentLayout from '../Layout/ContentLayout';
-// import NodeDetails from '../NodeDetails';
-
-// interface NodeContentViewProps {
-//   nodeId: string;
-//   chainId: string;
-//   colorState: {
-//     contrastingColor: string;
-//     reverseColor: string;
-//     hoverColor: string;
-//   };
-//   cycleColors: () => void;
-// }
-
-
-// export const NodeContentView: React.FC<NodeContentViewProps> = ({
-//   nodeId,
-//   chainId,
-//   colorState,
-//   cycleColors
-// }) => {
-//   const router = useRouter();
-//   const { user, ready, authenticated, logout, login } = usePrivy();
-//   const { selectToken } = useNode();
-//   const toast = useToast();
-  
-//   const userAddress = user?.wallet?.address || '';
-
-//   // Fetch balances for sidebar
-//   const { 
-//     balances, 
-//     protocolBalances, 
-//     isLoading: balancesLoading 
-//   } = useCovalentBalances(userAddress, chainId);
-
-//   // Fetch node data
-//   const { 
-//     data: nodeData, 
-//     isLoading: nodeLoading 
-//   } = useNodeData(chainId, nodeId);
-
-//   const handleTokenSelect = (tokenAddress: string) => {
-//     selectToken(tokenAddress);
-//     router.push('/dashboard');
-//   };
-
-//   const handleNodeSelect = (selectedNodeId: string) => {
-//     router.push(`/nodes/${chainId}/${selectedNodeId}`);
-//   };
-
-//   // Prepare header props
-//   const headerProps = {
-//     userAddress: userAddress,
-//     chainId: chainId,
-//     logout,
-//     login,
-//     selectedNodeId: nodeId,
-//     onNodeSelect: handleNodeSelect,
-//     isTransacting: false,
-//     contrastingColor: colorState.contrastingColor,
-//     reverseColor: colorState.reverseColor,
-//     cycleColors
-//   };
-
-//   // Prepare content layout props
-//   const contentLayoutProps = {
-//     sidebarProps: {
-//       selectedToken: router.query.token as string,
-//       handleTokenSelect,
-//       ...colorState,
-//       userAddress,
-//       chainId,
-//       isLoading: balancesLoading,
-//       balances,
-//       protocolBalances
-//     }
-//   };
-
-//   return (
-//       <ContentLayout {...contentLayoutProps}>
-//         <Box flex={1} overflow="auto" bg="gray.50" p={6}>
-//           <NodeDetails
-//             chainId={chainId}
-//             nodeId={nodeId}
-//             onNodeSelect={handleNodeSelect}
-//             selectedTokenColor={colorState.contrastingColor}
-//           />
-//         </Box>
-//       </ContentLayout>
-//   );
-// };
-
-
-// export default NodeContentView;
-
-
-
 // File: ./components/Node/ChildrenList.tsx
 import React from 'react';
 import {
@@ -4049,20 +3942,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         cycleColors,
       }}
     >
-      <Box width="100%" borderBottom="1px solid" borderColor="gray.200">
-        <BalanceList
-          selectedToken={selectedToken}
-          handleTokenSelect={handleTokenSelect}
-          contrastingColor={colorState.contrastingColor}
-          reverseColor={colorState.reverseColor}
-          hoverColor={`${colorState.contrastingColor}20`}
-          userAddress={user?.wallet?.address || ''}
-          chainId={user?.wallet?.chainId || ''}
-          balances={balances || []}
-          protocolBalances={protocolBalances || []}
-          isLoading={balancesLoading}
-        />
-      </Box>
       {children}
     </MainLayout>
   );
@@ -4268,10 +4147,16 @@ export default Header;
 
 
 // File: ./components/Layout/MainLayout.tsx
-// File: /components/Layout/MainLayout.tsx
-import React, { ReactNode } from 'react';
+// File: ./components/Layout/MainLayout.tsx
+
+import React, { ReactNode, useCallback } from 'react';
 import { Box } from '@chakra-ui/react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
+import { useCovalentBalances } from '../../hooks/useCovalentBalances';
 import Header from './Header';
+import BalanceList from '../BalanceList';
+import { useNode } from '../../contexts/NodeContext';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -4281,7 +4166,6 @@ interface MainLayoutProps {
     logout: () => void;
     login: () => void;
     selectedNodeId?: string;
-    onNodeSelect: (nodeId: string) => void;
     isTransacting: boolean;
     contrastingColor: string;
     reverseColor: string;
@@ -4290,15 +4174,64 @@ interface MainLayoutProps {
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps }) => {
+  const { user } = usePrivy();
+  const { selectedToken, selectToken } = useNode();
+  const router = useRouter();
+  
+  // Fetch balances for top bar
+  const { 
+    balances, 
+    protocolBalances, 
+    isLoading: balancesLoading 
+  } = useCovalentBalances(
+    user?.wallet?.address || '',
+    headerProps?.chainId || ''
+  );
+
+  // Handle token selection with navigation
+  const handleTokenSelect = useCallback((tokenAddress: string) => {
+    selectToken(tokenAddress);
+    // Always navigate to dashboard with the selected token
+    router.push({
+      pathname: '/dashboard',
+      query: { token: tokenAddress }
+    });
+  }, [selectToken, router]);
+
   return (
     <Box height="100vh" display="flex" flexDirection="column" overflow="hidden">
+      {/* Header */}
       {headerProps && <Header {...headerProps} />}
-      {children}
+      
+      {/* Token Balance Bar - Always visible */}
+      {user?.wallet?.address && (
+        <Box width="100%" borderBottom="1px solid" borderColor="gray.200">
+          <BalanceList
+            selectedToken={selectedToken}
+            handleTokenSelect={handleTokenSelect}
+            contrastingColor={headerProps?.contrastingColor || ''}
+            reverseColor={headerProps?.reverseColor || ''}
+            hoverColor={`${headerProps?.contrastingColor}20` || ''}
+            userAddress={user?.wallet?.address}
+            chainId={headerProps?.chainId || ''}
+            balances={balances || []}
+            protocolBalances={protocolBalances || []}
+            isLoading={balancesLoading}
+          />
+        </Box>
+      )}
+      
+      {/* Main Content */}
+      <Box 
+        flex={1} 
+        overflow="hidden"
+        bg="gray.50"
+      >
+        {children}
+      </Box>
     </Box>
   );
 };
-
-export default MainLayout;
 
 
 
@@ -6739,7 +6672,8 @@ export default NodeDetails;
 
 
 // File: ./components/DefineEntity.tsx
-// File: /components/DefineEntity.tsx
+// File: ./components/DefineEntity.tsx
+
 import React, { useState, useCallback } from 'react';
 import {
   Box,
@@ -6760,12 +6694,13 @@ import {
   Progress,
   Text,
   Badge,
+  useToast,
   Link,
   IconButton,
   Code,
   Tooltip,
-  Divider,
 } from '@chakra-ui/react';
+import { usePrivy } from "@privy-io/react-auth";
 import {
   Trash2,
   Plus,
@@ -6775,44 +6710,44 @@ import {
   AlertTriangle,
   Info,
 } from 'lucide-react';
-import { usePrivy } from "@privy-io/react-auth";
-import { useContractOperations } from '../hooks/useContractOperations';
-import { validateTokenWithCache } from '../utils/tokenValidation';
+import { ethers } from 'ethers';
+import { useTransaction } from '../contexts/TransactionContext'; // Updated import
+import { validateToken } from '../utils/tokenValidation';
+import { getExplorerLink, deployments, ABIs } from '../config/contracts';
 
 interface DefineEntityProps {
   chainId: string;
   onSuccess?: () => void;
 }
 
-interface Characteristic {
-  title: string;
-  link: string;
-}
-
-interface MembershipCondition {
-  tokenAddress: string;
-  requiredBalance: string;
-  symbol?: string;
-}
-
-export const DefineEntity: React.FC<DefineEntityProps> = ({
+export const DefineEntity: React.FC<DefineEntityProps> = ({ 
   chainId,
-  onSuccess
+  onSuccess 
 }) => {
+  // Initialize hooks
+  const toast = useToast();
+  const { authenticated, ready, getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
+
   // Form state
   const [entityName, setEntityName] = useState('');
-  const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
+  const [characteristics, setCharacteristics] = useState<Array<{title: string; link: string}>>([]);
   const [newCharTitle, setNewCharTitle] = useState('');
   const [newCharLink, setNewCharLink] = useState('');
-  const [membershipConditions, setMembershipConditions] = useState<MembershipCondition[]>([]);
+  const [membershipConditions, setMembershipConditions] = useState<Array<{
+    tokenAddress: string;
+    requiredBalance: string;
+    symbol?: string;
+  }>>([]);
   const [newTokenAddress, setNewTokenAddress] = useState('');
   const [newTokenBalance, setNewTokenBalance] = useState('');
-  const [createdMembraneId, setCreatedMembraneId] = useState<string>('');
 
-  const { executeContractCall, isLoading } = useContractOperations(chainId);
-  const toast = useToast();
+  // UI state
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validatingToken, setValidatingToken] = useState(false);
 
-  // Token validation and handling
+  // Handle token validation and addition
   const validateAndAddToken = useCallback(async () => {
     if (!newTokenAddress || !newTokenBalance) {
       toast({
@@ -6824,8 +6759,9 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
       return;
     }
 
+    setValidatingToken(true);
     try {
-      const tokenInfo = await validateTokenWithCache(newTokenAddress, chainId);
+      const tokenInfo = await validateToken(newTokenAddress, chainId);
       if (!tokenInfo) throw new Error('Invalid token address');
 
       const isDuplicate = membershipConditions.some(
@@ -6851,6 +6787,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
         status: 'success',
         duration: 2000
       });
+
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -6858,41 +6795,35 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
         status: 'error',
         duration: 3000
       });
+    } finally {
+      setValidatingToken(false);
     }
   }, [newTokenAddress, newTokenBalance, chainId, membershipConditions, toast]);
 
-  // Characteristic handling
-  const addCharacteristic = useCallback(() => {
-    if (!newCharTitle || !newCharLink) {
+  // Handle form submission
+  const handleSubmit = async () => {
+    if (!authenticated || !ready) {
       toast({
         title: 'Error',
-        description: 'Both title and link are required',
+        description: 'Please connect your wallet first',
         status: 'error',
-        duration: 3000
+        duration: 3000,
       });
       return;
     }
 
-    setCharacteristics(prev => [...prev, {
-      title: newCharTitle,
-      link: newCharLink
-    }]);
-
-    setNewCharTitle('');
-    setNewCharLink('');
-  }, [newCharTitle, newCharLink, toast]);
-
-  // Create membrane
-  const handleCreateMembrane = async () => {
     if (!entityName || membershipConditions.length === 0) {
       toast({
         title: 'Error',
         description: 'Entity name and at least one membership condition are required',
         status: 'error',
-        duration: 3000
+        duration: 3000,
       });
       return;
     }
+
+    setIsLoading(true);
+    setError(null);
 
     try {
       // Prepare metadata
@@ -6903,54 +6834,70 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
       };
 
       // Upload to IPFS
-      const ipfsResult = await fetch('/api/upload-to-ipfs', {
+      const response = await fetch('/api/upload-to-ipfs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: metadata }),
       });
 
-      if (!ipfsResult.ok) throw new Error('Failed to upload metadata');
-      const { cid } = await ipfsResult.json();
+      if (!response.ok) throw new Error('Failed to upload metadata');
+      const { cid } = await response.json();
 
-      // Create membrane
-      const result = await executeContractCall(
-        'Membrane',
-        'createMembrane',
-        [
-          membershipConditions.map(mc => mc.tokenAddress),
-          membershipConditions.map(mc => 
-            ethers.parseUnits(mc.requiredBalance, 18)
-          ),
-          cid
-        ],
+      // Create membrane using transaction context
+      const result = await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const cleanChainId = chainId.replace('eip155:', '');
+          const membraneAddress = deployments.Membrane[cleanChainId];
+
+          if (!membraneAddress) {
+            throw new Error(`No Membrane contract found for chain ${chainId}`);
+          }
+
+          const contract = new ethers.Contract(
+            membraneAddress,
+            ABIs.Membrane,
+            signer
+          );
+
+          const tokens = membershipConditions.map(mc => mc.tokenAddress);
+          const balances = membershipConditions.map(mc => 
+            ethers.parseUnits(mc.requiredBalance, 18).toString()
+          );
+
+          return contract.createMembrane(tokens, balances, cid);
+        },
         {
           successMessage: 'Entity created successfully',
-          onSuccess: () => {
-            onSuccess?.();
-            if (result.data?.membraneId) {
-              setCreatedMembraneId(result.data.membraneId);
-            }
-          }
+          errorMessage: 'Failed to create entity',
+          onSuccess
         }
       );
 
+      if (result) {
+        // Clear form
+        setEntityName('');
+        setCharacteristics([]);
+        setMembershipConditions([]);
+      }
+
     } catch (error: any) {
       console.error('Entity creation error:', error);
-      toast({
-        title: 'Error',
-        description: error.message,
-        status: 'error',
-        duration: 5000
-      });
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // Rest of the component remains the same...
   return (
     <Box display="flex" flexDirection="column" height="calc(100vh - 200px)">
-      <Box overflowY="auto" flex={1} pb="200px">
+      <Box overflowY="auto" flex="1" pb="200px">
         <Box p={6}>
           <VStack spacing={6} align="stretch">
-            {/* Entity Name */}
+            {/* Entity Name Input */}
             <FormControl isRequired>
               <FormLabel>Entity Name</FormLabel>
               <Input
@@ -6974,12 +6921,18 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                   value={newCharLink}
                   onChange={(e) => setNewCharLink(e.target.value)}
                 />
-                <IconButton
-                  aria-label="Add characteristic"
-                  icon={<Plus size={20} />}
-                  onClick={addCharacteristic}
-                  isDisabled={!newCharTitle || !newCharLink}
-                />
+                <Button
+                  colorScheme="purple"
+                  onClick={() => {
+                    if (newCharTitle && newCharLink) {
+                      setCharacteristics([...characteristics, { title: newCharTitle, link: newCharLink }]);
+                      setNewCharTitle('');
+                      setNewCharLink('');
+                    }
+                  }}
+                >
+                  Add
+                </Button>
               </HStack>
 
               {characteristics.length > 0 && (
@@ -7003,11 +6956,11 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                         </Td>
                         <Td>
                           <IconButton
-                            aria-label="Delete characteristic"
-                            icon={<Trash2 size={18} />}
-                            onClick={() => setCharacteristics(prev => 
-                              prev.filter((_, i) => i !== idx)
-                            )}
+                            aria-label="Remove characteristic"
+                            icon={<Trash2 size={16} />}
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setCharacteristics(chars => chars.filter((_, i) => i !== idx))}
                           />
                         </Td>
                       </Tr>
@@ -7016,8 +6969,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                 </Table>
               )}
             </Box>
-
-            <Divider />
 
             {/* Membership Conditions Section */}
             <Box>
@@ -7036,7 +6987,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                 <Button
                   colorScheme="purple"
                   onClick={validateAndAddToken}
-                  isDisabled={!newTokenAddress || !newTokenBalance}
+                  isLoading={validatingToken}
                 >
                   Add
                 </Button>
@@ -7052,18 +7003,23 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {membershipConditions.map((mc, idx) => (
+                    {membershipConditions.map((condition, idx) => (
                       <Tr key={idx}>
                         <Td>
-                          <Code>{mc.symbol ? `${mc.symbol} (${mc.tokenAddress})` : mc.tokenAddress}</Code>
+                          <HStack>
+                            <Badge colorScheme="purple">{condition.symbol || 'Unknown'}</Badge>
+                            <Code>{condition.tokenAddress.slice(0, 6)}...{condition.tokenAddress.slice(-4)}</Code>
+                          </HStack>
                         </Td>
-                        <Td>{mc.requiredBalance}</Td>
+                        <Td>{condition.requiredBalance}</Td>
                         <Td>
                           <IconButton
-                            aria-label="Delete condition"
-                            icon={<Trash2 size={18} />}
-                            onClick={() => setMembershipConditions(prev => 
-                              prev.filter((_, i) => i !== idx)
+                            aria-label="Remove condition"
+                            icon={<Trash2 size={16} />}
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setMembershipConditions(conditions => 
+                              conditions.filter((_, i) => i !== idx)
                             )}
                           />
                         </Td>
@@ -7074,67 +7030,30 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({
               )}
             </Box>
 
-            {/* Creation Result */}
-            {createdMembraneId && (
-              <Alert status="success">
+            {/* Error Display */}
+            {error && (
+              <Alert status="error">
                 <AlertIcon />
-                <VStack align="stretch" width="100%" spacing={2}>
-                  <Text>Entity successfully created</Text>
-                  <HStack>
-                    <Text fontWeight="bold">Membrane ID:</Text>
-                    <Code maxW="300px" isTruncated>
-                      {createdMembraneId}
-                    </Code>
-                    <Tooltip label="Copy to clipboard">
-                      <IconButton
-                        aria-label="Copy membrane ID"
-                        icon={<Copy size={14} />}
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          navigator.clipboard.writeText(createdMembraneId);
-                          toast({
-                            title: "Copied",
-                            status: "success",
-                            duration: 2000,
-                          });
-                        }}
-                      />
-                    </Tooltip>
-                  </HStack>
-                </VStack>
+                {error}
               </Alert>
+            )}
+
+            {/* Submit Button */}
+            <Button
+              colorScheme="purple"
+              onClick={handleSubmit}
+              isLoading={isLoading}
+              loadingText="Creating Entity..."
+              isDisabled={!entityName || membershipConditions.length === 0}
+            >
+              Create Entity
+            </Button>
+
+            {isLoading && (
+              <Progress size="xs" isIndeterminate colorScheme="purple" />
             )}
           </VStack>
         </Box>
-      </Box>
-
-      {/* Footer with Create Button */}
-      <Box
-        position="fixed"
-        bottom={0}
-        left={0}
-        right={0}
-        p={6}
-        borderTop="1px solid"
-        borderColor="gray.200"
-        bg="white"
-        zIndex={2}
-      >
-        <Button
-          colorScheme="purple"
-          onClick={handleCreateMembrane}
-          isLoading={isLoading}
-          loadingText="Creating Entity"
-          isDisabled={!entityName || membershipConditions.length === 0}
-          width="100%"
-          size="lg"
-        >
-          Create Entity
-        </Button>
-        {isLoading && (
-          <Progress size="xs" isIndeterminate colorScheme="purple" mt={2} />
-        )}
       </Box>
     </Box>
   );
@@ -12199,107 +12118,126 @@ export default useActivityFeed;
 
 
 // File: ./hooks/useContractOperations.ts
+// File: hooks/useContractOperations.ts
+
 import { useCallback } from 'react';
 import { ethers } from 'ethers';
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy } from '@privy-io/react-auth';
 import { useTransaction } from '../contexts/TransactionContext';
-import { deployments, ABIs } from '../config/contracts';
-import { NodeState } from '../types/chainData';
+import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+import { NodeState, MembraneState } from '../types/chainData';
+
+interface TokenInfo {
+  name: string;
+  symbol: string;
+  decimals: number;
+  totalSupply: string;
+}
+
+interface MembraneData {
+  tokens: string[];
+  balances: string[];
+  metadata: string;
+}
 
 export function useContractOperations(chainId: string) {
-  const { ready, authenticated, getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
+  const { getEthersProvider } = usePrivy();
 
   // Helper to get contract instance
-  const getContract = useCallback(async (contractName: keyof typeof deployments) => {
-    if (!ready || !authenticated) {
-      throw new Error('Please connect your wallet first');
+  const getContract = useCallback(async (
+    contractName: keyof typeof deployments,
+    requireSigner: boolean = false
+  ) => {
+    const cleanChainId = chainId.replace('eip155:', '');
+    const address = deployments[contractName][cleanChainId];
+    
+    if (!address) {
+      throw new Error(`No ${contractName} contract found for chain ${chainId}`);
     }
 
+    const provider = await getEthersProvider();
+    if (!provider) {
+      throw new Error('Provider not available');
+    }
+
+    if (requireSigner) {
+      const signer = await provider.getSigner();
+      return new ethers.Contract(address, ABIs[contractName], signer);
+    }
+    
+    return new ethers.Contract(address, ABIs[contractName], provider);
+  }, [chainId, getEthersProvider]);
+
+  // Token Operations
+  const getTokenInfo = useCallback(async (tokenAddress: string): Promise<TokenInfo> => {
     try {
       const provider = await getEthersProvider();
       if (!provider) throw new Error('Provider not available');
 
-      const signer = await provider.getSigner();
-      const cleanChainId = chainId.replace('eip155:', '');
-      const address = deployments[contractName][cleanChainId];
+      const tokenContract = new ethers.Contract(tokenAddress, ABIs.IERC20, provider);
+      
+      const [name, symbol, decimals, totalSupply] = await Promise.all([
+        tokenContract.name(),
+        tokenContract.symbol(),
+        tokenContract.decimals(),
+        tokenContract.totalSupply()
+      ]);
 
-      if (!address) {
-        throw new Error(`No ${contractName} contract found for chain ${chainId}`);
-      }
-
-      return new ethers.Contract(address, ABIs[contractName], signer);
+      return {
+        name,
+        symbol,
+        decimals,
+        totalSupply: totalSupply.toString()
+      };
     } catch (error) {
-      console.error('Contract initialization error:', error);
-      throw error;
+      console.error('Error fetching token info:', error);
+      throw new Error(`Failed to fetch token info: ${error.message}`);
     }
-  }, [chainId, getEthersProvider, ready, authenticated]);
+  }, [getEthersProvider]);
 
   // Node Operations
-  const spawnRootBranch = useCallback(async (tokenAddress: string) => {
+  const spawnRootNode = useCallback(async (tokenAddress: string) => {
     return executeTransaction(
       chainId,
       async () => {
-        const contract = await getContract('WillWe');
+        const contract = await getContract('WillWe', true);
         return contract.spawnRootBranch(tokenAddress, { gasLimit: 500000 });
       },
       {
-        successMessage: 'Root node created successfully'
+        successMessage: 'Root node created successfully',
+        errorMessage: 'Failed to create root node'
       }
     );
   }, [chainId, executeTransaction, getContract]);
 
-  const spawnBranch = useCallback(async (nodeId: string) => {
+  const spawnChildNode = useCallback(async (nodeId: string) => {
     return executeTransaction(
       chainId,
       async () => {
-        const contract = await getContract('WillWe');
+        const contract = await getContract('WillWe', true);
         return contract.spawnBranch(nodeId, { gasLimit: 400000 });
       },
       {
-        successMessage: 'Branch node created successfully'
+        successMessage: 'Child node created successfully',
+        errorMessage: 'Failed to create child node'
       }
     );
   }, [chainId, executeTransaction, getContract]);
 
-  const spawnBranchWithMembrane = useCallback(async (nodeId: string, membraneId: string) => {
+  const spawnNodeWithMembrane = useCallback(async (
+    nodeId: string,
+    membraneId: string
+  ) => {
     return executeTransaction(
       chainId,
       async () => {
-        const contract = await getContract('WillWe');
+        const contract = await getContract('WillWe', true);
         return contract.spawnBranchWithMembrane(nodeId, membraneId, { gasLimit: 600000 });
       },
       {
-        successMessage: 'Branch node with membrane created successfully'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  // Token Operations
-  const mint = useCallback(async (nodeId: string, amount: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe');
-        const parsedAmount = ethers.parseUnits(amount, 18);
-        return contract.mint(nodeId, parsedAmount, { gasLimit: 300000 });
-      },
-      {
-        successMessage: 'Tokens minted successfully'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  const mintPath = useCallback(async (targetId: string, amount: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe');
-        const parsedAmount = ethers.parseUnits(amount, 18);
-        return contract.mintPath(targetId, parsedAmount, { gasLimit: 400000 });
-      },
-      {
-        successMessage: 'Path tokens minted successfully'
+        successMessage: 'Node created with membrane successfully',
+        errorMessage: 'Failed to create node with membrane'
       }
     );
   }, [chainId, executeTransaction, getContract]);
@@ -12313,11 +12251,56 @@ export function useContractOperations(chainId: string) {
     return executeTransaction(
       chainId,
       async () => {
-        const contract = await getContract('Membrane');
+        const contract = await getContract('Membrane', true);
         return contract.createMembrane(tokens, balances, metadataCid, { gasLimit: 500000 });
       },
       {
-        successMessage: 'Membrane created successfully'
+        successMessage: 'Membrane created successfully',
+        errorMessage: 'Failed to create membrane'
+      }
+    );
+  }, [chainId, executeTransaction, getContract]);
+
+  const getMembraneData = useCallback(async (membraneId: string): Promise<MembraneData> => {
+    try {
+      const contract = await getContract('Membrane', false);
+      const data = await contract.getMembraneById(membraneId);
+      return {
+        tokens: data.tokens,
+        balances: data.balances.map((b: bigint) => b.toString()),
+        metadata: data.meta
+      };
+    } catch (error) {
+      console.error('Error fetching membrane data:', error);
+      throw new Error(`Failed to fetch membrane data: ${error.message}`);
+    }
+  }, [getContract]);
+
+  // Value Operations
+  const mint = useCallback(async (nodeId: string, amount: string) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract('WillWe', true);
+        return contract.mint(nodeId, amount, { gasLimit: 300000 });
+      },
+      {
+        successMessage: 'Tokens minted successfully',
+        errorMessage: 'Failed to mint tokens'
+      }
+    );
+  }, [chainId, executeTransaction, getContract]);
+
+  const burn = useCallback(async (nodeId: string, amount: string) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract('WillWe', true);
+        return contract.burn(nodeId, amount, { gasLimit: 300000 });
+      },
+      {
+        successMessage: 'Tokens burned successfully',
+        errorMessage: 'Failed to burn tokens'
       }
     );
   }, [chainId, executeTransaction, getContract]);
@@ -12327,78 +12310,101 @@ export function useContractOperations(chainId: string) {
     return executeTransaction(
       chainId,
       async () => {
-        const contract = await getContract('WillWe');
+        const contract = await getContract('WillWe', true);
         return contract.mintMembership(nodeId, { gasLimit: 200000 });
       },
       {
-        successMessage: 'Membership minted successfully'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  // Value Distribution
-  const redistribute = useCallback(async (nodeId: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe');
-        return contract.redistributePath(nodeId, { gasLimit: 500000 });
-      },
-      {
-        successMessage: 'Value redistributed successfully'
+        successMessage: 'Membership minted successfully',
+        errorMessage: 'Failed to mint membership'
       }
     );
   }, [chainId, executeTransaction, getContract]);
 
   // Signal Operations
-  const signal = useCallback(async (nodeId: string, signals: number[] = []) => {
+  const sendSignal = useCallback(async (nodeId: string, signals: number[] = []) => {
     return executeTransaction(
       chainId,
       async () => {
-        const contract = await getContract('WillWe');
+        const contract = await getContract('WillWe', true);
         return contract.sendSignal(nodeId, signals, { gasLimit: 300000 });
       },
       {
-        successMessage: 'Signal sent successfully'
+        successMessage: 'Signal sent successfully',
+        errorMessage: 'Failed to send signal'
       }
     );
   }, [chainId, executeTransaction, getContract]);
 
-  // Read Operations (no transaction needed)
+  // Data Fetching Operations
   const getNodeData = useCallback(async (nodeId: string): Promise<NodeState> => {
-    const contract = await getContract('WillWe');
-    return contract.getNodeData(nodeId);
-  }, [getContract]);
-
-  const getMembraneData = useCallback(async (membraneId: string) => {
-    const contract = await getContract('Membrane');
-    return contract.getMembraneById(membraneId);
+    try {
+      const contract = await getContract('WillWe', false);
+      return await contract.getNodeData(nodeId);
+    } catch (error) {
+      console.error('Error fetching node data:', error);
+      throw new Error(`Failed to fetch node data: ${error.message}`);
+    }
   }, [getContract]);
 
   const getAllNodesForRoot = useCallback(async (
     rootAddress: string,
     userAddress: string
   ): Promise<NodeState[]> => {
-    const contract = await getContract('WillWe');
-    return contract.getAllNodesForRoot(rootAddress, userAddress);
+    try {
+      const contract = await getContract('WillWe', false);
+      return await contract.getAllNodesForRoot(rootAddress, userAddress);
+    } catch (error) {
+      console.error('Error fetching root nodes:', error);
+      throw new Error(`Failed to fetch root nodes: ${error.message}`);
+    }
   }, [getContract]);
 
+  // Distribution Operations
+  const redistribute = useCallback(async (nodeId: string) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract('WillWe', true);
+        return contract.redistributePath(nodeId, { gasLimit: 500000 });
+      },
+      {
+        successMessage: 'Value redistributed successfully',
+        errorMessage: 'Failed to redistribute value'
+      }
+    );
+  }, [chainId, executeTransaction, getContract]);
+
   return {
-    spawnRootBranch,
-    spawnBranch,
-    spawnBranchWithMembrane,
-    mint,
-    mintPath,
-    createMembrane,
-    mintMembership,
-    redistribute,
-    signal,
+    // Token Operations
+    getTokenInfo,
+    
+    // Node Operations
+    spawnRootNode,
+    spawnChildNode,
+    spawnNodeWithMembrane,
     getNodeData,
-    getMembraneData,
     getAllNodesForRoot,
-    isReady: ready && authenticated
+    
+    // Membrane Operations
+    createMembrane,
+    getMembraneData,
+    
+    // Value Operations
+    mint,
+    burn,
+    
+    // Membership Operations
+    mintMembership,
+    
+    // Signal Operations
+    sendSignal,
+    
+    // Distribution Operations
+    redistribute
   };
 }
+
+export default useContractOperations;
 
 
 
