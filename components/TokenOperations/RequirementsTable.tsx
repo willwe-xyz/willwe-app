@@ -1,3 +1,5 @@
+// File: ./components/TokenOperations/RequirementsTable.tsx
+
 import React from 'react';
 import {
   Table,
@@ -8,11 +10,11 @@ import {
   Td,
   Button,
   HStack,
-  VStack,
   Text,
   Link,
   Box,
   useToast,
+  VStack,
   Badge,
 } from '@chakra-ui/react';
 import { Copy, ExternalLink, Info } from 'lucide-react';
@@ -22,11 +24,13 @@ import { getExplorerLink } from '../../config/contracts';
 interface RequirementsTableProps {
   requirements: MembraneRequirement[];
   membraneMetadata: MembraneMetadata | null;
+  chainId: string; // Add chainId prop
 }
 
 export const RequirementsTable: React.FC<RequirementsTableProps> = ({
   requirements,
-  membraneMetadata
+  membraneMetadata,
+  chainId
 }) => {
   const toast = useToast();
 
@@ -52,12 +56,7 @@ export const RequirementsTable: React.FC<RequirementsTableProps> = ({
 
   if (!requirements.length && !membraneMetadata?.characteristics?.length) {
     return (
-      <Box 
-        p={4} 
-        bg="gray.50" 
-        borderRadius="md" 
-        textAlign="center"
-      >
+      <Box p={4} bg="gray.50" borderRadius="md" textAlign="center">
         <Text color="gray.500">No requirements defined</Text>
       </Box>
     );
@@ -149,7 +148,7 @@ export const RequirementsTable: React.FC<RequirementsTableProps> = ({
                           <Copy size={14} />
                         </Button>
                         <Link
-                          href={getExplorerLink(req.tokenAddress)}
+                          href={getExplorerLink(req.tokenAddress, chainId)}
                           isExternal
                         >
                           <ExternalLink size={14} />

@@ -3,241 +3,322 @@ import {
   Box,
   VStack,
   HStack,
-  Heading,
   Text,
-  Spinner,
-  Alert,
-  AlertIcon,
-  Divider,
+  Badge,
   Table,
   Thead,
   Tbody,
   Tr,
   Th,
   Td,
-  Badge,
-  Button,
+  useColorModeValue,
+  Tooltip,
+  Skeleton,
+  Alert,
+  AlertIcon,
+  useDisclosure,
   useToast,
-  Tooltip
-} from '@chakra-ui/react';
-import { NodeState } from '../types/chainData';
-import NodeOperations from './Node/NodeOperations';
-import { useNodeData, getNodeValue, getNodeInflation, isNodeMember } from '../hooks/useNodeData';
-import { useTransaction } from '../contexts/TransactionContext';
-import { formatEther, formatUnits } from 'ethers';
+  Flex,
+} from "@chakra-ui/react";
+import { 
+  Users, 
+  ArrowUpRight, 
+  GitBranch,
+  Activity,
+  Clock,
+} from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { MembersList } from './Node/MembersList';
-import { ChildrenList } from './Node/ChildrenList';
-import { SignalHistory } from './Node/SignalHistory';
-import { formatAddress } from '../utils/formatting';
+import { useNodeData } from '../hooks/useNodeData';
+import { NodeOperations } from './Node/NodeOperations';
+import { formatBalance } from '../utils/formatters';
+import SignalForm from './Node/SignalForm';
 
 interface NodeDetailsProps {
   chainId: string;
   nodeId: string;
-  selectedTokenColor: string;
   onNodeSelect?: (nodeId: string) => void;
+  selectedTokenColor: string;
 }
 
 const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
-  selectedTokenColor,
-  onNodeSelect
+  onNodeSelect,
+  selectedTokenColor
 }) => {
+  // Hooks
   const { user } = usePrivy();
-  const userAddress = user?.wallet?.address || '';
-  const { isTransacting } = useTransaction();
+  const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
-  
-  const { 
-    data: nodeData,
-    isLoading,
-    error,
-    redistribute,
-    signal,
-    refetch
-  } = useNodeData(chainId, nodeId);
 
-  const nodeStats = useMemo(() => {
-    if (!nodeData) return null;
+  // Clean chain ID
+  const cleanChainId = chainId?.replace('eip155:', '') || '';
 
-    const value = getNodeValue(nodeData);
-    const inflation = getNodeInflation(nodeData);
-    const memberCount = nodeData.membersOfNode.length;
-    const childCount = nodeData.childrenNodes.length;
-    const pathDepth = nodeData.rootPath.length;
+  // Style hooks
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const textColor = useColorModeValue('gray.600', 'gray.400');
+  const permissionsBg = useColorModeValue('gray.50', 'gray.900');
 
-    return {
-      value: formatEther(value),
-      inflation: formatUnits(inflation, 9),
-      memberCount,
-      childCount,
-      pathDepth
+  // Fetch node data
+  const { data: nodeData, error, isLoading } = useNodeData(cleanChainId, nodeId);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    if (!nodeData?.basicInfo) return {
+      totalValue: '0',
+      dailyGrowth: '0',
+      memberCount: 0,
+      childCount: 0,
+      pathDepth: 0
     };
+
+    try {
+      const totalValue = nodeData.basicInfo[4] ? BigInt(nodeData.basicInfo[4]) : BigInt(0);
+      const inflation = nodeData.basicInfo[1] ? BigInt(nodeData.basicInfo[1]) : BigInt(0);
+      const dailyGrowth = inflation * BigInt(86400);
+
+      return {
+        totalValue: formatBalance(totalValue.toString()),
+        dailyGrowth: formatBalance(dailyGrowth.toString()),
+        memberCount: nodeData.membersOfNode?.length || 0,
+        childCount: nodeData.childrenNodes?.length || 0,
+        pathDepth: nodeData.rootPath?.length || 0
+      };
+    } catch (err) {
+      console.error('Error calculating stats:', err);
+      return {
+        totalValue: '0',
+        dailyGrowth: '0',
+        memberCount: 0,
+        childCount: 0,
+        pathDepth: 0
+      };
+    }
   }, [nodeData]);
 
-  const isMember = useMemo(() => {
-    if (!nodeData || !userAddress) return false;
-    return isNodeMember(nodeData, userAddress);
-  }, [nodeData, userAddress]);
-
-  const handleRedistribute = async () => {
-    try {
-      const success = await redistribute();
-      if (success) {
-        toast({
-          title: "Success",
-          description: "Value redistributed successfully",
-          status: "success",
-          duration: 5000,
-        });
-        refetch();
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to redistribute value",
-        status: "error",
-        duration: 5000,
-      });
-    }
-  };
-
-  const handleSignal = async (signals: number[]) => {
-    try {
-      const success = await signal(signals);
-      if (success) {
-        toast({
-          title: "Success",
-          description: "Signal sent successfully",
-          status: "success",
-          duration: 5000,
-        });
-        refetch();
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to send signal",
-        status: "error",
-        duration: 5000,
-      });
-    }
-  };
-
+  // Loading state
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-        <Spinner size="xl" color={selectedTokenColor} />
+      <Box height="100%" overflow="auto" p={6}>
+        <VStack spacing={4} align="stretch">
+          <Skeleton height="60px" />
+          <Skeleton height="200px" />
+          <Skeleton height="100px" />
+        </VStack>
       </Box>
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <Alert status="error">
-        <AlertIcon />
-        {error.message}
-      </Alert>
+      <Box height="100%" overflow="auto" p={6}>
+        <Alert status="error">
+          <AlertIcon />
+          <Text>Error loading node data: {error.message || 'Unknown error'}</Text>
+        </Alert>
+      </Box>
     );
   }
 
-  if (!nodeData) {
+  // No data state
+  if (!nodeData?.basicInfo) {
     return (
-      <Alert status="warning">
-        <AlertIcon />
-        No node data available
-      </Alert>
+      <Box height="100%" overflow="auto" p={6}>
+        <Alert status="warning">
+          <AlertIcon />
+          <Text>No data available for this node</Text>
+        </Alert>
+      </Box>
     );
   }
 
   return (
-    <VStack spacing={6} align="stretch">
-      <Box>
-        <HStack justify="space-between" align="center">
-          <Heading size="lg" color={selectedTokenColor}>
-            Node Details
-          </Heading>
-          <Badge 
-            colorScheme={isMember ? "green" : "gray"}
-            fontSize="md"
-            padding={2}
-          >
-            {isMember ? "Member" : "Non-Member"}
-          </Badge>
-        </HStack>
-        <Text color="gray.600">ID: {nodeId}</Text>
+    <Flex 
+      direction="column" 
+      height="100vh"
+      overflow="auto" 
+      bg="gray.50"
+      css={{
+        '&::-webkit-scrollbar': {
+          width: '4px',
+        },
+        '&::-webkit-scrollbar-track': {
+          width: '6px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: selectedTokenColor,
+          borderRadius: '24px',
+        },
+      }}
+    >
+      <Box p={6}>
+        <Box
+          borderRadius="lg"
+          bg={bgColor}
+          border="1px solid"
+          borderColor={borderColor}
+          overflow="visible"
+        >
+          {/* Header Section */}
+          <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+            <HStack justify="space-between" mb={4}>
+              <VStack align="start" spacing={1}>
+                <HStack>
+                  <Text fontSize="lg" fontWeight="bold">
+                    Node {nodeId.slice(-6)}
+                  </Text>
+                  <Badge colorScheme="purple">
+                    Depth {stats.pathDepth}
+                  </Badge>
+                </HStack>
+                <Text fontSize="sm" color={textColor}>
+                  {nodeData.basicInfo[0]}
+                </Text>
+              </VStack>
+              
+              <NodeOperations
+                nodeId={nodeId}
+                chainId={cleanChainId}
+                selectedTokenColor={selectedTokenColor}
+                onSuccess={() => {
+                  toast({
+                    title: 'Operation completed successfully',
+                    status: 'success',
+                    duration: 5000
+                  });
+                }}
+              />
+            </HStack>
+
+            <HStack spacing={8} wrap="wrap">
+              <Tooltip label="Total Value">
+                <VStack align="start">
+                  <Text fontSize="sm" color={textColor}>Total Value</Text>
+                  <Text fontSize="lg" fontWeight="semibold">
+                    {stats.totalValue}
+                  </Text>
+                </VStack>
+              </Tooltip>
+
+              <Tooltip label="Daily Growth">
+                <VStack align="start">
+                  <Text fontSize="sm" color={textColor}>Daily Growth</Text>
+                  <Text fontSize="lg" fontWeight="semibold" color="green.500">
+                    +{stats.dailyGrowth}
+                  </Text>
+                </VStack>
+              </Tooltip>
+
+              <Tooltip label="Members">
+                <VStack align="start">
+                  <Text fontSize="sm" color={textColor}>Members</Text>
+                  <HStack>
+                    <Users size={16} />
+                    <Text fontSize="lg" fontWeight="semibold">
+                      {stats.memberCount}
+                    </Text>
+                  </HStack>
+                </VStack>
+              </Tooltip>
+
+              <Tooltip label="Child Nodes">
+                <VStack align="start">
+                  <Text fontSize="sm" color={textColor}>Child Nodes</Text>
+                  <HStack>
+                    <GitBranch size={16} />
+                    <Text fontSize="lg" fontWeight="semibold">
+                      {stats.childCount}
+                    </Text>
+                  </HStack>
+                </VStack>
+              </Tooltip>
+            </HStack>
+          </Box>
+
+          {/* Path Display */}
+          {nodeData.rootPath.length > 0 && (
+            <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+              <Text fontWeight="medium" mb={2}>Path</Text>
+              <HStack spacing={2}>
+                {nodeData.rootPath.map((pathNodeId, index) => (
+                  <React.Fragment key={pathNodeId}>
+                    {index > 0 && <ArrowUpRight size={14} />}
+                    <Badge
+                      cursor="pointer"
+                      onClick={() => onNodeSelect?.(pathNodeId)}
+                      _hover={{ bg: 'purple.100' }}
+                    >
+                      {pathNodeId.slice(-6)}
+                    </Badge>
+                  </React.Fragment>
+                ))}
+              </HStack>
+            </Box>
+          )}
+
+          {/* Signal Configuration */}
+          {nodeData.childrenNodes.length > 0 && (
+            <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+              <Text fontWeight="medium" mb={4}>Signal Configuration</Text>
+              <SignalForm
+                node={nodeData}
+                chainId={chainId}
+                selectedTokenColor={selectedTokenColor}
+                onSuccess={() => {
+                  toast({
+                    title: 'Signal sent successfully',
+                    status: 'success',
+                    duration: 5000
+                  });
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Signal History */}
+          {nodeData.signals.length > 0 && (
+            <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+              <Text fontWeight="medium" mb={4}>Recent Signals</Text>
+              <Table size="sm">
+                <Thead>
+                  <Tr>
+                    <Th>Membrane</Th>
+                    <Th>Inflation</Th>
+                    <Th>Timestamp</Th>
+                    <Th isNumeric>Value</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {nodeData.signals.slice(0, 5).map((signal, index) => (
+                    <Tr key={index}>
+                      <Td>{signal.MembraneInflation[0] || 'Unknown'}</Td>
+                      <Td>{signal.MembraneInflation[1] || '0'}</Td>
+                      <Td>{new Date(Number(signal.lastRedistSignal[0] || '0')).toLocaleString()}</Td>
+                      <Td isNumeric>{formatBalance(signal.MembraneInflation[1] || '0')}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
+          )}
+
+          {/* Permissions */}
+          {user?.wallet?.address && (
+            <Box p={6} bg={permissionsBg}>
+              <Text fontWeight="medium" mb={2}>Permissions</Text>
+              <HStack spacing={4} wrap="wrap">
+                <Badge colorScheme="green" variant="subtle">Mint</Badge>
+                <Badge colorScheme="green" variant="subtle">Burn</Badge>
+                <Badge colorScheme="green" variant="subtle">Signal</Badge>
+                <Badge colorScheme="green" variant="subtle">Redistribute</Badge>
+              </HStack>
+            </Box>
+          )}
+        </Box>
       </Box>
-
-      <Divider />
-
-      {/* Node Statistics */}
-      <Box>
-        <Heading size="md" mb={4}>Statistics</Heading>
-        <Table variant="simple">
-          <Tbody>
-            <Tr>
-              <Th>Total Value</Th>
-              <Td>{nodeStats?.value} ETH</Td>
-            </Tr>
-            <Tr>
-              <Th>Inflation Rate</Th>
-              <Td>{nodeStats?.inflation}%</Td>
-            </Tr>
-            <Tr>
-              <Th>Members</Th>
-              <Td>{nodeStats?.memberCount}</Td>
-            </Tr>
-            <Tr>
-              <Th>Children</Th>
-              <Td>{nodeStats?.childCount}</Td>
-            </Tr>
-            <Tr>
-              <Th>Path Depth</Th>
-              <Td>{nodeStats?.pathDepth}</Td>
-            </Tr>
-          </Tbody>
-        </Table>
-      </Box>
-
-      <Divider />
-
-      {/* Node Operations */}
-      <NodeOperations
-        nodeId={nodeId}
-        chainId={chainId}
-        selectedTokenColor={selectedTokenColor}
-        onRedistribute={handleRedistribute}
-        onSignal={handleSignal}
-        isTransacting={isTransacting}
-        isMember={isMember}
-      />
-
-      <Divider />
-
-      {/* Members List */}
-      <MembersList 
-        members={nodeData.membersOfNode}
-        selectedTokenColor={selectedTokenColor}
-      />
-
-      <Divider />
-
-      {/* Children List */}
-      <ChildrenList
-        children={nodeData.childrenNodes}
-        selectedTokenColor={selectedTokenColor}
-        onNodeSelect={onNodeSelect}
-      />
-
-      <Divider />
-
-      {/* Signal History */}
-      <SignalHistory
-        signals={nodeData.signals}
-        selectedTokenColor={selectedTokenColor}
-      />
-    </VStack>
+    </Flex>
   );
 };
 

@@ -32,18 +32,39 @@ export const getRPCUrl = (chainId: string): string => {
   return url;
 };
 
-export const getExplorerLink = (chainId: string, hash: string, type: 'tx' | 'address' = 'tx'): string => {
+export const getExplorerLink = (
+  address: string,
+  chainId: string,
+  type: 'tx' | 'address' = 'address'
+): string => {
   try {
-    const chain = getChainById(chainId);
+    // Ensure we're using the chainId, not an address
+    if (!chainId || chainId.length > 10) {
+      throw new Error('Invalid chain ID format');
+    }
+    
+    // Clean chainId format
+    const cleanChainId = chainId.replace('eip155:', '');
+    
+    // Get chain info from viem
+    const chain = getChainById(cleanChainId);
     const explorerUrl = chain.blockExplorers?.default?.url;
-    if (!explorerUrl) throw new Error('No explorer URL found for chain');
-    return `${explorerUrl}/${type}/${hash}`;
+    
+    if (!explorerUrl) {
+      throw new Error('No explorer URL found for chain');
+    }
+
+    // Validate address format for address type
+    if (type === 'address' && !ethers.isAddress(address)) {
+      throw new Error('Invalid address format');
+    }
+
+    return `${explorerUrl}/${type}/${address}`;
   } catch (error) {
     console.warn('Failed to get explorer URL:', error);
     return '#';
   }
 };
-
 export const getMembraneContract = async (
   chainId: string,
   provider: ethers.Provider

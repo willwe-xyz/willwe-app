@@ -1,3 +1,5 @@
+// File: ./components/TokenOperations/TokenOperationModal.tsx
+
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Modal,
@@ -41,6 +43,7 @@ import { OperationConfirmation } from './OperationConfirmation';
 import { StatusIndicator } from './StatusIndicator';
 import { deployments, ABIs } from '../../config/contracts';
 import { NodeState, MembraneMetadata, MembraneRequirement } from '../../types/chainData';
+import { useTransaction } from '../../contexts/TransactionContext';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -52,20 +55,13 @@ interface TokenOperationModalProps {
   isLoading: boolean;
   nodeId: string;
   chainId: string;
-  node: NodeState;
+  node?: NodeState;
 }
 
 interface OperationParams {
   amount?: string;
   membraneId?: string;
   targetNodeId?: string;
-}
-
-interface MembraneData {
-  id: string;
-  tokens: string[];
-  balances: string[];
-  meta: string;
 }
 
 export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
@@ -78,6 +74,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   chainId,
   node,
 }) => {
+  // State
   const [membraneId, setMembraneId] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
   const [isValidInput, setIsValidInput] = useState(false);
@@ -87,9 +84,12 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Hooks
   const { getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
   const toast = useToast();
 
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setMembraneId('');
@@ -101,121 +101,104 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   }, [isOpen]);
 
-  const validateMembraneIdFormat = useCallback((value: string): boolean => {
+  // Validate membrane ID format
+  const validateMembraneIdFormat = useCallback((value: string) => {
+    setInputError(null);
+    setIsValidInput(false);
+
+    if (!value) {
+      setInputError('Membrane ID is required');
+      return false;
+    }
+
     try {
-      if (!value) {
-        setInputError('Membrane ID is required');
-        return false;
-      }
-      const parsed = ethers.getBigInt(value);
-      if (parsed <= 0n) {
-        setInputError('Invalid membrane ID');
-        return false;
-      }
-      setInputError(null);
+      ethers.getBigInt(value);
+      setIsValidInput(true);
       return true;
     } catch (error) {
-      setInputError('Invalid membrane ID format');
+      setInputError('Invalid numeric format');
       return false;
     }
   }, []);
 
-  const fetchMembraneData = useCallback(async (membraneId: string): Promise<{
-    membrane: MembraneData;
-    metadata: MembraneMetadata;
-    requirements: MembraneRequirement[];
-  }> => {
-    const provider = await getEthersProvider();
-    if (!provider) throw new Error('Provider not available');
-
-    const cleanChainId = chainId.replace('eip155:', '');
-    const contractAddress = deployments.Membrane[cleanChainId];
-
-    if (!contractAddress) {
-      throw new Error(`No Membrane contract found for chain ${chainId}`);
-    }
-
-    const contract = new ethers.Contract(
-      contractAddress,
-      ABIs.Membrane,
-      provider
-    );
-
-    // Fetch membrane data
-    const membrane = await contract.getMembraneById(membraneId);
-    
-    if (!membrane || !membrane.meta) {
-      throw new Error('Invalid membrane data');
-    }
-
-    // Fetch metadata from IPFS
-    const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch membrane metadata');
-    }
-    
-    const metadata: MembraneMetadata = await response.json();
-
-    // Fetch token details
-    const requirements: MembraneRequirement[] = await Promise.all(
-      membrane.tokens.map(async (tokenAddress: string, index: number) => {
-        const tokenContract = new ethers.Contract(
-          tokenAddress,
-          ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
-          provider
-        );
-
-        const [symbol, decimals] = await Promise.all([
-          tokenContract.symbol(),
-          tokenContract.decimals(),
-        ]);
-
-        return {
-          tokenAddress,
-          symbol,
-          requiredBalance: membrane.balances[index].toString(),
-          formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
-        };
-      })
-    );
-
-    return {
-      membrane,
-      metadata,
-      requirements
-    };
-  }, [chainId, getEthersProvider]);
-
-  const handleMembraneIdChange = useCallback(async (value: string) => {
-    setMembraneId(value);
-    setIsValidInput(false);
-    setError(null);
-
-    if (!validateMembraneIdFormat(value)) {
-      return;
-    }
-
-    setIsValidating(true);
-    setIsLoadingTokens(true);
-
+  // Fetch membrane metadata and requirements
+  const fetchMembraneMetadata = useCallback(async (membraneId: string) => {
     try {
-      const { metadata, requirements } = await fetchMembraneData(value);
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = await getEthersProvider();
+      
+      if (!provider) {
+        throw new Error('Provider not available');
+      }
+
+      const contract = new ethers.Contract(
+        deployments.Membrane[cleanChainId],
+        ABIs.Membrane,
+        provider
+      );
+
+      const membrane = await contract.getMembraneById(membraneId);
+      if (!membrane) throw new Error('Membrane not found');
+
+      // Fetch metadata from IPFS
+      const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
+      if (!response.ok) throw new Error('Failed to fetch membrane metadata');
+      
+      const metadata = await response.json();
       setMembraneMetadata(metadata);
+
+      // Fetch token details
+      setIsLoadingTokens(true);
+      const requirements = await Promise.all(
+        membrane.tokens.map(async (tokenAddress: string, index: number) => {
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+            provider
+          );
+
+          const [symbol, decimals] = await Promise.all([
+            tokenContract.symbol(),
+            tokenContract.decimals()
+          ]);
+
+          return {
+            tokenAddress,
+            symbol,
+            requiredBalance: membrane.balances[index].toString(),
+            formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
+          };
+        })
+      );
+
       setRequirements(requirements);
-      setIsValidInput(true);
-    } catch (error) {
-      console.error('Error fetching membrane data:', error);
-      setError(error instanceof Error ? error.message : 'Failed to fetch membrane data');
-      setMembraneMetadata(null);
-      setRequirements([]);
+    } catch (err) {
+      console.error('Error fetching membrane data:', err);
+      throw err;
     } finally {
-      setIsValidating(false);
       setIsLoadingTokens(false);
     }
-  }, [fetchMembraneData, validateMembraneIdFormat]);
+  }, [chainId, getEthersProvider]);
 
+  // Handle membrane ID input change
+  const handleMembraneIdChange = useCallback((value: string) => {
+    setMembraneId(value);
+    if (validateMembraneIdFormat(value)) {
+      setIsValidating(true);
+      fetchMembraneMetadata(value)
+        .catch(error => {
+          setError(error.message);
+          setMembraneMetadata(null);
+          setRequirements([]);
+        })
+        .finally(() => setIsValidating(false));
+    }
+  }, [validateMembraneIdFormat, fetchMembraneMetadata]);
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!isValidInput || !membraneId) {
       setError('Please enter a valid membrane ID');
       return;
@@ -238,16 +221,12 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   };
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      size="xl"
-    >
+    <Modal isOpen={isOpen} onClose={onClose} size="xl">
       <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent>
         <Box maxH="85vh" overflowY="auto" p={6}>
           <VStack spacing={6} align="stretch" width="100%">
-            {/* Title Section */}
+            {/* Header Section */}
             <Box borderBottomWidth="1px" pb={4}>
               <Text fontSize="2xl" fontWeight="bold">Design Corner</Text>
               <Text fontSize="sm" color="gray.600">Configure membrane requirements</Text>
@@ -292,7 +271,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
               )}
             </FormControl>
 
-            {/* Loading Indicator */}
+            {/* Loading States */}
             {(isValidating || isLoadingTokens) && (
               <Box>
                 <Progress size="xs" isIndeterminate colorScheme="purple" />
@@ -313,11 +292,12 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
             {/* Membrane Data Display */}
             {membraneMetadata && !error && (
               <VStack spacing={4} align="stretch">
+                {/* Membrane Info Card */}
                 <Card variant="outline" bg="purple.50" mb={4}>
                   <CardHeader pb={2}>
                     <HStack justify="space-between">
                       <Text fontSize="lg" fontWeight="bold">{membraneMetadata.name}</Text>
-                      <Badge colorScheme="purple">ID: {membraneId.slice(0, 6)}...</Badge>
+                      <Badge colorScheme="purple">ID: {membraneId}</Badge>
                     </HStack>
                   </CardHeader>
                   <CardBody>
@@ -353,11 +333,14 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                   </CardBody>
                 </Card>
 
+                {/* Requirements Table */}
                 <RequirementsTable
                   requirements={requirements}
                   membraneMetadata={membraneMetadata}
+                  chainId={chainId}
                 />
 
+                {/* Operation Confirmation */}
                 <OperationConfirmation
                   membraneMetadata={membraneMetadata}
                   membraneId={membraneId}
@@ -372,7 +355,6 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
               pt={4} 
               mt={4}
               background="white"
-              zIndex={2}
             >
               <HStack justify="flex-end" spacing={3}>
                 <Button variant="ghost" onClick={onClose}>
