@@ -87,7 +87,7 @@ export function useActivityFeed(chainId: string): UseActivityFeedResult {
           id: '2',
           type: 'signal',
           timestamp: Date.now() - 1000 * 60 * 30,
-          description: 'Signaled preference',
+          description: 'Redistributive preference signaled by Johanna',
           account: user.wallet.address,
           nodeId: '123',
           status: 'success'

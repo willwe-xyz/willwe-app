@@ -845,7 +845,6 @@ export default MyApp;
 
 // File: ./components/Node/NodeOperations.tsx
 import React, { useState, useCallback } from 'react';
-import { useRouter } from 'next/router';
 import {
   ButtonGroup,
   Button,
@@ -861,6 +860,7 @@ import {
   Tooltip,
   HStack,
   Progress,
+  useDisclosure,
 } from '@chakra-ui/react';
 import {
   Plus,
@@ -870,6 +870,10 @@ import {
   UserPlus,
   RefreshCw,
   Shield,
+  Coins,
+  ArrowUpRight,
+  ArrowDownRight,
+  Flame,
 } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from 'ethers';
@@ -877,23 +881,27 @@ import { useTransaction } from '../../contexts/TransactionContext';
 import { TokenOperationModal } from '../TokenOperations/TokenOperationModal';
 import { deployments, ABIs } from '../../config/contracts';
 
-export const NodeOperations: React.FC<{
+interface NodeOperationsProps {
   nodeId: string;
   chainId: string;
   selectedTokenColor: string;
+  node?: any;
   onSuccess?: () => void;
-}> = ({
+}
+
+export const NodeOperations: React.FC<NodeOperationsProps> = ({
   nodeId,
   chainId,
   selectedTokenColor,
+  node,
   onSuccess
 }) => {
-  const router = useRouter();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentOperation, setCurrentOperation] = useState('');
+  const { isOpen: isModalOpen, onOpen, onClose } = useDisclosure();
+  const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentOperation, setCurrentOperation] = useState('');
 
   const getContract = useCallback(async () => {
     if (!user?.wallet?.address) {
@@ -916,106 +924,80 @@ export const NodeOperations: React.FC<{
     }
   }, [chainId, getEthersProvider, user?.wallet?.address]);
 
+  // Node management operations
   const handleSpawnNode = useCallback(async () => {
     setIsProcessing(true);
     try {
-      const result = await executeTransaction(
+      await executeTransaction(
         chainId,
         async () => {
           const contract = await getContract();
-          return await contract.spawnBranch(nodeId, { gasLimit: 400000 });
+          return contract.spawnBranch(nodeId, { gasLimit: 400000 });
         },
         {
           successMessage: 'Node spawned successfully',
+          onSuccess
+        }
+      );
+    } catch (error: any) {
+      toast({
+        title: 'Failed to spawn node',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, executeTransaction, getContract, toast, onSuccess]);
+
+  // Token operations
+  const handleOperation = useCallback((operation: string) => {
+    setCurrentOperation(operation);
+    onOpen();
+  }, [onOpen]);
+
+  const handleModalSubmit = useCallback(async (params: any) => {
+    try {
+      await executeTransaction(
+        chainId,
+        async () => {
+          const contract = await getContract();
+          switch (currentOperation) {
+            case 'mint':
+              return contract.mint(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 300000 });
+            case 'mintPath':
+              return contract.mintPath(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 400000 });
+            case 'burn':
+              return contract.burn(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 300000 });
+            case 'burnPath':
+              return contract.burnPath(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 400000 });
+            default:
+              throw new Error('Unknown operation');
+          }
+        },
+        {
+          successMessage: `${currentOperation} completed successfully`,
           onSuccess: () => {
-            router.push(`/nodes/${chainId}/${nodeId}`);
+            onClose();
             if (onSuccess) onSuccess();
           }
         }
       );
-
-      if (!result) throw new Error('Transaction failed');
-
-      // Extract new node ID from events if needed
-      const receipt = result.receipt;
-      if (receipt.logs) {
-        const event = receipt.logs.find(log => {
-          try {
-            return log.topics[0] === ethers.id("BranchSpawned(uint256,uint256,address)");
-          } catch {
-            return false;
-          }
-        });
-        
-        if (event && event.topics[2]) {
-          const newNodeId = ethers.getBigInt(event.topics[2]).toString();
-          router.push(`/nodes/${chainId}/${newNodeId}`);
-        }
-      }
     } catch (error: any) {
-      console.error('Failed to spawn node:', error);
-    } finally {
-      setIsProcessing(false);
+      toast({
+        title: 'Operation Failed',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
     }
-  }, [chainId, nodeId, getContract, executeTransaction, router, onSuccess]);
-
-  const handleMintMembership = useCallback(async () => {
-    try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const contract = await getContract();
-          return contract.mintMembership(nodeId, { gasLimit: 200000 });
-        },
-        {
-          successMessage: 'Membership minted successfully',
-          onSuccess
-        }
-      );
-    } catch (error: any) {
-      console.error('Failed to mint membership:', error);
-    }
-  }, [chainId, nodeId, getContract, executeTransaction, onSuccess]);
-
-  const handleRedistribute = useCallback(async () => {
-    try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const contract = await getContract();
-          return contract.redistributePath(nodeId, { gasLimit: 500000 });
-        },
-        {
-          successMessage: 'Value redistributed successfully',
-          onSuccess
-        }
-      );
-    } catch (error: any) {
-      console.error('Failed to redistribute:', error);
-    }
-  }, [chainId, nodeId, getContract, executeTransaction, onSuccess]);
-
-  const handleSignal = useCallback(async () => {
-    try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const contract = await getContract();
-          return contract.sendSignal(nodeId, [], { gasLimit: 300000 });
-        },
-        {
-          successMessage: 'Signal sent successfully',
-          onSuccess
-        }
-      );
-    } catch (error: any) {
-      console.error('Failed to send signal:', error);
-    }
-  }, [chainId, nodeId, getContract, executeTransaction, onSuccess]);
+  }, [chainId, currentOperation, nodeId, executeTransaction, getContract, onClose, onSuccess, toast]);
 
   return (
     <VStack spacing={4} align="stretch" w="100%">
       <ButtonGroup size="sm" spacing={2} flexWrap="wrap">
+        {/* Node Management Menu */}
         <Menu>
           <MenuButton
             as={Button}
@@ -1035,20 +1017,58 @@ export const NodeOperations: React.FC<{
             </MenuItem>
             <MenuItem
               icon={<Shield size={16} />}
-              onClick={() => {
-                setCurrentOperation('spawnWithMembrane');
-                setIsModalOpen(true);
-              }}
+              onClick={() => handleOperation('spawnWithMembrane')}
             >
               Spawn with Membrane
             </MenuItem>
           </MenuList>
         </Menu>
 
+        {/* Token Operations Menu */}
+        <Menu>
+          <MenuButton
+            as={Button}
+            rightIcon={<ChevronDown size={16} />}
+            colorScheme="purple"
+            variant="outline"
+            isDisabled={isProcessing}
+          >
+            Token
+          </MenuButton>
+          <MenuList>
+            <MenuItem
+              icon={<ArrowUpRight size={16} />}
+              onClick={() => handleOperation('mint')}
+            >
+              Mint
+            </MenuItem>
+            <MenuItem
+              icon={<ArrowUpRight size={16} />}
+              onClick={() => handleOperation('mintPath')}
+            >
+              Mint Path
+            </MenuItem>
+            <Divider />
+            <MenuItem
+              icon={<ArrowDownRight size={16} />}
+              onClick={() => handleOperation('burn')}
+            >
+              Burn
+            </MenuItem>
+            <MenuItem
+              icon={<ArrowDownRight size={16} />}
+              onClick={() => handleOperation('burnPath')}
+            >
+              Burn Path
+            </MenuItem>
+          </MenuList>
+        </Menu>
+
+        {/* Quick Action Buttons */}
         <Tooltip label="Mint membership">
           <Button
             leftIcon={<UserPlus size={16} />}
-            onClick={handleMintMembership}
+            onClick={() => handleOperation('mintMembership')}
             colorScheme="purple"
             variant="outline"
             isDisabled={isProcessing}
@@ -1060,7 +1080,7 @@ export const NodeOperations: React.FC<{
         <Tooltip label="Redistribute value">
           <Button
             leftIcon={<RefreshCw size={16} />}
-            onClick={handleRedistribute}
+            onClick={() => handleOperation('redistribute')}
             colorScheme="purple"
             variant="outline"
             isDisabled={isProcessing}
@@ -1072,7 +1092,7 @@ export const NodeOperations: React.FC<{
         <Tooltip label="Send signal">
           <Button
             leftIcon={<Signal size={16} />}
-            onClick={handleSignal}
+            onClick={() => handleOperation('signal')}
             colorScheme="purple"
             variant="outline"
             isDisabled={isProcessing}
@@ -1082,6 +1102,7 @@ export const NodeOperations: React.FC<{
         </Tooltip>
       </ButtonGroup>
 
+      {/* Processing Indicator */}
       {isProcessing && (
         <Box 
           position="fixed" 
@@ -1107,40 +1128,16 @@ export const NodeOperations: React.FC<{
         </Box>
       )}
 
+      {/* Operation Modal */}
       <TokenOperationModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={onClose}
         operation={currentOperation}
-        onSubmit={async (params: any) => {
-          try {
-            await executeTransaction(
-              chainId,
-              async () => {
-                const contract = await getContract();
-                switch (currentOperation) {
-                  case 'spawnWithMembrane':
-                    return contract.spawnBranchWithMembrane(nodeId, params.membraneId, {
-                      gasLimit: 600000
-                    });
-                  default:
-                    throw new Error('Unknown operation');
-                }
-              },
-              {
-                successMessage: 'Operation completed successfully',
-                onSuccess: () => {
-                  setIsModalOpen(false);
-                  if (onSuccess) onSuccess();
-                }
-              }
-            );
-          } catch (error: any) {
-            console.error('Operation error:', error);
-          }
-        }}
+        onSubmit={handleModalSubmit}
         nodeId={nodeId}
         chainId={chainId}
         isLoading={isProcessing}
+        node={node}
       />
     </VStack>
   );
@@ -2007,6 +2004,597 @@ export default React.memo(NodeCard, (prevProps, nextProps) => {
 
 
 
+// File: ./components/Node/SignalForm/index.tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  VStack,
+  HStack,
+  Text,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
+  Box,
+  Button,
+  Alert,
+  AlertIcon,
+  Tooltip,
+  Progress,
+} from '@chakra-ui/react';
+import { usePrivy } from "@privy-io/react-auth";
+import { useTransaction } from '../../../contexts/TransactionContext';
+import { useContractOperations } from '../../../hooks/useContractOperations';
+import { useNodeData } from '../../../hooks/useNodeData';
+import { fetchIPFSMetadata } from '../../../utils/ipfs';
+import { deployments, ABIs, getRPCUrl } from '../../../config/contracts';
+import { ethers } from 'ethers';
+import { NodeState } from '../../../types/chainData';
+
+
+interface SignalFormProps {
+  chainId: string;
+  nodeId: string;
+  parentNodeData: NodeState | null;
+  onSuccess?: () => void;
+}
+
+type ChildData = {
+  nodeId: string;
+  parentId: string;
+  membraneId: string;
+  membraneName: string;
+  currentSignal: number;
+  eligibilityPerSecond: string;
+};
+
+const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData, onSuccess }) => {
+  const { user, ready } = usePrivy();
+  const { sendSignal } = useContractOperations(chainId);
+
+  // State declarations
+  const [childrenData, setChildrenData] = useState<ChildData[]>([]);
+  const [loadingChildren, setLoadingChildren] = useState(true);
+  const [sliderValues, setSliderValues] = useState<Record<string, number>>({});
+  const [userSignals, setUserSignals] = useState<Record<string, number>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [totalAllocation, setTotalAllocation] = useState(0);
+
+  // Handle slider changes
+  const handleSliderChange = useCallback((nodeId: string, value: number) => {
+    setSliderValues(prev => {
+      const newValues = { ...prev, [nodeId]: value };
+      const total = Object.values(newValues).reduce((sum, val) => sum + val, 0);
+      setTotalAllocation(total);
+      return newValues;
+    });
+  }, []);
+
+  // Handle form submission
+  const handleSubmit = useCallback(async () => {
+    if (Math.abs(totalAllocation - 100) > 0.01) {
+      setError('Total allocation must equal 100%');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError(null);
+
+      const signalArray = childrenData.map(child => 
+        Math.round(sliderValues[child.nodeId] * 100)
+      );
+
+      await sendSignal(nodeId, signalArray);
+      if (onSuccess) onSuccess();
+      
+    } catch (error: any) {
+      console.error('Error submitting signals:', error);
+      setError(error.message || 'Failed to submit signals');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [childrenData, sliderValues, sendSignal, nodeId, totalAllocation, onSuccess]);
+
+  // Fetch children data
+  const fetchChildrenData = useCallback(async () => {
+    if (!ready || !chainId || !parentNodeData || !user?.wallet?.address) {
+      setLoadingChildren(false);
+      return;
+    }
+
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+      const contract = new ethers.Contract(
+        deployments.WillWe[cleanChainId],
+        ABIs.WillWe,
+        provider
+      );
+
+      const childNodes = await contract.getNodes(parentNodeData.childrenNodes);
+      const existingSignals = await contract.getUserNodeSignals(
+        user.wallet.address,
+        nodeId
+      );
+
+      const childrenWithMetadata = await Promise.all(
+        childNodes.map(async (node: any, index: number) => {
+          // Default to last 6 chars of nodeId
+          let membraneName = node.basicInfo[0].slice(-6);
+          
+          try {
+            // Check if membraneMeta exists and is a valid CID
+            if (node.membraneMeta && typeof node.membraneMeta === 'string' && node.membraneMeta.trim() !== '') {
+              const metadataUrl = `${'https://underlying-tomato-locust.myfilebase.com/ipfs/'}${node.membraneMeta.replace('ipfs://', '')}`;
+              console.log('Fetching metadata from:', metadataUrl);
+              
+              const response = await fetch(metadataUrl);
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              const metadata = await response.json();
+              membraneName = metadata.title || metadata.name || membraneName;
+            }
+          } catch (error) {
+            console.error('Error fetching membrane metadata:', error);
+            // Keep the default membraneName (last 6 chars of nodeId)
+          }
+
+          const eligibilityPerSecond = await contract.calculateUserTargetedPreferenceAmount(
+            node.basicInfo[0],
+            nodeId,
+            existingSignals[index]?.[0] || 0,
+            user.wallet.address
+          );
+
+          return {
+            nodeId: node.basicInfo[0],
+            parentId: nodeId,
+            membraneId: node.basicInfo[5],
+            membraneName,
+            currentSignal: Number(existingSignals[index]?.[0] || 0) / 100,
+            eligibilityPerSecond: eligibilityPerSecond.toString()
+          };
+        })
+      );
+
+      setChildrenData(childrenWithMetadata);
+      
+      // Initialize with existing signals
+      const initialValues = Object.fromEntries(
+        childrenWithMetadata.map(child => [
+          child.nodeId,
+          child.currentSignal
+        ])
+      );
+      
+      setSliderValues(initialValues);
+      setUserSignals(initialValues);
+      
+    } catch (error) {
+      console.error('Error fetching children data:', error);
+      setError(error.message || 'Failed to load children nodes');
+    } finally {
+      setLoadingChildren(false);
+    }
+  }, [chainId, parentNodeData, user?.wallet?.address, ready, nodeId]);
+
+  useEffect(() => {
+    fetchChildrenData();
+  }, [fetchChildrenData]);
+
+  // Render loading state
+  if (!ready || loadingChildren) {
+    return (
+      <VStack spacing={4} align="stretch" width="100%">
+        <Progress size="xs" isIndeterminate colorScheme="purple" />
+        <Text textAlign="center">Loading signals...</Text>
+      </VStack>
+    );
+  }
+
+  // Render wallet connection state
+  if (!user?.wallet?.address) {
+    return (
+      <Alert status="warning">
+        <AlertIcon />
+        Please connect your wallet to view signals
+      </Alert>
+    );
+  }
+
+  // Render error state
+  if (error) {
+    return (
+      <Alert status="error">
+        <AlertIcon />
+        {error}
+      </Alert>
+    );
+  }
+
+  // Render main component
+  return (
+    <VStack spacing={6} width="100%">
+      {childrenData.map(child => (
+        <Box key={child.nodeId} width="100%" p={4} borderWidth={1} borderRadius="md">
+          <VStack align="stretch" spacing={2}>
+            <HStack justify="space-between">
+              <Text fontWeight="medium">{child.membraneName}</Text>
+              <Text color="gray.600" fontSize="sm">
+                {sliderValues[child.nodeId]?.toFixed(1)}%
+              </Text>
+            </HStack>
+
+            <Tooltip
+              label={`Current allocation: ${sliderValues[child.nodeId]?.toFixed(1)}%`}
+              placement="top"
+            >
+              <Slider
+                value={sliderValues[child.nodeId] || 0}
+                onChange={(v) => handleSliderChange(child.nodeId, v)}
+                min={0}
+                max={100}
+                step={0.1}
+                isDisabled={isSubmitting}
+              >
+                <SliderTrack>
+                  <SliderFilledTrack />
+                </SliderTrack>
+                <SliderThumb />
+              </Slider>
+            </Tooltip>
+
+            <Text fontSize="xs" color="gray.500">
+              Previous: {userSignals[child.nodeId]?.toFixed(1)}%
+            </Text>
+          </VStack>
+        </Box>
+      ))}
+
+      <Box width="100%" p={4} bg="gray.50" borderRadius="md">
+        <HStack justify="space-between">
+          <Text>Total Allocation:</Text>
+          <Text 
+            fontWeight="bold"
+            color={Math.abs(totalAllocation - 100) < 0.01 ? 'green.500' : 'red.500'}
+          >
+            {totalAllocation.toFixed(1)}%
+          </Text>
+        </HStack>
+      </Box>
+
+      <Button
+        colorScheme="purple"
+        width="100%"
+        onClick={handleSubmit}
+        isLoading={isSubmitting}
+        loadingText="Submitting Signals..."
+        isDisabled={
+          isSubmitting || 
+          Math.abs(totalAllocation - 100) > 0.01 ||
+          !user?.wallet?.address
+        }
+      >
+        Submit Signals
+      </Button>
+    </VStack>
+  );
+};
+
+export default SignalForm;
+
+
+
+// File: ./components/Node/SignalForm/MembraneSection.tsx
+import React from 'react';
+import {
+  Box,
+  Text,
+  HStack,
+  Input,
+  FormControl,
+  FormLabel,
+  Progress,
+  VStack,
+  Badge,
+  Tooltip,
+  Skeleton,
+} from '@chakra-ui/react';
+import { Shield, Info } from 'lucide-react';
+import { MembraneRequirement } from '../../../types/chainData';
+
+interface MembraneSectionProps {
+  membraneId: string;
+  setMembraneId: (id: string) => void;
+  membraneMetadata: any;
+  membraneRequirements: MembraneRequirement[];
+  isLoadingMembrane: boolean;
+  isValidating: boolean;
+  isProcessing: boolean;
+}
+
+export const MembraneSection: React.FC<MembraneSectionProps> = ({
+  membraneId,
+  setMembraneId,
+  membraneMetadata,
+  membraneRequirements,
+  isLoadingMembrane,
+  isValidating,
+  isProcessing
+}) => {
+  return (
+    <Box p={4} bg="purple.50" borderRadius="lg">
+      <Text fontSize="lg" fontWeight="semibold" mb={4}>
+        Membrane Configuration
+      </Text>
+      
+      <FormControl>
+        <FormLabel>
+          <HStack>
+            <Shield size={14} />
+            <Text>Membrane ID</Text>
+            <Tooltip label="Enter the ID of the membrane to signal for">
+              <Box as="span" cursor="help">
+                <Info size={14} />
+              </Box>
+            </Tooltip>
+          </HStack>
+        </FormLabel>
+
+        <Input
+          value={membraneId}
+          onChange={(e) => setMembraneId(e.target.value)}
+          placeholder="Enter membrane ID"
+          isDisabled={isProcessing}
+          bg="white"
+        />
+
+        {isValidating && (
+          <Progress size="xs" isIndeterminate colorScheme="purple" mt={2} />
+        )}
+
+        {isLoadingMembrane ? (
+          <Skeleton height="100px" mt={2} />
+        ) : (
+          membraneMetadata && (
+            <Box mt={2} p={3} bg="white" borderRadius="md">
+              <Text fontWeight="semibold" mb={2}>
+                {membraneMetadata.name}
+              </Text>
+              {membraneMetadata.description && (
+                <Text fontSize="sm" color="gray.600" mb={2}>
+                  {membraneMetadata.description}
+                </Text>
+              )}
+              <VStack align="start" spacing={1}>
+                {membraneRequirements.map((req, idx) => (
+                  <HStack key={idx} spacing={2} fontSize="sm">
+                    <Badge colorScheme="purple">{req.symbol}</Badge>
+                    <Text>{req.formattedBalance} tokens required</Text>
+                  </HStack>
+                ))}
+              </VStack>
+            </Box>
+          )
+        )}
+      </FormControl>
+    </Box>
+  );
+};
+
+export default MembraneSection;
+
+
+
+// File: ./components/Node/SignalForm/utils.ts
+import { ethers } from 'ethers';
+
+export const calculateMonthlyPreference = (
+  amount: string,
+  decimals: number = 18
+): string => {
+  try {
+    const annualAmount = ethers.parseUnits(amount, decimals);
+    const monthlyAmount = annualAmount / BigInt(12);
+    return ethers.formatUnits(monthlyAmount, decimals);
+  } catch (error) {
+    console.error('Error calculating monthly preference:', error);
+    return '0';
+  }
+};
+
+export const validateSignals = (signals: number[]): boolean => {
+  if (signals.length === 0) return false;
+  const sum = signals.reduce((acc, val) => acc + val, 0);
+  return Math.abs(sum - 100) < 0.001; // Allow for small floating point errors
+};
+
+
+
+// File: ./components/Node/SignalForm/types.ts
+export interface SignalFormProps {
+    nodeId: string;
+    parentId: string;
+    membraneId: string;
+    membraneName: string;
+    selectedTokenColor: string;
+    onSubmit: (signals: number[]) => Promise<void>;
+    onClose: () => void;
+  }
+  
+  export interface SignalState {
+    value: number;
+    childId: string;
+    lastSignal: string;
+    balance: string;
+    eligibilityPerSecond: string;
+  }
+
+
+
+// File: ./components/Node/SignalForm/SignalSlider.tsx
+import React from 'react';
+import {
+  Box,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
+  Text,
+  HStack,
+  Tooltip,
+  VStack,
+} from '@chakra-ui/react';
+import { formatBalance } from '../../../utils/formatters';
+
+interface SignalSliderProps {
+  nodeId: string;
+  parentId: string;
+  childId: string;
+  value: number;
+  lastSignal: string;
+  balance: string;
+  eligibilityPerSecond: string;
+  totalInflationPerSecond: string;
+  onChange: (value: number) => void;
+  onChangeEnd: (value: number) => void;
+  isDisabled?: boolean;
+  selectedTokenColor: string;
+}
+
+export const SignalSlider: React.FC<SignalSliderProps> = ({
+  nodeId,
+  value,
+  lastSignal,
+  balance,
+  eligibilityPerSecond,
+  totalInflationPerSecond,
+  onChange,
+  onChangeEnd,
+  isDisabled,
+  selectedTokenColor,
+}) => {
+  // Calculate percentages
+  const eligibilityPercentage = totalInflationPerSecond !== '0' 
+    ? (Number(eligibilityPerSecond) / Number(totalInflationPerSecond)) * 100 
+    : 0;
+
+  return (
+    <VStack align="stretch" spacing={2} width="100%" mb={4}>
+      <HStack justify="space-between">
+        <Text fontSize="sm" color="gray.600">
+          Balance: {formatBalance(balance)}
+        </Text>
+        <Text fontSize="sm" color="gray.600">
+          Last Signal: {lastSignal}%
+        </Text>
+      </HStack>
+
+      <Box position="relative" py={4}>
+        <Tooltip
+          label={`Current Eligibility: ${eligibilityPercentage.toFixed(2)}%`}
+          placement="top"
+        >
+          <Box
+            position="absolute"
+            left={`${eligibilityPercentage}%`}
+            top="0"
+            height="100%"
+            width="2px"
+            bg={`${selectedTokenColor}40`}
+            zIndex={1}
+          />
+        </Tooltip>
+
+        <Slider
+          aria-label="signal-strength"
+          value={value}
+          min={0}
+          max={100}
+          step={0.1}
+          onChange={onChange}
+          onChangeEnd={onChangeEnd}
+          isDisabled={isDisabled}
+        >
+          <SliderTrack bg={`${selectedTokenColor}20`}>
+            <SliderFilledTrack bg={selectedTokenColor} />
+          </SliderTrack>
+          <SliderThumb boxSize={6} bg={selectedTokenColor}>
+            <Box color="white" fontSize="xs">
+              {value.toFixed(1)}
+            </Box>
+          </SliderThumb>
+        </Slider>
+      </Box>
+
+      <Text fontSize="xs" color="gray.500" textAlign="right">
+        Current Eligibility: {formatBalance(eligibilityPerSecond)}/sec ({eligibilityPercentage.toFixed(2)}%)
+      </Text>
+    </VStack>
+  );
+};
+
+export default SignalSlider;
+
+
+
+// File: ./components/Node/SignalForm/InflationSection.tsx
+import React from 'react';
+import {
+  Box,
+  Text,
+  HStack,
+  Input,
+  FormControl,
+  FormLabel,
+  FormHelperText,
+} from '@chakra-ui/react';
+import { Activity } from 'lucide-react';
+
+interface InflationSectionProps {
+  inflationRate: string;
+  setInflationRate: (rate: string) => void;
+  isProcessing: boolean;
+}
+
+export const InflationSection: React.FC<InflationSectionProps> = ({
+  inflationRate,
+  setInflationRate,
+  isProcessing
+}) => {
+  return (
+    <Box p={4} bg="purple.50" borderRadius="lg">
+      <Text fontSize="lg" fontWeight="semibold" mb={4}>
+        <HStack>
+          <Activity size={16} />
+          <Text>Inflation Rate</Text>
+        </HStack>
+      </Text>
+
+      <FormControl>
+        <FormLabel>Rate (gwei/sec)</FormLabel>
+        <Input
+          value={inflationRate}
+          onChange={(e) => setInflationRate(e.target.value)}
+          placeholder="Enter inflation rate"
+          type="number"
+          min="0"
+          max="1000000"
+          isDisabled={isProcessing}
+          bg="white"
+        />
+        <FormHelperText>Maximum rate: 1,000,000 gwei/sec</FormHelperText>
+      </FormControl>
+    </Box>
+  );
+};
+
+export default InflationSection;
+
+
+
 // File: ./components/Node/NodeList.tsx
 import React from 'react';
 import { useRouter } from 'next/router';
@@ -2184,119 +2772,6 @@ const NodeControls: React.FC<NodeControlsProps> = ({
 };
 
 export default NodeControls;
-
-
-
-// File: ./components/TokenActivity.tsx
-import React from 'react';
-import { Box, Text, HStack, VStack, useToken } from '@chakra-ui/react';
-import { Activity, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import { formatBalance } from '../hooks/useBalances';
-
-interface TokenActivityProps {
-  tokenAddress: string;
-  tokenSymbol: string;
-  lastActivity?: {
-    type: 'mint' | 'burn' | 'transfer' | 'signal';
-    timestamp: number;
-    amount: string;
-  };
-  recentActivities: {
-    type: 'mint' | 'burn' | 'transfer' | 'signal';
-    timestamp: number;
-    amount: string;
-  }[];
-  contrastingColor: string;
-}
-
-export const TokenActivity: React.FC<TokenActivityProps> = ({
-  tokenAddress,
-  tokenSymbol,
-  lastActivity,
-  recentActivities,
-  contrastingColor,
-}) => {
-  const [baseColor] = useToken('colors', [contrastingColor]);
-
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'mint':
-        return <ArrowUpRight size={16} />;
-      case 'burn':
-        return <ArrowDownRight size={16} />;
-      default:
-        return <Activity size={16} />;
-    }
-  };
-
-  const getTimeAgo = (timestamp: number) => {
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    
-    if (seconds < 60) return `${seconds}s ago`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
-  };
-
-  if (!lastActivity) return null;
-
-  return (
-    <Box
-      position="absolute"
-      bottom={0}
-      left={0}
-      width="100%"
-      p={2}
-      backgroundColor={`${baseColor}10`}
-      borderBottomRadius="md"
-    >
-      <VStack align="stretch" spacing={2}>
-        {/* Last Activity */}
-        <HStack justify="space-between">
-          <HStack spacing={1}>
-            {getActivityIcon(lastActivity.type)}
-            <Text fontSize="xs" fontWeight="medium">
-              {lastActivity.type.toUpperCase()}
-            </Text>
-          </HStack>
-          <Text fontSize="xs" opacity={0.8}>
-            {getTimeAgo(lastActivity.timestamp)}
-          </Text>
-        </HStack>
-
-        {/* Recent Activity Summary */}
-        {recentActivities.length > 0 && (
-          <Box>
-            <Text fontSize="xs" opacity={0.8}>
-              {recentActivities.length} activities in the last 24h
-            </Text>
-            <Box
-              width="100%"
-              height="2px"
-              mt={1}
-              background={`linear-gradient(to right, ${baseColor}40, ${baseColor}10)`}
-            >
-              {recentActivities.map((activity, index) => (
-                <Box
-                  key={index}
-                  position="absolute"
-                  height="4px"
-                  width="2px"
-                  bottom={0}
-                  left={`${(index / recentActivities.length) * 100}%`}
-                  backgroundColor={baseColor}
-                  opacity={0.6}
-                />
-              ))}
-            </Box>
-          </Box>
-        )}
-      </VStack>
-    </Box>
-  );
-};
-
-export default React.memo(TokenActivity);
 
 
 
@@ -3042,8 +3517,6 @@ export default RequirementsTable;
 
 
 // File: ./components/TokenOperations/TokenOperationModal.tsx
-// File: ./components/TokenOperations/TokenOperationModal.tsx
-
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Modal,
@@ -3070,6 +3543,11 @@ import {
   CardHeader,
   Divider,
   useToast,
+  TabList,
+  Tabs,
+  Tab,
+  TabPanels,
+  TabPanel,
 } from '@chakra-ui/react';
 import {
   Shield,
@@ -3079,6 +3557,7 @@ import {
   CheckCircle,
   ExternalLink,
   Link as LinkIcon,
+  Coins,
 } from 'lucide-react';
 import { ethers } from 'ethers';
 import { usePrivy } from "@privy-io/react-auth";
@@ -3086,8 +3565,6 @@ import { RequirementsTable } from './RequirementsTable';
 import { OperationConfirmation } from './OperationConfirmation';
 import { StatusIndicator } from './StatusIndicator';
 import { deployments, ABIs } from '../../config/contracts';
-import { NodeState, MembraneMetadata, MembraneRequirement } from '../../types/chainData';
-import { useTransaction } from '../../contexts/TransactionContext';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -3099,13 +3576,18 @@ interface TokenOperationModalProps {
   isLoading: boolean;
   nodeId: string;
   chainId: string;
-  node?: NodeState;
 }
 
 interface OperationParams {
   amount?: string;
   membraneId?: string;
   targetNodeId?: string;
+}
+
+interface ValueOperationForm {
+  amount: string;
+  targetNodeId?: string;
+  operation: 'mint' | 'burn' | 'mintPath' | 'burnPath';
 }
 
 export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
@@ -3116,9 +3598,8 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   isLoading,
   nodeId,
   chainId,
-  node,
 }) => {
-  // State
+  // State for membrane operations
   const [membraneId, setMembraneId] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
   const [isValidInput, setIsValidInput] = useState(false);
@@ -3128,55 +3609,56 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Hooks
+  // State for value operations
+  const [valueOperation, setValueOperation] = useState<ValueOperationForm>({
+    amount: '',
+    operation: 'mint'
+  });
+
   const { getEthersProvider } = usePrivy();
-  const { executeTransaction } = useTransaction();
   const toast = useToast();
 
-  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setMembraneId('');
-      setMembraneMetadata(null);
-      setRequirements([]);
-      setError(null);
-      setInputError(null);
-      setIsValidInput(false);
+      resetForm();
     }
   }, [isOpen]);
 
-  // Validate membrane ID format
+  const resetForm = () => {
+    setMembraneId('');
+    setMembraneMetadata(null);
+    setRequirements([]);
+    setError(null);
+    setInputError(null);
+    setIsValidInput(false);
+    setValueOperation({
+      amount: '',
+      operation: 'mint'
+    });
+  };
+
   const validateMembraneIdFormat = useCallback((value: string) => {
     setInputError(null);
     setIsValidInput(false);
-
     if (!value) {
       setInputError('Membrane ID is required');
       return false;
     }
-
     try {
       ethers.getBigInt(value);
       setIsValidInput(true);
       return true;
-    } catch (error) {
+    } catch {
       setInputError('Invalid numeric format');
       return false;
     }
   }, []);
 
-  // Fetch membrane metadata and requirements
   const fetchMembraneMetadata = useCallback(async (membraneId: string) => {
     try {
-      const cleanChainId = chainId.replace('eip155:', '');
       const provider = await getEthersProvider();
-      
-      if (!provider) {
-        throw new Error('Provider not available');
-      }
-
       const contract = new ethers.Contract(
-        deployments.Membrane[cleanChainId],
+        deployments.Membrane[chainId.replace('eip155:', '')],
         ABIs.Membrane,
         provider
       );
@@ -3184,14 +3666,12 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
       const membrane = await contract.getMembraneById(membraneId);
       if (!membrane) throw new Error('Membrane not found');
 
-      // Fetch metadata from IPFS
       const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
       if (!response.ok) throw new Error('Failed to fetch membrane metadata');
       
       const metadata = await response.json();
       setMembraneMetadata(metadata);
 
-      // Fetch token details
       setIsLoadingTokens(true);
       const requirements = await Promise.all(
         membrane.tokens.map(async (tokenAddress: string, index: number) => {
@@ -3224,7 +3704,6 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   }, [chainId, getEthersProvider]);
 
-  // Handle membrane ID input change
   const handleMembraneIdChange = useCallback((value: string) => {
     setMembraneId(value);
     if (validateMembraneIdFormat(value)) {
@@ -3239,17 +3718,23 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   }, [validateMembraneIdFormat, fetchMembraneMetadata]);
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!isValidInput || !membraneId) {
-      setError('Please enter a valid membrane ID');
-      return;
-    }
-
     try {
-      await onSubmit({ membraneId });
+      if (operation === 'spawnBranchWithMembrane') {
+        if (!isValidInput || !membraneId) {
+          setError('Please enter a valid membrane ID');
+          return;
+        }
+        await onSubmit({ membraneId });
+      } else {
+        const { amount, targetNodeId } = valueOperation;
+        if (!amount) {
+          setError('Please enter a valid amount');
+          return;
+        }
+        await onSubmit({ amount, targetNodeId });
+      }
       onClose();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -3264,157 +3749,142 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   };
 
+  const handleValueOperationChange = (field: keyof ValueOperationForm, value: string) => {
+    setValueOperation(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const renderValueOperationsForm = () => (
+    <VStack spacing={4} align="stretch">
+      <FormControl isRequired>
+        <FormLabel>Amount</FormLabel>
+        <InputGroup>
+          <Input
+            value={valueOperation.amount}
+            onChange={(e) => handleValueOperationChange('amount', e.target.value)}
+            placeholder="Enter amount"
+            type="number"
+            step="0.000000000000000001"
+          />
+          <InputRightElement>
+            <Coins size={16} />
+          </InputRightElement>
+        </InputGroup>
+      </FormControl>
+
+      {(operation === 'mintPath' || operation === 'burnPath') && (
+        <FormControl isRequired>
+          <FormLabel>Target Node</FormLabel>
+          <Input
+            value={valueOperation.targetNodeId || ''}
+            onChange={(e) => handleValueOperationChange('targetNodeId', e.target.value)}
+            placeholder="Enter target node ID"
+          />
+        </FormControl>
+      )}
+    </VStack>
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      size="xl"
+    >
       <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent>
         <Box maxH="85vh" overflowY="auto" p={6}>
           <VStack spacing={6} align="stretch" width="100%">
-            {/* Header Section */}
-            <Box borderBottomWidth="1px" pb={4}>
-              <Text fontSize="2xl" fontWeight="bold">Design Corner</Text>
-              <Text fontSize="sm" color="gray.600">Configure membrane requirements</Text>
-            </Box>
+            <Tabs isFitted colorScheme="purple">
+              <TabList mb={4}>
+                <Tab>Value Operations</Tab>
+                <Tab>Membrane Operations</Tab>
+              </TabList>
 
-            {/* Input Section */}
-            <FormControl isRequired isInvalid={!!inputError}>
-              <FormLabel>
-                <HStack>
-                  <Text>Membrane ID</Text>
-                  <Tooltip label="Enter a numeric membrane identifier">
-                    <span><Info size={14} /></span>
-                  </Tooltip>
-                </HStack>
-              </FormLabel>
-              
-              <InputGroup>
-                <Input
-                  value={membraneId}
-                  onChange={(e) => handleMembraneIdChange(e.target.value)}
-                  placeholder="Enter numeric membrane ID"
-                  isDisabled={isValidating || isLoading}
-                  pattern="\d*"
-                  inputMode="numeric"
-                />
-                <InputRightElement>
-                  {membraneId && (
-                    isValidInput ? (
-                      <CheckCircle size={18} color="green" />
-                    ) : (
-                      <XCircle size={18} color="red" />
-                    )
-                  )}
-                </InputRightElement>
-              </InputGroup>
+              <TabPanels>
+                <TabPanel>
+                  {renderValueOperationsForm()}
+                </TabPanel>
+                <TabPanel>
+                  <VStack spacing={4} align="stretch">
+                    <FormControl isRequired isInvalid={!!inputError}>
+                      <FormLabel>
+                        <HStack>
+                          <Text>Membrane ID</Text>
+                          <Tooltip label="Enter a numeric membrane identifier">
+                            <span><Info size={14} /></span>
+                          </Tooltip>
+                        </HStack>
+                      </FormLabel>
+                      
+                      <InputGroup>
+                        <Input
+                          value={membraneId}
+                          onChange={(e) => handleMembraneIdChange(e.target.value)}
+                          placeholder="Enter membrane ID"
+                          isDisabled={isValidating || isLoading}
+                        />
+                        <InputRightElement>
+                          {membraneId && (
+                            isValidInput ? (
+                              <CheckCircle size={18} color="green" />
+                            ) : (
+                              <XCircle size={18} color="red" />
+                            )
+                          )}
+                        </InputRightElement>
+                      </InputGroup>
 
-              {inputError && (
-                <Alert status="error" mt={2} size="sm">
-                  <AlertIcon as={AlertTriangle} size={14} />
-                  {inputError}
-                </Alert>
-              )}
-            </FormControl>
+                      {inputError && (
+                        <Alert status="error" mt={2}>
+                          <AlertIcon />
+                          {inputError}
+                        </Alert>
+                      )}
+                    </FormControl>
 
-            {/* Loading States */}
-            {(isValidating || isLoadingTokens) && (
-              <Box>
-                <Progress size="xs" isIndeterminate colorScheme="purple" />
-                <Text mt={2} textAlign="center" fontSize="sm" color="gray.600">
-                  {isValidating ? 'Validating membrane...' : 'Loading token details...'}
-                </Text>
-              </Box>
-            )}
+                    {membraneMetadata && !error && (
+                      <>
+                        <RequirementsTable
+                          requirements={requirements}
+                          membraneMetadata={membraneMetadata}
+                        />
+                        <OperationConfirmation
+                          membraneMetadata={membraneMetadata}
+                          membraneId={membraneId}
+                          requirementsCount={requirements.length}
+                        />
+                      </>
+                    )}
+                  </VStack>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
 
-            {/* Error Display */}
-            {error && (
-              <Alert status="error">
-                <AlertIcon />
-                {error}
-              </Alert>
-            )}
+            <StatusIndicator
+              isValidating={isValidating}
+              isLoadingTokens={isLoadingTokens}
+              error={error}
+            />
 
-            {/* Membrane Data Display */}
-            {membraneMetadata && !error && (
-              <VStack spacing={4} align="stretch">
-                {/* Membrane Info Card */}
-                <Card variant="outline" bg="purple.50" mb={4}>
-                  <CardHeader pb={2}>
-                    <HStack justify="space-between">
-                      <Text fontSize="lg" fontWeight="bold">{membraneMetadata.name}</Text>
-                      <Badge colorScheme="purple">ID: {membraneId}</Badge>
-                    </HStack>
-                  </CardHeader>
-                  <CardBody>
-                    <VStack align="stretch" spacing={3}>
-                      {membraneMetadata.characteristics?.map((char, idx) => (
-                        <Box
-                          key={idx}
-                          p={3}
-                          bg="white"
-                          borderRadius="md"
-                          border="1px solid"
-                          borderColor="purple.100"
-                        >
-                          <HStack justify="space-between">
-                            <Text>{char.title}</Text>
-                            {char.link && (
-                              <Link 
-                                href={char.link} 
-                                isExternal 
-                                color="purple.500"
-                                fontSize="sm"
-                              >
-                                <HStack spacing={1}>
-                                  <LinkIcon size={14} />
-                                  <ExternalLink size={14} />
-                                </HStack>
-                              </Link>
-                            )}
-                          </HStack>
-                        </Box>
-                      ))}
-                    </VStack>
-                  </CardBody>
-                </Card>
-
-                {/* Requirements Table */}
-                <RequirementsTable
-                  requirements={requirements}
-                  membraneMetadata={membraneMetadata}
-                  chainId={chainId}
-                />
-
-                {/* Operation Confirmation */}
-                <OperationConfirmation
-                  membraneMetadata={membraneMetadata}
-                  membraneId={membraneId}
-                  requirementsCount={requirements.length}
-                />
-              </VStack>
-            )}
-
-            {/* Action Buttons */}
             <Box 
               borderTopWidth="1px" 
-              pt={4} 
+              pt={4}
               mt={4}
-              background="white"
+              bg="white"
             >
-              <HStack justify="flex-end" spacing={3}>
-                <Button variant="ghost" onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button
-                  colorScheme="purple"
-                  onClick={handleSubmit}
-                  isLoading={isLoading || isValidating || isLoadingTokens}
-                  loadingText="Processing..."
-                  isDisabled={!!error || !membraneMetadata || !isValidInput}
-                  leftIcon={<Shield size={16} />}
-                >
-                  Apply Membrane
-                </Button>
-              </HStack>
+              <Button
+                colorScheme="purple"
+                onClick={handleSubmit}
+                isLoading={isLoading}
+                loadingText="Processing..."
+                width="100%"
+                size="lg"
+              >
+                Confirm Operation
+              </Button>
             </Box>
           </VStack>
         </Box>
@@ -3433,6 +3903,213 @@ export * from './OperationConfirmation';
 export * from './OperationForm';
 export * from './RequirementsTable';
 export * from './StatusIndicator';
+
+
+
+// File: ./components/TokenOperations/TokenValueOperations.tsx
+import React, { useState, useCallback } from 'react';
+import { ethers } from 'ethers';
+import {
+  Box,
+  Button,
+  VStack,
+  FormControl,
+  FormLabel,
+  Input,
+  Alert,
+  AlertIcon,
+  Progress,
+  Text,
+  HStack,
+  useToast,
+} from '@chakra-ui/react';
+import { usePrivy } from "@privy-io/react-auth";
+import { deployments, ABIs } from '../../config/contracts';
+import { Check, AlertTriangle } from 'lucide-react';
+
+interface TokenValueOperationsProps {
+  nodeId: string;
+  chainId: string;
+  operation: 'mint' | 'burn' | 'mintPath' | 'burnPath';
+  onSubmit: (params: { amount: string }) => Promise<void>;
+  onClose: () => void;
+}
+
+const TokenValueOperations: React.FC<TokenValueOperationsProps> = ({
+  nodeId,
+  chainId,
+  operation,
+  onSubmit,
+  onClose,
+}) => {
+  const [amount, setAmount] = useState('');
+  const [isApproving, setIsApproving] = useState(false);
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const { getEthersProvider } = usePrivy();
+  const toast = useToast();
+
+  const checkAllowance = useCallback(async () => {
+    try {
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
+      
+      // Get root token from path
+      const willWeContract = new ethers.Contract(
+        deployments.WillWe[chainId.replace('eip155:', '')],
+        ABIs.WillWe,
+        provider
+      );
+      const path = await willWeContract.getFidPath(nodeId);
+      const rootToken = path[0];
+
+      // Check ERC20 allowance
+      const tokenContract = new ethers.Contract(
+        ethers.getAddress(rootToken),
+        ABIs.IERC20,
+        provider
+      );
+
+      const allowance = await tokenContract.allowance(
+        userAddress,
+        willWeContract.target
+      );
+
+      const parsedAmount = ethers.parseUnits(amount || '0', 18);
+      setNeedsApproval(allowance < parsedAmount);
+
+    } catch (err) {
+      console.error('Error checking allowance:', err);
+      setError('Failed to check token approval status');
+    }
+  }, [amount, chainId, getEthersProvider, nodeId]);
+
+  const handleApprove = async () => {
+    setIsApproving(true);
+    setError(null);
+    
+    try {
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      
+      const willWeContract = new ethers.Contract(
+        deployments.WillWe[chainId.replace('eip155:', '')],
+        ABIs.WillWe,
+        provider
+      );
+      
+      const path = await willWeContract.getFidPath(nodeId);
+      const rootToken = path[0];
+      
+      const tokenContract = new ethers.Contract(
+        ethers.getAddress(rootToken),
+        ABIs.IERC20,
+        signer
+      );
+
+      const parsedAmount = ethers.parseUnits(amount, 18);
+      const tx = await tokenContract.approve(willWeContract.target, parsedAmount);
+      await tx.wait();
+
+      setNeedsApproval(false);
+      toast({
+        title: 'Approved',
+        description: 'Token spending approved successfully',
+        status: 'success',
+        duration: 5000,
+      });
+      
+    } catch (err) {
+      console.error('Approval error:', err);
+      setError('Failed to approve token spending');
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await onSubmit({ amount });
+      onClose();
+    } catch (err) {
+      console.error('Transaction error:', err);
+      setError('Transaction failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (amount && (operation === 'mint' || operation === 'mintPath')) {
+      checkAllowance();
+    }
+  }, [amount, operation, checkAllowance]);
+
+  return (
+    <Box>
+      <VStack spacing={4} align="stretch">
+        <FormControl isRequired>
+          <FormLabel>Amount</FormLabel>
+          <Input
+            type="number"
+            step="0.000000000000000001"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Enter amount"
+            isDisabled={isApproving || isSubmitting}
+          />
+        </FormControl>
+
+        {error && (
+          <Alert status="error">
+            <AlertIcon />
+            {error}
+          </Alert>
+        )}
+
+        {(isApproving || isSubmitting) && (
+          <Progress size="xs" isIndeterminate colorScheme="purple" />
+        )}
+
+        <HStack spacing={4} justify="flex-end">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+
+          {needsApproval && (operation === 'mint' || operation === 'mintPath') ? (
+            <Button
+              colorScheme="purple"
+              onClick={handleApprove}
+              isLoading={isApproving}
+              loadingText="Approving..."
+            >
+              Approve
+            </Button>
+          ) : (
+            <Button
+              colorScheme="purple"
+              onClick={handleSubmit}
+              isLoading={isSubmitting}
+              loadingText={`${operation}ing...`}
+              isDisabled={(operation === 'mint' || operation === 'mintPath') && needsApproval}
+            >
+              {operation.charAt(0).toUpperCase() + operation.slice(1)}
+            </Button>
+          )}
+        </HStack>
+      </VStack>
+    </Box>
+  );
+};
+
+export default TokenValueOperations;
 
 
 
@@ -6233,103 +6910,6 @@ export default BalanceList;
 
 
 
-// File: ./components/AllStackComponents.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import {IconButton, Box, Text } from "@chakra-ui/react";
-import { getDistinguishableColor, getReverseColor } from "../const/colors";
-import { Palette } from 'lucide-react';
-
-
-interface ColorState {
-    contrastingColor: string;
-    reverseColor: string;
-    hoverColor: string;
-  }
-
-export const useColorManagement = () => {
-    const [colorState, setColorState] = useState<ColorState>({
-      contrastingColor: '#000000',
-      reverseColor: '#ffffff',
-      hoverColor: '#e2e8f0',
-    });
-  
-     const updateColors = useCallback((baseColor: string) => {
-      const newContrastingColor = getDistinguishableColor(`#${baseColor.slice(-6)}`, '#e2e8f0');
-      setColorState({
-        contrastingColor: newContrastingColor,
-        reverseColor: getReverseColor(newContrastingColor),
-        hoverColor: getReverseColor(newContrastingColor, 0.2),
-      });
-    }, []);
-  
-     const cycleColors = useCallback(() => {
-      const currentHue = parseInt(colorState.contrastingColor.slice(1), 16);
-      const newHue = (currentHue + 0.08 * 16777215) % 16777215;
-      const noise = Math.floor(Math.random() * 1000);
-      const newColor = Math.floor(newHue + noise).toString(16).padStart(6, '0');
-      updateColors(newColor);
-    }, [colorState.contrastingColor, updateColors]);
-  
-    return { colorState, updateColors, cycleColors };
-  };
-  
-  export const PaletteButton: React.FC<{ 
-    cycleColors: () => void, 
-    contrastingColor: string,
-    reverseColor: string
-  }> = ({ cycleColors, contrastingColor, reverseColor }) => {
-    const [isHovering, setIsHovering] = useState(false);
-  
-    useEffect(() => {
-      let intervalId: NodeJS.Timeout;
-      if (isHovering) {
-        intervalId = setInterval(cycleColors, 100);
-      }
-      return () => {
-        if (intervalId) clearInterval(intervalId);
-      };
-    }, [isHovering, cycleColors]);
-  
-    return (
-      <IconButton
-        aria-label="Cycle Colors"
-        icon={<Palette size={18} />}
-        onClick={cycleColors}
-        onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => setIsHovering(false)}
-        size="md"
-        isRound={true}
-        color={reverseColor}
-        bg={contrastingColor}
-        _hover={{ bg: reverseColor, color: contrastingColor }}
-        transition="all 0.2s"
-      />
-    );
-  };
-  
-  export const NodeDetails: React.FC<{ node: NodeState }> = ({ node }) => (
-    <Box p={4} borderWidth={1} borderRadius="lg">
-      <Text fontWeight="bold" fontSize="xl">{node.nodeId}</Text>
-      <Text>Inflation: {node.inflation}</Text>
-      <Text>Balance Anchor: {node.balanceAnchor}</Text>
-      <Text>Balance Budget: {node.balanceBudget}</Text>
-      <Text>Value: {node.value}</Text>
-      <Text>Membrane ID: {node.membraneId}</Text>
-      <Text>Members: {node.membersOfNode.join(', ')}</Text>
-      <Text>Children: {node.childrenNodes.join(', ')}</Text>
-      <Text>Root Path: {node.rootPath.join(' > ')}</Text>
-    </Box>
-  );
-  
-  export const ActivityLogs: React.FC = () => (
-    <Box p={4}>
-      <Text fontWeight="bold" fontSize="xl">Activity Logs</Text>
-      <Text mt={4}>This is a placeholder for the Activity Logs page.</Text>
-    </Box>
-  );
-
-
-
 // File: ./components/TokenBalance.tsx
 // File: ./components/TokenBalance.tsx
 
@@ -6661,246 +7241,288 @@ export class ErrorBoundary extends Component<Props, State> {
 
 
 // File: ./components/NodeDetails.tsx
+// File: ./components/NodeDetails.tsx
+
 import React, { useMemo } from 'react';
 import {
   Box,
   VStack,
   HStack,
-  Heading,
   Text,
-  Spinner,
-  Alert,
-  AlertIcon,
-  Divider,
+  Badge,
   Table,
   Thead,
   Tbody,
   Tr,
   Th,
   Td,
-  Badge,
-  Button,
-  useToast,
-  Tooltip
-} from '@chakra-ui/react';
-import { NodeState } from '../types/chainData';
-import NodeOperations from './Node/NodeOperations';
-import { useNodeData, getNodeValue, getNodeInflation, isNodeMember } from '../hooks/useNodeData';
-import { useTransaction } from '../contexts/TransactionContext';
-import { formatEther, formatUnits } from 'ethers';
+  useColorModeValue,
+  Tooltip,
+  Skeleton,
+  Alert,
+  AlertIcon,
+  useDisclosure,
+} from "@chakra-ui/react";
+import { 
+  Users, 
+  ArrowUpRight, 
+  GitBranch,
+} from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { MembersList } from './Node/MembersList';
-import { ChildrenList } from './Node/ChildrenList';
-import { SignalHistory } from './Node/SignalHistory';
-import { formatAddress } from '../utils/formatting';
+import { useNodeData } from '../hooks/useNodeData';
+import { NodeOperations } from './Node/NodeOperations';
+import  SignalForm  from './Node/SignalForm/index';
+import { formatBalance } from '../utils/formatters';
+import { useNodeTransactions } from '../hooks/useNodeTransactions';
 
 interface NodeDetailsProps {
   chainId: string;
   nodeId: string;
-  selectedTokenColor: string;
   onNodeSelect?: (nodeId: string) => void;
+  selectedTokenColor: string;
 }
 
 const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
-  selectedTokenColor,
-  onNodeSelect
+  onNodeSelect,
+  selectedTokenColor
 }) => {
+  // Hooks
   const { user } = usePrivy();
-  const userAddress = user?.wallet?.address || '';
-  const { isTransacting } = useTransaction();
-  const toast = useToast();
-  
-  const { 
-    data: nodeData,
-    isLoading,
-    error,
-    redistribute,
-    signal,
-    refetch
-  } = useNodeData(chainId, nodeId);
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
-  const nodeStats = useMemo(() => {
-    if (!nodeData) return null;
+  // Clean chain ID
+  const cleanChainId = chainId?.replace('eip155:', '') || '';
 
-    const value = getNodeValue(nodeData);
-    const inflation = getNodeInflation(nodeData);
-    const memberCount = nodeData.membersOfNode.length;
-    const childCount = nodeData.childrenNodes.length;
-    const pathDepth = nodeData.rootPath.length;
+  // Style hooks
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const textColor = useColorModeValue('gray.600', 'gray.400');
+  const permissionsBg = useColorModeValue('gray.50', 'gray.900');
 
-    return {
-      value: formatEther(value),
-      inflation: formatUnits(inflation, 9),
-      memberCount,
-      childCount,
-      pathDepth
+  // Fetch node data
+  const { data: nodeData, error, isLoading, refetch } = useNodeData(cleanChainId, nodeId);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    if (!nodeData?.basicInfo) return {
+      totalValue: '0',
+      dailyGrowth: '0',
+      memberCount: 0,
+      childCount: 0,
+      pathDepth: 0
     };
+
+    try {
+      const totalValue = nodeData.basicInfo[4] ? BigInt(nodeData.basicInfo[4]) : BigInt(0);
+      const inflation = nodeData.basicInfo[1] ? BigInt(nodeData.basicInfo[1]) : BigInt(0);
+      const dailyGrowth = inflation * BigInt(86400);
+
+      return {
+        totalValue: formatBalance(totalValue.toString()),
+        dailyGrowth: formatBalance(dailyGrowth.toString()),
+        memberCount: nodeData.membersOfNode?.length || 0,
+        childCount: nodeData.childrenNodes?.length || 0,
+        pathDepth: nodeData.rootPath?.length || 0
+      };
+    } catch (err) {
+      console.error('Error calculating stats:', err);
+      return {
+        totalValue: '0',
+        dailyGrowth: '0',
+        memberCount: 0,
+        childCount: 0,
+        pathDepth: 0
+      };
+    }
   }, [nodeData]);
 
-  const isMember = useMemo(() => {
-    if (!nodeData || !userAddress) return false;
-    return isNodeMember(nodeData, userAddress);
-  }, [nodeData, userAddress]);
-
-  const handleRedistribute = async () => {
-    try {
-      const success = await redistribute();
-      if (success) {
-        toast({
-          title: "Success",
-          description: "Value redistributed successfully",
-          status: "success",
-          duration: 5000,
-        });
-        refetch();
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to redistribute value",
-        status: "error",
-        duration: 5000,
-      });
-    }
-  };
-
-  const handleSignal = async (signals: number[]) => {
-    try {
-      const success = await signal(signals);
-      if (success) {
-        toast({
-          title: "Success",
-          description: "Signal sent successfully",
-          status: "success",
-          duration: 5000,
-        });
-        refetch();
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to send signal",
-        status: "error",
-        duration: 5000,
-      });
-    }
-  };
-
+  // Loading state
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-        <Spinner size="xl" color={selectedTokenColor} />
-      </Box>
+      <VStack spacing={4} align="stretch" p={6}>
+        <Skeleton height="60px" />
+        <Skeleton height="200px" />
+        <Skeleton height="100px" />
+      </VStack>
     );
   }
 
+  // Error state
   if (error) {
     return (
       <Alert status="error">
         <AlertIcon />
-        {error.message}
+        <Text>Error loading node data: {error.message || 'Unknown error'}</Text>
       </Alert>
     );
   }
 
-  if (!nodeData) {
+  // No data state
+  if (!nodeData?.basicInfo) {
     return (
       <Alert status="warning">
         <AlertIcon />
-        No node data available
+        <Text>No data available for this node</Text>
       </Alert>
     );
   }
 
   return (
-    <VStack spacing={6} align="stretch">
-      <Box>
-        <HStack justify="space-between" align="center">
-          <Heading size="lg" color={selectedTokenColor}>
-            Node Details
-          </Heading>
-          <Badge 
-            colorScheme={isMember ? "green" : "gray"}
-            fontSize="md"
-            padding={2}
-          >
-            {isMember ? "Member" : "Non-Member"}
-          </Badge>
+    <Box
+    borderRadius="lg"
+    bg={bgColor}
+    border="1px solid"
+    borderColor={borderColor}
+    overflow="auto" // Change from "hidden" to "auto"
+    maxHeight="calc(100vh - 200px)" // Add max height with space for header/nav
+    display="flex"
+    flexDirection="column"
+    >
+      {/* Header Section */}
+      <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+        <HStack justify="space-between" mb={4}>
+          <VStack align="start" spacing={1}>
+            <HStack>
+              <Text fontSize="lg" fontWeight="bold">
+                Node {nodeId.slice(-6)}
+              </Text>
+              <Badge colorScheme="purple">
+                Depth {stats.pathDepth}
+              </Badge>
+            </HStack>
+            <Text fontSize="sm" color={textColor}>
+              {nodeData.basicInfo[0]}
+            </Text>
+          </VStack>
+          
+          <NodeOperations
+            nodeId={nodeId}
+            node={nodeData}
+            chainId={cleanChainId}
+            selectedTokenColor={selectedTokenColor}
+            onSuccess={refetch}
+          />
+
         </HStack>
-        <Text color="gray.600">ID: {nodeId}</Text>
+
+        <HStack spacing={8} wrap="wrap">
+          <Tooltip label="Total Value">
+            <VStack align="start">
+              <Text fontSize="sm" color={textColor}>Total Value</Text>
+              <Text fontSize="lg" fontWeight="semibold">
+                {stats.totalValue}
+              </Text>
+            </VStack>
+          </Tooltip>
+
+          <Tooltip label="Daily Growth">
+            <VStack align="start">
+              <Text fontSize="sm" color={textColor}>Daily Growth</Text>
+              <Text fontSize="lg" fontWeight="semibold" color="green.500">
+                +{stats.dailyGrowth}
+              </Text>
+            </VStack>
+          </Tooltip>
+
+          <Tooltip label="Members">
+            <VStack align="start">
+              <Text fontSize="sm" color={textColor}>Members</Text>
+              <HStack>
+                <Users size={16} />
+                <Text fontSize="lg" fontWeight="semibold">
+                  {stats.memberCount}
+                </Text>
+              </HStack>
+            </VStack>
+          </Tooltip>
+
+          <Tooltip label="Child Nodes">
+            <VStack align="start">
+              <Text fontSize="sm" color={textColor}>Child Nodes</Text>
+              <HStack>
+                <GitBranch size={16} />
+                <Text fontSize="lg" fontWeight="semibold">
+                  {stats.childCount}
+                </Text>
+              </HStack>
+            </VStack>
+          </Tooltip>
+        </HStack>
       </Box>
 
-      <Divider />
+      {/* Path Display */}
+      {nodeData.rootPath.length > 0 && (
+        <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+          <Text fontWeight="medium" mb={2}>Path</Text>
+          <HStack spacing={2}>
+            {nodeData.rootPath.map((pathNodeId, index) => (
+              <React.Fragment key={pathNodeId}>
+                {index > 0 && <ArrowUpRight size={14} />}
+                <Badge
+                  cursor="pointer"
+                  onClick={() => onNodeSelect?.(pathNodeId)}
+                  _hover={{ bg: 'purple.100' }}
+                >
+                  {pathNodeId.slice(-6)}
+                </Badge>
+              </React.Fragment>
+            ))}
+          </HStack>
+        </Box>
+      )}
 
-      {/* Node Statistics */}
-      <Box>
-        <Heading size="md" mb={4}>Statistics</Heading>
-        <Table variant="simple">
-          <Tbody>
-            <Tr>
-              <Th>Total Value</Th>
-              <Td>{nodeStats?.value} ETH</Td>
-            </Tr>
-            <Tr>
-              <Th>Inflation Rate</Th>
-              <Td>{nodeStats?.inflation}%</Td>
-            </Tr>
-            <Tr>
-              <Th>Members</Th>
-              <Td>{nodeStats?.memberCount}</Td>
-            </Tr>
-            <Tr>
-              <Th>Children</Th>
-              <Td>{nodeStats?.childCount}</Td>
-            </Tr>
-            <Tr>
-              <Th>Path Depth</Th>
-              <Td>{nodeStats?.pathDepth}</Td>
-            </Tr>
-          </Tbody>
-        </Table>
-      </Box>
-
-      <Divider />
-
-      {/* Node Operations */}
-      <NodeOperations
-        nodeId={nodeId}
-        chainId={chainId}
-        selectedTokenColor={selectedTokenColor}
-        onRedistribute={handleRedistribute}
-        onSignal={handleSignal}
-        isTransacting={isTransacting}
-        isMember={isMember}
-      />
-
-      <Divider />
-
-      {/* Members List */}
-      <MembersList 
-        members={nodeData.membersOfNode}
-        selectedTokenColor={selectedTokenColor}
-      />
-
-      <Divider />
-
-      {/* Children List */}
-      <ChildrenList
-        children={nodeData.childrenNodes}
-        selectedTokenColor={selectedTokenColor}
-        onNodeSelect={onNodeSelect}
-      />
-
-      <Divider />
+      {/* Signal Configuration */}
+      {nodeData?.basicInfo && (
+  <SignalForm
+    chainId={cleanChainId}
+    nodeId={nodeId}
+    parentNodeData={nodeData}
+    onSuccess={refetch}
+  />
+)}
 
       {/* Signal History */}
-      <SignalHistory
-        signals={nodeData.signals}
-        selectedTokenColor={selectedTokenColor}
-      />
-    </VStack>
+      {nodeData.signals.length > 0 && (
+        <Box p={6} borderBottom="1px solid" borderColor={borderColor}>
+          <Text fontWeight="medium" mb={4}>Recent Signals</Text>
+          <Table size="sm">
+            <Thead>
+              <Tr>
+                <Th>Membrane</Th>
+                <Th>Inflation</Th>
+                <Th>Timestamp</Th>
+                <Th isNumeric>Value</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {nodeData.signals.slice(0, 5).map((signal, index) => (
+                <Tr key={index}>
+                  <Td>{signal.MembraneInflation[0] || 'Unknown'}</Td>
+                  <Td>{signal.MembraneInflation[1] || '0'}</Td>
+                  <Td>{new Date(Number(signal.lastRedistSignal[0] || '0')).toLocaleString()}</Td>
+                  <Td isNumeric>{formatBalance(signal.MembraneInflation[1] || '0')}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </Box>
+      )}
+
+      {/* Permissions */}
+      {user?.wallet?.address && (
+        <Box p={6} bg={permissionsBg}>
+          <Text fontWeight="medium" mb={2}>Permissions</Text>
+          <HStack spacing={4} wrap="wrap">
+            <Badge colorScheme="green" variant="subtle">Mint</Badge>
+            <Badge colorScheme="green" variant="subtle">Burn</Badge>
+            <Badge colorScheme="green" variant="subtle">Signal</Badge>
+            <Badge colorScheme="green" variant="subtle">Redistribute</Badge>
+          </HStack>
+        </Box>
+      )}
+    </Box>
   );
 };
 
@@ -12097,6 +12719,47 @@ export const getRPCUrl = (chainId: string): string => {
 
 
 
+// File: ./hooks/useSignalState.ts
+import { useState, useCallback, useMemo } from 'react';
+
+interface SignalState {
+  [key: string]: number;
+}
+
+export function useSignalState(childNodes: string[]) {
+  const [childSignals, setChildSignals] = useState<SignalState>(() => 
+    childNodes.reduce((acc, nodeId) => ({ ...acc, [nodeId]: 0 }), {})
+  );
+
+  const [inflationRate, setInflationRate] = useState('');
+
+  const validateInflationRate = useCallback((value: string): boolean => {
+    if (!value) return false;
+    const rate = Number(value);
+    return !isNaN(rate) && rate >= 0 && rate <= 1000000;
+  }, []);
+
+  const totalAllocation = useMemo(() => 
+    Object.values(childSignals).reduce((sum, val) => sum + val, 0),
+  [childSignals]);
+
+  const validateChildSignals = useCallback(() => 
+    Math.abs(totalAllocation - 100) < 0.01,
+  [totalAllocation]);
+
+  return {
+    childSignals,
+    setChildSignals,
+    inflationRate,
+    setInflationRate,
+    validateInflationRate,
+    validateChildSignals,
+    totalAllocation
+  };
+}
+
+
+
 // File: ./hooks/useNodeDataLoading.tsx
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
@@ -12456,6 +13119,114 @@ export default useMembraneOperations;
 
 
 
+// File: ./hooks/useMembraneData.ts
+import { useState, useCallback, useEffect } from 'react';
+import { ethers } from 'ethers';
+import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+
+const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
+
+interface MembraneMetadata {
+  name: string;
+  description?: string;
+  characteristics?: Array<{title: string; link?: string}>;
+}
+
+interface MembraneRequirement {
+  tokenAddress: string;
+  symbol: string;
+  requiredBalance: string;
+  formattedBalance: string;
+}
+
+export function useMembraneData(chainId: string) {
+  const [membraneId, setMembraneId] = useState('');
+  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
+  const [membraneRequirements, setMembraneRequirements] = useState<MembraneRequirement[]>([]);
+  const [isLoadingMembrane, setIsLoadingMembrane] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+
+  const fetchMembraneMetadata = useCallback(async (cid: string) => {
+    try {
+      const response = await fetch(`${IPFS_GATEWAY}${cid}`);
+      if (!response.ok) throw new Error('Failed to fetch membrane metadata');
+      const metadata = await response.json();
+      setMembraneMetadata(metadata);
+    } catch (err) {
+      console.error('Error fetching membrane metadata:', err);
+      setMembraneMetadata(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!membraneId) return;
+
+    const validateMembrane = async () => {
+      setIsValidating(true);
+      setIsLoadingMembrane(true);
+
+      try {
+        const cleanChainId = chainId.replace('eip155:', '');
+        const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+        const membraneContract = new ethers.Contract(
+          deployments.Membrane[cleanChainId],
+          ABIs.Membrane,
+          provider
+        );
+
+        const membrane = await membraneContract.getMembraneById(membraneId);
+        
+        if (!membrane) throw new Error('Invalid membrane ID');
+
+        if (membrane.meta) {
+          await fetchMembraneMetadata(membrane.meta);
+        }
+
+        const requirements = await Promise.all(
+          membrane.tokens.map(async (tokenAddress: string, index: number) => {
+            const tokenContract = new ethers.Contract(
+              tokenAddress,
+              ['function symbol() view returns (string)'],
+              provider
+            );
+
+            const symbol = await tokenContract.symbol();
+            
+            return {
+              tokenAddress,
+              symbol,
+              requiredBalance: membrane.balances[index].toString(),
+              formattedBalance: ethers.formatUnits(membrane.balances[index], 18)
+            };
+          })
+        );
+
+        setMembraneRequirements(requirements);
+      } catch (err) {
+        console.error('Membrane validation error:', err);
+        setMembraneRequirements([]);
+        setMembraneMetadata(null);
+      } finally {
+        setIsValidating(false);
+        setIsLoadingMembrane(false);
+      }
+    };
+
+    validateMembrane();
+  }, [membraneId, chainId, fetchMembraneMetadata]);
+
+  return {
+    membraneId,
+    setMembraneId,
+    membraneMetadata,
+    membraneRequirements,
+    isLoadingMembrane,
+    isValidating
+  };
+}
+
+
+
 // File: ./hooks/useNodeHierarchy.tsx
 // File: ./hooks/useNodeHierarchy.ts
 import { useMemo } from 'react';
@@ -12631,7 +13402,7 @@ export function useActivityFeed(chainId: string): UseActivityFeedResult {
           id: '2',
           type: 'signal',
           timestamp: Date.now() - 1000 * 60 * 30,
-          description: 'Signaled preference',
+          description: 'Redistributive preference signaled by Johanna',
           account: user.wallet.address,
           nodeId: '123',
           status: 'success'
@@ -13020,6 +13791,92 @@ export default useChainId;
 
 
 
+// File: ./hooks/useNodeTransactions.tsx
+import { useCallback } from 'react';
+import { ethers } from 'ethers';
+import { usePrivy } from '@privy-io/react-auth';
+import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+import { useToast } from '@chakra-ui/react';
+
+export function useNodeTransactions(chainId: string) {
+  const { getEthersProvider } = usePrivy();
+  const toast = useToast();
+
+  const getContract = useCallback(async () => {
+    const provider = await getEthersProvider();
+    const cleanChainId = chainId.replace('eip155:', '');
+    return new ethers.Contract(
+      deployments.WillWe[cleanChainId],
+      ABIs.WillWe,
+      provider.getSigner()
+    );
+  }, [chainId, getEthersProvider]);
+
+  const executeTransaction = useCallback(async (
+    chainId: string,
+    transactionFn: () => Promise<ethers.ContractTransaction>,
+    options: {
+      successMessage?: string;
+      errorMessage?: string;
+      onSuccess?: () => void;
+    } = {}
+  ) => {
+    try {
+      const tx = await transactionFn();
+      toast({
+        title: 'Transaction Submitted',
+        description: 'Please wait for confirmation...',
+        status: 'info',
+      });
+
+      await tx.wait(1); // Wait for 1 confirmation
+
+      toast({
+        title: 'Transaction Confirmed',
+        description: options.successMessage || 'Transaction completed successfully',
+        status: 'success',
+      });
+
+      if (options.onSuccess) {
+        options.onSuccess();
+      }
+
+      return tx;
+    } catch (error: any) {
+      console.error('Transaction failed:', error);
+      toast({
+        title: 'Transaction Failed',
+        description: options.errorMessage || error.message,
+        status: 'error',
+      });
+      throw error;
+    }
+  }, [toast]);
+
+  const signal = useCallback(async (nodeId: string, signals: number[], onSuccess?: () => void) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract();
+        return contract.sendSignal(nodeId, signals, { gasLimit: 300000 });
+      },
+      {
+        successMessage: 'Signals submitted successfully',
+        errorMessage: 'Failed to submit signals',
+        onSuccess
+      }
+    );
+  }, [chainId, executeTransaction, getContract]);
+
+  return {
+    signal,
+    getContract,
+    executeTransaction
+  };
+}
+
+
+
 // File: ./hooks/useTransactionHandler.ts
 // File: ./hooks/useTransactionHandler.ts
 
@@ -13259,6 +14116,114 @@ export const useColorManagement = () => {
 };
 
 export default useColorManagement;
+
+
+
+// File: ./hooks/useNodeOperations.ts
+import { useCallback } from 'react';
+import { usePrivy } from "@privy-io/react-auth";
+import { useTransaction } from '../contexts/TransactionContext';
+import { ethers } from 'ethers';
+import { deployments, ABIs } from '../config/contracts';
+
+export function useNodeOperations(chainId: string) {
+  const { executeTransaction } = useTransaction();
+  const { getEthersProvider } = usePrivy();
+
+  // Helper function to get contract instance
+  const getContract = useCallback(async () => {
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const address = deployments.WillWe[cleanChainId];
+      
+      if (!address) {
+        throw new Error(`No contract deployment found for chain ${chainId}`);
+      }
+
+      return new ethers.Contract(address, ABIs.WillWe, signer);
+    } catch (error) {
+      console.error('Contract initialization error:', error);
+      throw error;
+    }
+  }, [chainId, getEthersProvider]);
+
+  const spawnNode = useCallback(async (nodeId: string) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract();
+        return contract.spawnBranch(nodeId, { gasLimit: 400000 });
+      },
+      {
+        successMessage: 'Node spawned successfully',
+      }
+    );
+  }, [chainId, getContract, executeTransaction]);
+
+  const mintMembership = useCallback(async (nodeId: string) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract();
+        return contract.mintMembership(nodeId, { gasLimit: 200000 });
+      },
+      {
+        successMessage: 'Membership minted successfully',
+      }
+    );
+  }, [chainId, getContract, executeTransaction]);
+
+  const redistribute = useCallback(async (nodeId: string) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract();
+        return contract.redistributePath(nodeId, { gasLimit: 500000 });
+      },
+      {
+        successMessage: 'Value redistributed successfully',
+      }
+    );
+  }, [chainId, getContract, executeTransaction]);
+
+  const signal = useCallback(async (nodeId: string, signals: number[]) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract();
+        return contract.sendSignal(nodeId, signals, { gasLimit: 300000 });
+      },
+      {
+        successMessage: 'Signal sent successfully',
+      }
+    );
+  }, [chainId, getContract, executeTransaction]);
+
+  const spawnBranchWithMembrane = useCallback(async (nodeId: string, membraneId: string) => {
+    return executeTransaction(
+      chainId,
+      async () => {
+        const contract = await getContract();
+        return contract.spawnBranchWithMembrane(nodeId, membraneId, { gasLimit: 600000 });
+      },
+      {
+        successMessage: 'Branch with membrane spawned successfully',
+      }
+    );
+  }, [chainId, getContract, executeTransaction]);
+
+  return {
+    spawnNode,
+    mintMembership,
+    redistribute,
+    signal,
+    spawnBranchWithMembrane
+  };
+}
+
+export default useNodeOperations;
 
 
 
@@ -13583,6 +14548,136 @@ export const useCovalentBalances = (address: string, chainId: string) => {
 
   return { balances, isLoading, error };
 };
+
+
+
+// File: ./hooks/useChildNodes.ts
+import { useState, useCallback, useEffect } from 'react';
+import { ethers } from 'ethers';
+import { NodeState } from '../types/chainData';
+import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+
+const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
+
+interface ChildNodeInfo {
+  id: string;
+  membraneTitle: string | null;
+}
+
+export function useChildNodes(node: NodeState, chainId: string) {
+  const [childNodesInfo, setChildNodesInfo] = useState<{[key: string]: ChildNodeInfo}>({});
+
+  useEffect(() => {
+    const fetchChildNodeMembranes = async () => {
+      if (!node?.childrenNodes?.length) return;
+
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+      const contract = new ethers.Contract(
+        deployments.WillWe[cleanChainId],
+        ABIs.WillWe,
+        provider
+      );
+      const membraneContract = new ethers.Contract(
+        deployments.Membrane[cleanChainId],
+        ABIs.Membrane,
+        provider
+      );
+
+      const childInfo: {[key: string]: ChildNodeInfo} = {};
+
+      await Promise.all(node.childrenNodes.map(async (childId) => {
+        try {
+          const nodeData = await contract.getNodeData(childId);
+          if (nodeData?.basicInfo?.[5]) {
+            const membrane = await membraneContract.getMembraneById(nodeData.basicInfo[5]);
+            if (membrane?.meta) {
+              try {
+                const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
+                const metadata = await response.json();
+                childInfo[childId] = {
+                  id: childId,
+                  membraneTitle: metadata.name || null
+                };
+              } catch (err) {
+                console.error('Failed to fetch membrane metadata:', err);
+                childInfo[childId] = { id: childId, membraneTitle: null };
+              }
+            }
+          } else {
+            childInfo[childId] = { id: childId, membraneTitle: null };
+          }
+        } catch (err) {
+          console.error('Failed to fetch node data:', err);
+          childInfo[childId] = { id: childId, membraneTitle: null };
+        }
+      }));
+
+      setChildNodesInfo(childInfo);
+    };
+
+    fetchChildNodeMembranes();
+  }, [node?.childrenNodes, chainId]);
+
+  return { childNodesInfo };
+}
+
+
+
+// File: ./hooks/useContract.ts
+import { useState, useEffect, useMemo } from 'react';
+import { ethers } from 'ethers';
+import { usePrivy } from '@privy-io/react-auth';
+import { deployments, ABIs } from '../config/contracts';
+
+export function useContract(
+  contractName: keyof typeof deployments,
+  chainId?: string
+) {
+  const [contract, setContract] = useState<ethers.Contract | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const { getEthersProvider } = usePrivy();
+
+  const cleanChainId = useMemo(() => {
+    if (!chainId) return null;
+    return chainId.replace('eip155:', '');
+  }, [chainId]);
+
+  useEffect(() => {
+    const initContract = async () => {
+      if (!cleanChainId) return;
+
+      try {
+        const provider = await getEthersProvider();
+        if (!provider) throw new Error('Provider not available');
+
+        const address = deployments[contractName][cleanChainId];
+        if (!address) throw new Error(`No contract found for chain ${chainId}`);
+
+        const signer = await provider.getSigner();
+        const contract = new ethers.Contract(
+          address,
+          ABIs[contractName],
+          signer
+        );
+
+        setContract(contract);
+        setError(null);
+
+      } catch (err) {
+        console.error('Failed to initialize contract:', err);
+        setError(err instanceof Error ? err : new Error('Failed to initialize contract'));
+        setContract(null);
+      }
+    };
+
+    initContract();
+  }, [contractName, cleanChainId, getEthersProvider]);
+
+  return { contract, error };
+}
+
+export default useContract;
 
 
 

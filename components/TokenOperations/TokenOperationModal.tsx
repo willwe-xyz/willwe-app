@@ -1,5 +1,3 @@
-// File: ./components/TokenOperations/TokenOperationModal.tsx
-
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Modal,
@@ -26,6 +24,11 @@ import {
   CardHeader,
   Divider,
   useToast,
+  TabList,
+  Tabs,
+  Tab,
+  TabPanels,
+  TabPanel,
 } from '@chakra-ui/react';
 import {
   Shield,
@@ -35,6 +38,7 @@ import {
   CheckCircle,
   ExternalLink,
   Link as LinkIcon,
+  Coins,
 } from 'lucide-react';
 import { ethers } from 'ethers';
 import { usePrivy } from "@privy-io/react-auth";
@@ -42,8 +46,6 @@ import { RequirementsTable } from './RequirementsTable';
 import { OperationConfirmation } from './OperationConfirmation';
 import { StatusIndicator } from './StatusIndicator';
 import { deployments, ABIs } from '../../config/contracts';
-import { NodeState, MembraneMetadata, MembraneRequirement } from '../../types/chainData';
-import { useTransaction } from '../../contexts/TransactionContext';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -55,13 +57,18 @@ interface TokenOperationModalProps {
   isLoading: boolean;
   nodeId: string;
   chainId: string;
-  node?: NodeState;
 }
 
 interface OperationParams {
   amount?: string;
   membraneId?: string;
   targetNodeId?: string;
+}
+
+interface ValueOperationForm {
+  amount: string;
+  targetNodeId?: string;
+  operation: 'mint' | 'burn' | 'mintPath' | 'burnPath';
 }
 
 export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
@@ -72,9 +79,8 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   isLoading,
   nodeId,
   chainId,
-  node,
 }) => {
-  // State
+  // State for membrane operations
   const [membraneId, setMembraneId] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
   const [isValidInput, setIsValidInput] = useState(false);
@@ -84,55 +90,56 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Hooks
+  // State for value operations
+  const [valueOperation, setValueOperation] = useState<ValueOperationForm>({
+    amount: '',
+    operation: 'mint'
+  });
+
   const { getEthersProvider } = usePrivy();
-  const { executeTransaction } = useTransaction();
   const toast = useToast();
 
-  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setMembraneId('');
-      setMembraneMetadata(null);
-      setRequirements([]);
-      setError(null);
-      setInputError(null);
-      setIsValidInput(false);
+      resetForm();
     }
   }, [isOpen]);
 
-  // Validate membrane ID format
+  const resetForm = () => {
+    setMembraneId('');
+    setMembraneMetadata(null);
+    setRequirements([]);
+    setError(null);
+    setInputError(null);
+    setIsValidInput(false);
+    setValueOperation({
+      amount: '',
+      operation: 'mint'
+    });
+  };
+
   const validateMembraneIdFormat = useCallback((value: string) => {
     setInputError(null);
     setIsValidInput(false);
-
     if (!value) {
       setInputError('Membrane ID is required');
       return false;
     }
-
     try {
       ethers.getBigInt(value);
       setIsValidInput(true);
       return true;
-    } catch (error) {
+    } catch {
       setInputError('Invalid numeric format');
       return false;
     }
   }, []);
 
-  // Fetch membrane metadata and requirements
   const fetchMembraneMetadata = useCallback(async (membraneId: string) => {
     try {
-      const cleanChainId = chainId.replace('eip155:', '');
       const provider = await getEthersProvider();
-      
-      if (!provider) {
-        throw new Error('Provider not available');
-      }
-
       const contract = new ethers.Contract(
-        deployments.Membrane[cleanChainId],
+        deployments.Membrane[chainId.replace('eip155:', '')],
         ABIs.Membrane,
         provider
       );
@@ -140,14 +147,12 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
       const membrane = await contract.getMembraneById(membraneId);
       if (!membrane) throw new Error('Membrane not found');
 
-      // Fetch metadata from IPFS
       const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
       if (!response.ok) throw new Error('Failed to fetch membrane metadata');
       
       const metadata = await response.json();
       setMembraneMetadata(metadata);
 
-      // Fetch token details
       setIsLoadingTokens(true);
       const requirements = await Promise.all(
         membrane.tokens.map(async (tokenAddress: string, index: number) => {
@@ -180,7 +185,6 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   }, [chainId, getEthersProvider]);
 
-  // Handle membrane ID input change
   const handleMembraneIdChange = useCallback((value: string) => {
     setMembraneId(value);
     if (validateMembraneIdFormat(value)) {
@@ -195,17 +199,23 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   }, [validateMembraneIdFormat, fetchMembraneMetadata]);
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!isValidInput || !membraneId) {
-      setError('Please enter a valid membrane ID');
-      return;
-    }
-
     try {
-      await onSubmit({ membraneId });
+      if (operation === 'spawnBranchWithMembrane') {
+        if (!isValidInput || !membraneId) {
+          setError('Please enter a valid membrane ID');
+          return;
+        }
+        await onSubmit({ membraneId });
+      } else {
+        const { amount, targetNodeId } = valueOperation;
+        if (!amount) {
+          setError('Please enter a valid amount');
+          return;
+        }
+        await onSubmit({ amount, targetNodeId });
+      }
       onClose();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -220,157 +230,142 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   };
 
+  const handleValueOperationChange = (field: keyof ValueOperationForm, value: string) => {
+    setValueOperation(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const renderValueOperationsForm = () => (
+    <VStack spacing={4} align="stretch">
+      <FormControl isRequired>
+        <FormLabel>Amount</FormLabel>
+        <InputGroup>
+          <Input
+            value={valueOperation.amount}
+            onChange={(e) => handleValueOperationChange('amount', e.target.value)}
+            placeholder="Enter amount"
+            type="number"
+            step="0.000000000000000001"
+          />
+          <InputRightElement>
+            <Coins size={16} />
+          </InputRightElement>
+        </InputGroup>
+      </FormControl>
+
+      {(operation === 'mintPath' || operation === 'burnPath') && (
+        <FormControl isRequired>
+          <FormLabel>Target Node</FormLabel>
+          <Input
+            value={valueOperation.targetNodeId || ''}
+            onChange={(e) => handleValueOperationChange('targetNodeId', e.target.value)}
+            placeholder="Enter target node ID"
+          />
+        </FormControl>
+      )}
+    </VStack>
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      size="xl"
+    >
       <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent>
         <Box maxH="85vh" overflowY="auto" p={6}>
           <VStack spacing={6} align="stretch" width="100%">
-            {/* Header Section */}
-            <Box borderBottomWidth="1px" pb={4}>
-              <Text fontSize="2xl" fontWeight="bold">Design Corner</Text>
-              <Text fontSize="sm" color="gray.600">Configure membrane requirements</Text>
-            </Box>
+            <Tabs isFitted colorScheme="purple">
+              <TabList mb={4}>
+                <Tab>Value Operations</Tab>
+                <Tab>Membrane Operations</Tab>
+              </TabList>
 
-            {/* Input Section */}
-            <FormControl isRequired isInvalid={!!inputError}>
-              <FormLabel>
-                <HStack>
-                  <Text>Membrane ID</Text>
-                  <Tooltip label="Enter a numeric membrane identifier">
-                    <span><Info size={14} /></span>
-                  </Tooltip>
-                </HStack>
-              </FormLabel>
-              
-              <InputGroup>
-                <Input
-                  value={membraneId}
-                  onChange={(e) => handleMembraneIdChange(e.target.value)}
-                  placeholder="Enter numeric membrane ID"
-                  isDisabled={isValidating || isLoading}
-                  pattern="\d*"
-                  inputMode="numeric"
-                />
-                <InputRightElement>
-                  {membraneId && (
-                    isValidInput ? (
-                      <CheckCircle size={18} color="green" />
-                    ) : (
-                      <XCircle size={18} color="red" />
-                    )
-                  )}
-                </InputRightElement>
-              </InputGroup>
+              <TabPanels>
+                <TabPanel>
+                  {renderValueOperationsForm()}
+                </TabPanel>
+                <TabPanel>
+                  <VStack spacing={4} align="stretch">
+                    <FormControl isRequired isInvalid={!!inputError}>
+                      <FormLabel>
+                        <HStack>
+                          <Text>Membrane ID</Text>
+                          <Tooltip label="Enter a numeric membrane identifier">
+                            <span><Info size={14} /></span>
+                          </Tooltip>
+                        </HStack>
+                      </FormLabel>
+                      
+                      <InputGroup>
+                        <Input
+                          value={membraneId}
+                          onChange={(e) => handleMembraneIdChange(e.target.value)}
+                          placeholder="Enter membrane ID"
+                          isDisabled={isValidating || isLoading}
+                        />
+                        <InputRightElement>
+                          {membraneId && (
+                            isValidInput ? (
+                              <CheckCircle size={18} color="green" />
+                            ) : (
+                              <XCircle size={18} color="red" />
+                            )
+                          )}
+                        </InputRightElement>
+                      </InputGroup>
 
-              {inputError && (
-                <Alert status="error" mt={2} size="sm">
-                  <AlertIcon as={AlertTriangle} size={14} />
-                  {inputError}
-                </Alert>
-              )}
-            </FormControl>
+                      {inputError && (
+                        <Alert status="error" mt={2}>
+                          <AlertIcon />
+                          {inputError}
+                        </Alert>
+                      )}
+                    </FormControl>
 
-            {/* Loading States */}
-            {(isValidating || isLoadingTokens) && (
-              <Box>
-                <Progress size="xs" isIndeterminate colorScheme="purple" />
-                <Text mt={2} textAlign="center" fontSize="sm" color="gray.600">
-                  {isValidating ? 'Validating membrane...' : 'Loading token details...'}
-                </Text>
-              </Box>
-            )}
+                    {membraneMetadata && !error && (
+                      <>
+                        <RequirementsTable
+                          requirements={requirements}
+                          membraneMetadata={membraneMetadata}
+                        />
+                        <OperationConfirmation
+                          membraneMetadata={membraneMetadata}
+                          membraneId={membraneId}
+                          requirementsCount={requirements.length}
+                        />
+                      </>
+                    )}
+                  </VStack>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
 
-            {/* Error Display */}
-            {error && (
-              <Alert status="error">
-                <AlertIcon />
-                {error}
-              </Alert>
-            )}
+            <StatusIndicator
+              isValidating={isValidating}
+              isLoadingTokens={isLoadingTokens}
+              error={error}
+            />
 
-            {/* Membrane Data Display */}
-            {membraneMetadata && !error && (
-              <VStack spacing={4} align="stretch">
-                {/* Membrane Info Card */}
-                <Card variant="outline" bg="purple.50" mb={4}>
-                  <CardHeader pb={2}>
-                    <HStack justify="space-between">
-                      <Text fontSize="lg" fontWeight="bold">{membraneMetadata.name}</Text>
-                      <Badge colorScheme="purple">ID: {membraneId}</Badge>
-                    </HStack>
-                  </CardHeader>
-                  <CardBody>
-                    <VStack align="stretch" spacing={3}>
-                      {membraneMetadata.characteristics?.map((char, idx) => (
-                        <Box
-                          key={idx}
-                          p={3}
-                          bg="white"
-                          borderRadius="md"
-                          border="1px solid"
-                          borderColor="purple.100"
-                        >
-                          <HStack justify="space-between">
-                            <Text>{char.title}</Text>
-                            {char.link && (
-                              <Link 
-                                href={char.link} 
-                                isExternal 
-                                color="purple.500"
-                                fontSize="sm"
-                              >
-                                <HStack spacing={1}>
-                                  <LinkIcon size={14} />
-                                  <ExternalLink size={14} />
-                                </HStack>
-                              </Link>
-                            )}
-                          </HStack>
-                        </Box>
-                      ))}
-                    </VStack>
-                  </CardBody>
-                </Card>
-
-                {/* Requirements Table */}
-                <RequirementsTable
-                  requirements={requirements}
-                  membraneMetadata={membraneMetadata}
-                  chainId={chainId}
-                />
-
-                {/* Operation Confirmation */}
-                <OperationConfirmation
-                  membraneMetadata={membraneMetadata}
-                  membraneId={membraneId}
-                  requirementsCount={requirements.length}
-                />
-              </VStack>
-            )}
-
-            {/* Action Buttons */}
             <Box 
               borderTopWidth="1px" 
-              pt={4} 
+              pt={4}
               mt={4}
-              background="white"
+              bg="white"
             >
-              <HStack justify="flex-end" spacing={3}>
-                <Button variant="ghost" onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button
-                  colorScheme="purple"
-                  onClick={handleSubmit}
-                  isLoading={isLoading || isValidating || isLoadingTokens}
-                  loadingText="Processing..."
-                  isDisabled={!!error || !membraneMetadata || !isValidInput}
-                  leftIcon={<Shield size={16} />}
-                >
-                  Apply Membrane
-                </Button>
-              </HStack>
+              <Button
+                colorScheme="purple"
+                onClick={handleSubmit}
+                isLoading={isLoading}
+                loadingText="Processing..."
+                width="100%"
+                size="lg"
+              >
+                Confirm Operation
+              </Button>
             </Box>
           </VStack>
         </Box>

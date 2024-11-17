@@ -22,19 +22,16 @@ error() {
 # Smart content appender that removes duplicate exports and combines similar declarations
 append_smart() {
     local file=$1
-    local section_name=$2
 
     # Skip if file doesn't exist
     [[ ! -f "$file" ]] && return
 
     echo "// File: $file" >> "$CONTEXT_FILE"
-    
+
     # Process file content to remove duplicates and combine similar declarations
     awk '
-    # Store lines and track exports
     {
         if ($0 ~ /^export/) {
-            # Extract export name
             match($0, /export[[:space:]]+(type|interface|const|function|class)[[:space:]]+([a-zA-Z0-9_]+)/)
             if (RSTART) {
                 name = substr($0, RSTART+length(RLENGTH), RLENGTH)
@@ -63,13 +60,13 @@ append_smart() {
 # Core configuration files
 log "Processing configuration files..."
 for config in package.json next.config.js tsconfig.json; do
-    [[ -f $config ]] && append_smart "$config" "Configuration"
+    [[ -f $config ]] && append_smart "$config"
 done
 
-# Process core directories with smart deduplication
-CORE_DIRS=("pages" "components" "config" "hooks" "contexts" "utils" "types" "const")
+# Process directories recursively, including all files in components/Node/
+DIRECTORIES=("pages" "components" "config" "hooks" "contexts" "utils" "types" "const")
 
-for dir in "${CORE_DIRS[@]}"; do
+for dir in "${DIRECTORIES[@]}"; do
     [[ ! -d "./$dir" ]] && continue
     
     log "Processing $dir directory..."
@@ -81,7 +78,7 @@ for dir in "${CORE_DIRS[@]}"; do
         ! -name "*.test.*" \
         ! -name "*.spec.*" | \
     while read -r file; do
-        append_smart "$file" "$dir"
+        append_smart "$file"
     done
 done
 
@@ -96,7 +93,6 @@ log "Extracting types and utilities..."
         \( -name '*.ts' -o -name '*.tsx' \) \
         ! -path '*/node_modules/*' | \
     while read -r file; do
-        # Extract types, interfaces, and functions without duplicates
         awk '
         BEGIN { in_block = 0 }
         /^export (type|interface|class|function|const)/ {
