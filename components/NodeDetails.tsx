@@ -31,6 +31,7 @@ import { NodeOperations } from './Node/NodeOperations';
 import  SignalForm  from './Node/SignalForm/index';
 import { formatBalance } from '../utils/formatters';
 import { useNodeTransactions } from '../hooks/useNodeTransactions';
+import {nodeIdToAddress} from '../utils/formatters';
 
 interface NodeDetailsProps {
   chainId: string;
@@ -154,13 +155,15 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             </Text>
           </VStack>
           
-          <NodeOperations
-            nodeId={nodeId}
-            node={nodeData}
-            chainId={cleanChainId}
-            selectedTokenColor={selectedTokenColor}
-            onSuccess={refetch}
-          />
+
+
+<NodeOperations
+  nodeId={nodeId}
+  chainId={chainId}
+  selectedTokenColor={selectedTokenColor}
+  onSuccess={refetch}
+  rootTokenAddress={nodeIdToAddress(nodeData.rootPath[0])}
+/>
 
         </HStack>
 

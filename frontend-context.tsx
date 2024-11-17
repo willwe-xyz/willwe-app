@@ -845,103 +845,160 @@ export default MyApp;
 
 // File: ./components/Node/NodeOperations.tsx
 import React, { useState, useCallback } from 'react';
+import { ethers } from 'ethers';
 import {
   ButtonGroup,
   Button,
-  useToast,
-  VStack,
-  Text,
-  Box,
   Menu,
   MenuButton,
   MenuList,
   MenuItem,
-  Divider,
-  Tooltip,
-  HStack,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalCloseButton,
+  FormControl,
+  FormLabel,
+  Input,
+  VStack,
   Progress,
-  useDisclosure,
+  useToast,
+  Text,
+  Alert,
+  AlertIcon,
+  Tooltip,
 } from '@chakra-ui/react';
 import {
-  Plus,
   GitBranch,
-  Signal,
-  ChevronDown,
+  Shield,
   UserPlus,
   RefreshCw,
-  Shield,
-  Coins,
-  ArrowUpRight,
-  ArrowDownRight,
-  Flame,
+  Plus,
+  Trash,
+  ChevronDown,
 } from 'lucide-react';
-import { usePrivy } from "@privy-io/react-auth";
-import { ethers } from 'ethers';
+import { usePrivy } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
-import { TokenOperationModal } from '../TokenOperations/TokenOperationModal';
+import { useNodeData } from '../../hooks/useNodeData';
 import { deployments, ABIs } from '../../config/contracts';
+import { nodeIdToAddress } from '../../utils/formatters';
 
-interface NodeOperationsProps {
+export type NodeOperationsProps = {
   nodeId: string;
   chainId: string;
-  selectedTokenColor: string;
-  node?: any;
+  selectedTokenColor?: string;
   onSuccess?: () => void;
-}
+};
 
-export const NodeOperations: React.FC<NodeOperationsProps> = ({
+export const NodeOperations = ({
   nodeId,
   chainId,
   selectedTokenColor,
-  node,
   onSuccess
-}) => {
+}: NodeOperationsProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentOperation, setCurrentOperation] = useState('');
-  const { isOpen: isModalOpen, onOpen, onClose } = useDisclosure();
+  const [activeModal, setActiveModal] = useState(null);
+  const [membraneId, setMembraneId] = useState('');
+  const [mintAmount, setMintAmount] = useState('');
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [allowance, setAllowance] = useState('0');
+  const [burnAmount, setBurnAmount] = useState('');
+  const [userBalance, setUserBalance] = useState('0');
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
+  
+  // Fetch node data to check membership
+  const { data: nodeData } = useNodeData(chainId, nodeId);
+  const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address);
 
-  const getContract = useCallback(async () => {
-    if (!user?.wallet?.address) {
-      throw new Error('Please connect your wallet first');
-    }
-
+  const checkAllowance = useCallback(async () => {
     try {
-      const provider = await getEthersProvider();
-      if (!provider) throw new Error('Provider not available');
+      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
+        console.warn('Token address or user address not available');
+        return;
+      }
 
-      const signer = await provider.getSigner();
+      const tokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
       const cleanChainId = chainId.replace('eip155:', '');
-      const address = deployments.WillWe[cleanChainId];
+      const willWeAddress = deployments.WillWe[cleanChainId];
 
-      if (!address) throw new Error(`No contract deployment found for chain ${chainId}`);
-      return new ethers.Contract(address, ABIs.WillWe, signer);
+      if (!willWeAddress) {
+        console.warn('WillWe contract address not available');
+        return;
+      }
+
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      
+      // Get ERC20 token contract
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ['function allowance(address,address) view returns (uint256)'],
+        signer
+      );
+
+      const currentAllowance = await tokenContract.allowance(
+        user.wallet.address,
+        willWeAddress
+      );
+      
+      setAllowance(currentAllowance.toString());
+      const allowanceBigInt = BigInt(currentAllowance);
+      const requiredAmount = ethers.parseUnits(mintAmount || '0', 18);
+      setNeedsApproval(allowanceBigInt < BigInt(requiredAmount));
     } catch (error) {
-      console.error('Contract initialization error:', error);
-      throw error;
+      console.error('Error checking allowance:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to check token allowance',
+        status: 'error',
+        duration: 5000
+      });
     }
-  }, [chainId, getEthersProvider, user?.wallet?.address]);
+  }, [chainId, nodeData?.rootPath, user?.wallet?.address, mintAmount, getEthersProvider, toast]);
 
-  // Node management operations
-  const handleSpawnNode = useCallback(async () => {
+  const handleApprove = useCallback(async () => {
+    if (!nodeData?.rootPath?.[0]) {
+      toast({
+        title: 'Error',
+        description: 'Token address not available',
+        status: 'error',
+        duration: 3000
+      });
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const contract = await getContract();
-          return contract.spawnBranch(nodeId, { gasLimit: 400000 });
-        },
-        {
-          successMessage: 'Node spawned successfully',
-          onSuccess
-        }
+      const tokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ['function approve(address,uint256)'],
+        signer
       );
-    } catch (error: any) {
+
+      const tx = await tokenContract.approve(
+        deployments.WillWe[chainId.replace('eip155:', '')],
+        ethers.MaxUint256
+      );
+      await tx.wait();
+      
+      await checkAllowance();
       toast({
-        title: 'Failed to spawn node',
+        title: 'Success',
+        description: 'Approval granted successfully',
+        status: 'success',
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('Approval error:', error);
+      toast({
+        title: 'Error',
         description: error.message,
         status: 'error',
         duration: 5000
@@ -949,197 +1006,532 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [chainId, nodeId, executeTransaction, getContract, toast, onSuccess]);
+  }, [chainId, nodeData?.rootPath, getEthersProvider, checkAllowance, toast]);
 
-  // Token operations
-  const handleOperation = useCallback((operation: string) => {
-    setCurrentOperation(operation);
-    onOpen();
-  }, [onOpen]);
-
-  const handleModalSubmit = useCallback(async (params: any) => {
+  const checkNodeBalance = useCallback(async () => {
     try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const contract = await getContract();
-          switch (currentOperation) {
-            case 'mint':
-              return contract.mint(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 300000 });
-            case 'mintPath':
-              return contract.mintPath(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 400000 });
-            case 'burn':
-              return contract.burn(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 300000 });
-            case 'burnPath':
-              return contract.burnPath(nodeId, ethers.parseUnits(params.amount, 18), { gasLimit: 400000 });
-            default:
-              throw new Error('Unknown operation');
-          }
-        },
-        {
-          successMessage: `${currentOperation} completed successfully`,
-          onSuccess: () => {
-            onClose();
-            if (onSuccess) onSuccess();
-          }
-        }
+      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
+        console.warn('Token address or user address not available');
+        return;
+      }
+
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      
+      // Use WillWe contract address instead of token address
+      const tokenContract = new ethers.Contract(
+        contractAddress,
+        [
+          'function balanceOf(address account, uint256 id) view returns (uint256)'
+        ],
+        signer
       );
-    } catch (error: any) {
+
+      console.log('Checking ERC1155 balance:', {
+        userAddress: user.wallet.address,
+        nodeId,
+        contractAddress
+      });
+
+      const balance = await tokenContract.balanceOf(
+        user.wallet.address,
+        BigInt(nodeId)
+      );
+      
+      console.log('Node token balance received:', balance.toString());
+      setUserBalance(balance.toString());
+    } catch (error) {
+      console.error('Error checking node balance:', error);
       toast({
-        title: 'Operation Failed',
-        description: error.message,
+        title: 'Error',
+        description: 'Failed to check node token balance',
         status: 'error',
         duration: 5000
       });
     }
-  }, [chainId, currentOperation, nodeId, executeTransaction, getContract, onClose, onSuccess, toast]);
+  }, [chainId, nodeData?.rootPath, user?.wallet?.address, nodeId, getEthersProvider, toast]);
+
+  // Operation handlers
+  const handleSpawnNode = useCallback(async () => {
+    setIsProcessing(true);
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer
+          );
+          return contract.spawnBranch(nodeId, { gasLimit: 400000 });
+        },
+        {
+          successMessage: 'Node spawned successfully',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to spawn node:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess]);
+
+  const handleSpawnWithMembrane = useCallback(async () => {
+    if (!membraneId) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a membrane ID',
+        status: 'error',
+        duration: 3000
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer
+          );
+          return contract.spawnBranchWithMembrane(nodeId, membraneId, { gasLimit: 600000 });
+        },
+        {
+          successMessage: 'Node spawned with membrane successfully',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to spawn node with membrane:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, membraneId, executeTransaction, getEthersProvider, toast, onSuccess]);
+
+  const handleMintMembership = useCallback(async () => {
+    setIsProcessing(true);
+    try {
+      await executeTransaction(
+        chainId,
+        async (contract) => contract.mintMembership(nodeId),
+        {
+          successMessage: 'Membership minted successfully',
+          onSuccess
+        }
+      );
+    } catch (error) {
+      console.error('Failed to mint membership:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, executeTransaction, toast, onSuccess]);
+
+  const handleRedistribute = useCallback(async () => {
+    setIsProcessing(true);
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer
+          );
+          return contract.redistributePath(nodeId, { gasLimit: 500000 });
+        },
+        {
+          successMessage: 'Value redistributed successfully',
+          onSuccess
+        }
+      );
+    } catch (error) {
+      console.error('Failed to redistribute:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess]);
+
+  const handleMintPath = useCallback(async () => {
+    if (!mintAmount) return;
+    
+    setIsProcessing(true);
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer
+          );
+          return contract.mintPath(nodeId, ethers.parseUnits(mintAmount, 18), { gasLimit: 500000 });
+        },
+        {
+          successMessage: 'Tokens minted successfully',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to mint tokens:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, toast, onSuccess]);
+
+  const handleBurnPath = useCallback(async () => {
+    if (!burnAmount) return;
+    
+    setIsProcessing(true);
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            [
+              'function burnPath(uint256 target_, uint256 amount) external'
+            ],
+            signer
+          );
+          
+          const nodeIdBigInt = BigInt(nodeId);
+          const amountToBurn = ethers.parseUnits(burnAmount || '0', 18);
+          return contract.burnPath(nodeIdBigInt, amountToBurn);
+        },
+        {
+          successMessage: 'Path burned successfully',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          },
+          gasLimit: 300000
+        }
+      );
+    } catch (error) {
+      console.error('Failed to burn path:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, toast, onSuccess]);
 
   return (
-    <VStack spacing={4} align="stretch" w="100%">
+    <>
       <ButtonGroup size="sm" spacing={2} flexWrap="wrap">
-        {/* Node Management Menu */}
         <Menu>
           <MenuButton
             as={Button}
             rightIcon={<ChevronDown size={16} />}
             colorScheme="purple"
             variant="outline"
-            isDisabled={isProcessing}
           >
-            Node
+            Actions
           </MenuButton>
           <MenuList>
-            <MenuItem
-              icon={<GitBranch size={16} />}
-              onClick={handleSpawnNode}
-            >
-              Spawn Sub-Node
+            <MenuItem icon={<GitBranch size={16} />} onClick={() => setActiveModal('spawn')}>
+              Spawn Node
             </MenuItem>
-            <MenuItem
-              icon={<Shield size={16} />}
-              onClick={() => handleOperation('spawnWithMembrane')}
-            >
+            <MenuItem icon={<Shield size={16} />} onClick={() => setActiveModal('membrane')}>
               Spawn with Membrane
             </MenuItem>
-          </MenuList>
-        </Menu>
-
-        {/* Token Operations Menu */}
-        <Menu>
-          <MenuButton
-            as={Button}
-            rightIcon={<ChevronDown size={16} />}
-            colorScheme="purple"
-            variant="outline"
-            isDisabled={isProcessing}
-          >
-            Token
-          </MenuButton>
-          <MenuList>
-            <MenuItem
-              icon={<ArrowUpRight size={16} />}
-              onClick={() => handleOperation('mint')}
+            <MenuItem 
+              icon={<UserPlus size={16} />} 
+              onClick={handleMintMembership}
+              isDisabled={isMember}
             >
-              Mint
+              Mint Membership
             </MenuItem>
-            <MenuItem
-              icon={<ArrowUpRight size={16} />}
-              onClick={() => handleOperation('mintPath')}
-            >
+            <MenuItem icon={<RefreshCw size={16} />} onClick={handleRedistribute}>
+              Redistribute
+            </MenuItem>
+            <MenuItem icon={<Plus size={16} />} onClick={() => setActiveModal('mint')}>
               Mint Path
             </MenuItem>
-            <Divider />
-            <MenuItem
-              icon={<ArrowDownRight size={16} />}
-              onClick={() => handleOperation('burn')}
-            >
-              Burn
-            </MenuItem>
-            <MenuItem
-              icon={<ArrowDownRight size={16} />}
-              onClick={() => handleOperation('burnPath')}
+            <MenuItem 
+              icon={<Trash size={16} />} 
+              onClick={() => {
+                setActiveModal('burn');
+                checkNodeBalance();
+              }}
             >
               Burn Path
             </MenuItem>
           </MenuList>
         </Menu>
-
-        {/* Quick Action Buttons */}
-        <Tooltip label="Mint membership">
-          <Button
-            leftIcon={<UserPlus size={16} />}
-            onClick={() => handleOperation('mintMembership')}
-            colorScheme="purple"
-            variant="outline"
-            isDisabled={isProcessing}
-          >
-            Membership
-          </Button>
-        </Tooltip>
-
-        <Tooltip label="Redistribute value">
-          <Button
-            leftIcon={<RefreshCw size={16} />}
-            onClick={() => handleOperation('redistribute')}
-            colorScheme="purple"
-            variant="outline"
-            isDisabled={isProcessing}
-          >
-            Redistribute
-          </Button>
-        </Tooltip>
-
-        <Tooltip label="Send signal">
-          <Button
-            leftIcon={<Signal size={16} />}
-            onClick={() => handleOperation('signal')}
-            colorScheme="purple"
-            variant="outline"
-            isDisabled={isProcessing}
-          >
-            Signal
-          </Button>
-        </Tooltip>
       </ButtonGroup>
 
-      {/* Processing Indicator */}
-      {isProcessing && (
-        <Box 
-          position="fixed" 
-          bottom={4} 
-          right={4} 
-          bg="white" 
-          p={4} 
-          borderRadius="md" 
-          boxShadow="lg"
-          zIndex={1000}
-        >
-          <HStack spacing={3}>
-            <Progress 
-              size="xs" 
-              isIndeterminate 
-              colorScheme="purple" 
-              width="100px"
-            />
-            <Text fontSize="sm" color="gray.600">
-              Processing transaction...
-            </Text>
-          </HStack>
-        </Box>
-      )}
+      {/* Spawn Node Modal */}
+      <Modal isOpen={activeModal === 'spawn'} onClose={() => setActiveModal(null)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Spawn New Node</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <Alert status="info">
+                <AlertIcon />
+                <Text>This will create a new sub-node under the current node.</Text>
+              </Alert>
+              
+              <Button
+                colorScheme="purple"
+                onClick={handleSpawnNode}
+                isLoading={isProcessing}
+                width="100%"
+              >
+                Spawn Node
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
-      {/* Operation Modal */}
-      <TokenOperationModal
-        isOpen={isModalOpen}
-        onClose={onClose}
-        operation={currentOperation}
-        onSubmit={handleModalSubmit}
-        nodeId={nodeId}
-        chainId={chainId}
-        isLoading={isProcessing}
-        node={node}
-      />
-    </VStack>
+      {/* Membrane Modal */}
+      <Modal isOpen={activeModal === 'membrane'} onClose={() => setActiveModal(null)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Spawn Node with Membrane</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Membrane ID</FormLabel>
+                <Input
+                  value={membraneId}
+                  onChange={(e) => setMembraneId(e.target.value)}
+                  placeholder="Enter membrane ID"
+                  type="number"
+                />
+              </FormControl>
+
+              {isProcessing && (
+                <Progress size="xs" isIndeterminate colorScheme="purple" />
+              )}
+
+              <Button
+                colorScheme="purple"
+                onClick={handleSpawnWithMembrane}
+                isLoading={isProcessing}
+                width="100%"
+                isDisabled={!membraneId}
+              >
+                Create Node with Membrane
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Mint Path Modal */}
+      <Modal isOpen={activeModal === 'mint'} onClose={() => setActiveModal(null)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Mint Tokens</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Amount</FormLabel>
+                <Input
+                  value={mintAmount}
+                  onChange={(e) => {
+                    setMintAmount(e.target.value);
+                    checkAllowance();
+                  }}
+                  placeholder="Enter amount to mint"
+                  type="number"
+                />
+              </FormControl>
+
+              {mintAmount && (
+                <Alert status={needsApproval ? "warning" : "success"}>
+                  <AlertIcon />
+                  <Text>
+                    {needsApproval 
+                      ? "Approval required before minting" 
+                      : "Ready to mint"}
+                  </Text>
+                </Alert>
+              )}
+
+              {needsApproval ? (
+                <Button
+                  colorScheme="blue"
+                  onClick={handleApprove}
+                  isLoading={isProcessing}
+                  width="100%"
+                >
+                  Approve Tokens
+                </Button>
+              ) : (
+                <Button
+                  colorScheme="purple"
+                  onClick={handleMintPath}
+                  isLoading={isProcessing}
+                  width="100%"
+                  isDisabled={!mintAmount}
+                >
+                  Mint Tokens
+                </Button>
+              )}
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Burn Path Modal */}
+      <Modal isOpen={activeModal === 'burn'} onClose={() => setActiveModal(null)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Burn Tokens</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Amount</FormLabel>
+                <Input
+                  value={burnAmount}
+                  onChange={(e) => {
+                    setBurnAmount(e.target.value);
+                    checkNodeBalance();
+                  }}
+                  placeholder="Enter amount to burn"
+                  type="number"
+                />
+              </FormControl>
+
+              {burnAmount && (
+                <Alert 
+                  status={
+                    BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
+                      ? "success" 
+                      : "error"
+                  }
+                >
+                  <AlertIcon />
+                  <Text>
+                    {BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
+                      ? "Ready to burn"
+                      : "Insufficient balance"
+                    }
+                  </Text>
+                </Alert>
+              )}
+
+              <Button
+                colorScheme="purple"
+                onClick={handleBurnPath}
+                isLoading={isProcessing}
+                width="100%"
+                isDisabled={!burnAmount}
+              >
+                Burn Tokens
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+    </>
   );
 };
 
@@ -3517,6 +3909,8 @@ export default RequirementsTable;
 
 
 // File: ./components/TokenOperations/TokenOperationModal.tsx
+// File: ./components/TokenOperations/TokenOperationModal.tsx
+
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Modal,
@@ -3543,11 +3937,6 @@ import {
   CardHeader,
   Divider,
   useToast,
-  TabList,
-  Tabs,
-  Tab,
-  TabPanels,
-  TabPanel,
 } from '@chakra-ui/react';
 import {
   Shield,
@@ -3557,7 +3946,6 @@ import {
   CheckCircle,
   ExternalLink,
   Link as LinkIcon,
-  Coins,
 } from 'lucide-react';
 import { ethers } from 'ethers';
 import { usePrivy } from "@privy-io/react-auth";
@@ -3565,6 +3953,8 @@ import { RequirementsTable } from './RequirementsTable';
 import { OperationConfirmation } from './OperationConfirmation';
 import { StatusIndicator } from './StatusIndicator';
 import { deployments, ABIs } from '../../config/contracts';
+import { NodeState, MembraneMetadata, MembraneRequirement } from '../../types/chainData';
+import { useTransaction } from '../../contexts/TransactionContext';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -3576,18 +3966,13 @@ interface TokenOperationModalProps {
   isLoading: boolean;
   nodeId: string;
   chainId: string;
+  node?: NodeState;
 }
 
 interface OperationParams {
   amount?: string;
   membraneId?: string;
   targetNodeId?: string;
-}
-
-interface ValueOperationForm {
-  amount: string;
-  targetNodeId?: string;
-  operation: 'mint' | 'burn' | 'mintPath' | 'burnPath';
 }
 
 export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
@@ -3598,8 +3983,9 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   isLoading,
   nodeId,
   chainId,
+  node,
 }) => {
-  // State for membrane operations
+  // State
   const [membraneId, setMembraneId] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
   const [isValidInput, setIsValidInput] = useState(false);
@@ -3609,56 +3995,55 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // State for value operations
-  const [valueOperation, setValueOperation] = useState<ValueOperationForm>({
-    amount: '',
-    operation: 'mint'
-  });
-
+  // Hooks
   const { getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
   const toast = useToast();
 
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      resetForm();
+      setMembraneId('');
+      setMembraneMetadata(null);
+      setRequirements([]);
+      setError(null);
+      setInputError(null);
+      setIsValidInput(false);
     }
   }, [isOpen]);
 
-  const resetForm = () => {
-    setMembraneId('');
-    setMembraneMetadata(null);
-    setRequirements([]);
-    setError(null);
-    setInputError(null);
-    setIsValidInput(false);
-    setValueOperation({
-      amount: '',
-      operation: 'mint'
-    });
-  };
-
+  // Validate membrane ID format
   const validateMembraneIdFormat = useCallback((value: string) => {
     setInputError(null);
     setIsValidInput(false);
+
     if (!value) {
       setInputError('Membrane ID is required');
       return false;
     }
+
     try {
       ethers.getBigInt(value);
       setIsValidInput(true);
       return true;
-    } catch {
+    } catch (error) {
       setInputError('Invalid numeric format');
       return false;
     }
   }, []);
 
+  // Fetch membrane metadata and requirements
   const fetchMembraneMetadata = useCallback(async (membraneId: string) => {
     try {
+      const cleanChainId = chainId.replace('eip155:', '');
       const provider = await getEthersProvider();
+      
+      if (!provider) {
+        throw new Error('Provider not available');
+      }
+
       const contract = new ethers.Contract(
-        deployments.Membrane[chainId.replace('eip155:', '')],
+        deployments.Membrane[cleanChainId],
         ABIs.Membrane,
         provider
       );
@@ -3666,12 +4051,14 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
       const membrane = await contract.getMembraneById(membraneId);
       if (!membrane) throw new Error('Membrane not found');
 
+      // Fetch metadata from IPFS
       const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
       if (!response.ok) throw new Error('Failed to fetch membrane metadata');
       
       const metadata = await response.json();
       setMembraneMetadata(metadata);
 
+      // Fetch token details
       setIsLoadingTokens(true);
       const requirements = await Promise.all(
         membrane.tokens.map(async (tokenAddress: string, index: number) => {
@@ -3704,6 +4091,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   }, [chainId, getEthersProvider]);
 
+  // Handle membrane ID input change
   const handleMembraneIdChange = useCallback((value: string) => {
     setMembraneId(value);
     if (validateMembraneIdFormat(value)) {
@@ -3718,23 +4106,17 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   }, [validateMembraneIdFormat, fetchMembraneMetadata]);
 
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!isValidInput || !membraneId) {
+      setError('Please enter a valid membrane ID');
+      return;
+    }
+
     try {
-      if (operation === 'spawnBranchWithMembrane') {
-        if (!isValidInput || !membraneId) {
-          setError('Please enter a valid membrane ID');
-          return;
-        }
-        await onSubmit({ membraneId });
-      } else {
-        const { amount, targetNodeId } = valueOperation;
-        if (!amount) {
-          setError('Please enter a valid amount');
-          return;
-        }
-        await onSubmit({ amount, targetNodeId });
-      }
+      await onSubmit({ membraneId });
       onClose();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
@@ -3749,142 +4131,157 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
   };
 
-  const handleValueOperationChange = (field: keyof ValueOperationForm, value: string) => {
-    setValueOperation(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const renderValueOperationsForm = () => (
-    <VStack spacing={4} align="stretch">
-      <FormControl isRequired>
-        <FormLabel>Amount</FormLabel>
-        <InputGroup>
-          <Input
-            value={valueOperation.amount}
-            onChange={(e) => handleValueOperationChange('amount', e.target.value)}
-            placeholder="Enter amount"
-            type="number"
-            step="0.000000000000000001"
-          />
-          <InputRightElement>
-            <Coins size={16} />
-          </InputRightElement>
-        </InputGroup>
-      </FormControl>
-
-      {(operation === 'mintPath' || operation === 'burnPath') && (
-        <FormControl isRequired>
-          <FormLabel>Target Node</FormLabel>
-          <Input
-            value={valueOperation.targetNodeId || ''}
-            onChange={(e) => handleValueOperationChange('targetNodeId', e.target.value)}
-            placeholder="Enter target node ID"
-          />
-        </FormControl>
-      )}
-    </VStack>
-  );
-
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      size="xl"
-    >
+    <Modal isOpen={isOpen} onClose={onClose} size="xl">
       <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent>
         <Box maxH="85vh" overflowY="auto" p={6}>
           <VStack spacing={6} align="stretch" width="100%">
-            <Tabs isFitted colorScheme="purple">
-              <TabList mb={4}>
-                <Tab>Value Operations</Tab>
-                <Tab>Membrane Operations</Tab>
-              </TabList>
+            {/* Header Section */}
+            <Box borderBottomWidth="1px" pb={4}>
+              <Text fontSize="2xl" fontWeight="bold">New Node with Membrane</Text>
+              <Text fontSize="sm" color="gray.600">Spawn a child node in the current context with provided membrane conditions</Text>
+            </Box>
 
-              <TabPanels>
-                <TabPanel>
-                  {renderValueOperationsForm()}
-                </TabPanel>
-                <TabPanel>
-                  <VStack spacing={4} align="stretch">
-                    <FormControl isRequired isInvalid={!!inputError}>
-                      <FormLabel>
-                        <HStack>
-                          <Text>Membrane ID</Text>
-                          <Tooltip label="Enter a numeric membrane identifier">
-                            <span><Info size={14} /></span>
-                          </Tooltip>
-                        </HStack>
-                      </FormLabel>
-                      
-                      <InputGroup>
-                        <Input
-                          value={membraneId}
-                          onChange={(e) => handleMembraneIdChange(e.target.value)}
-                          placeholder="Enter membrane ID"
-                          isDisabled={isValidating || isLoading}
-                        />
-                        <InputRightElement>
-                          {membraneId && (
-                            isValidInput ? (
-                              <CheckCircle size={18} color="green" />
-                            ) : (
-                              <XCircle size={18} color="red" />
-                            )
-                          )}
-                        </InputRightElement>
-                      </InputGroup>
+            {/* Input Section */}
+            <FormControl isRequired isInvalid={!!inputError}>
+              <FormLabel>
+                <HStack>
+                  <Text>Membrane ID</Text>
+                  <Tooltip label="Enter a numeric membrane identifier">
+                    <span><Info size={14} /></span>
+                  </Tooltip>
+                </HStack>
+              </FormLabel>
+              
+              <InputGroup>
+                <Input
+                  value={membraneId}
+                  onChange={(e) => handleMembraneIdChange(e.target.value)}
+                  placeholder="Enter numeric membrane ID"
+                  isDisabled={isValidating || isLoading}
+                  pattern="\d*"
+                  inputMode="numeric"
+                />
+                <InputRightElement>
+                  {membraneId && (
+                    isValidInput ? (
+                      <CheckCircle size={18} color="green" />
+                    ) : (
+                      <XCircle size={18} color="red" />
+                    )
+                  )}
+                </InputRightElement>
+              </InputGroup>
 
-                      {inputError && (
-                        <Alert status="error" mt={2}>
-                          <AlertIcon />
-                          {inputError}
-                        </Alert>
-                      )}
-                    </FormControl>
+              {inputError && (
+                <Alert status="error" mt={2} size="sm">
+                  <AlertIcon as={AlertTriangle} size={14} />
+                  {inputError}
+                </Alert>
+              )}
+            </FormControl>
 
-                    {membraneMetadata && !error && (
-                      <>
-                        <RequirementsTable
-                          requirements={requirements}
-                          membraneMetadata={membraneMetadata}
-                        />
-                        <OperationConfirmation
-                          membraneMetadata={membraneMetadata}
-                          membraneId={membraneId}
-                          requirementsCount={requirements.length}
-                        />
-                      </>
-                    )}
-                  </VStack>
-                </TabPanel>
-              </TabPanels>
-            </Tabs>
+            {/* Loading States */}
+            {(isValidating || isLoadingTokens) && (
+              <Box>
+                <Progress size="xs" isIndeterminate colorScheme="purple" />
+                <Text mt={2} textAlign="center" fontSize="sm" color="gray.600">
+                  {isValidating ? 'Validating membrane...' : 'Loading token details...'}
+                </Text>
+              </Box>
+            )}
 
-            <StatusIndicator
-              isValidating={isValidating}
-              isLoadingTokens={isLoadingTokens}
-              error={error}
-            />
+            {/* Error Display */}
+            {error && (
+              <Alert status="error">
+                <AlertIcon />
+                {error}
+              </Alert>
+            )}
 
+            {/* Membrane Data Display */}
+            {membraneMetadata && !error && (
+              <VStack spacing={4} align="stretch">
+                {/* Membrane Info Card */}
+                <Card variant="outline" bg="purple.50" mb={4}>
+                  <CardHeader pb={2}>
+                    <HStack justify="space-between">
+                      <Text fontSize="lg" fontWeight="bold">{membraneMetadata.name}</Text>
+                      <Badge colorScheme="purple">ID: {membraneId}</Badge>
+                    </HStack>
+                  </CardHeader>
+                  <CardBody>
+                    <VStack align="stretch" spacing={3}>
+                      {membraneMetadata.characteristics?.map((char, idx) => (
+                        <Box
+                          key={idx}
+                          p={3}
+                          bg="white"
+                          borderRadius="md"
+                          border="1px solid"
+                          borderColor="purple.100"
+                        >
+                          <HStack justify="space-between">
+                            <Text>{char.title}</Text>
+                            {char.link && (
+                              <Link 
+                                href={char.link} 
+                                isExternal 
+                                color="purple.500"
+                                fontSize="sm"
+                              >
+                                <HStack spacing={1}>
+                                  <LinkIcon size={14} />
+                                  <ExternalLink size={14} />
+                                </HStack>
+                              </Link>
+                            )}
+                          </HStack>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </CardBody>
+                </Card>
+
+                {/* Requirements Table */}
+                <RequirementsTable
+                  requirements={requirements}
+                  membraneMetadata={membraneMetadata}
+                  chainId={chainId}
+                />
+
+                {/* Operation Confirmation */}
+                <OperationConfirmation
+                  membraneMetadata={membraneMetadata}
+                  membraneId={membraneId}
+                  requirementsCount={requirements.length}
+                />
+              </VStack>
+            )}
+
+            {/* Action Buttons */}
             <Box 
               borderTopWidth="1px" 
-              pt={4}
+              pt={4} 
               mt={4}
-              bg="white"
+              background="white"
             >
-              <Button
-                colorScheme="purple"
-                onClick={handleSubmit}
-                isLoading={isLoading}
-                loadingText="Processing..."
-                width="100%"
-                size="lg"
-              >
-                Confirm Operation
-              </Button>
+              <HStack justify="flex-end" spacing={3}>
+                <Button variant="ghost" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  colorScheme="purple"
+                  onClick={handleSubmit}
+                  isLoading={isLoading || isValidating || isLoadingTokens}
+                  loadingText="Processing..."
+                  isDisabled={!!error || !membraneMetadata || !isValidInput}
+                  leftIcon={<Shield size={16} />}
+                >
+                  Apply Membrane
+                </Button>
+              </HStack>
             </Box>
           </VStack>
         </Box>
@@ -7274,6 +7671,7 @@ import { NodeOperations } from './Node/NodeOperations';
 import  SignalForm  from './Node/SignalForm/index';
 import { formatBalance } from '../utils/formatters';
 import { useNodeTransactions } from '../hooks/useNodeTransactions';
+import {nodeIdToAddress} from '../utils/formatters';
 
 interface NodeDetailsProps {
   chainId: string;
@@ -7397,13 +7795,15 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             </Text>
           </VStack>
           
-          <NodeOperations
-            nodeId={nodeId}
-            node={nodeData}
-            chainId={cleanChainId}
-            selectedTokenColor={selectedTokenColor}
-            onSuccess={refetch}
-          />
+
+
+<NodeOperations
+  nodeId={nodeId}
+  chainId={chainId}
+  selectedTokenColor={selectedTokenColor}
+  onSuccess={refetch}
+  rootTokenAddress={nodeIdToAddress(nodeData.rootPath[0])}
+/>
 
         </HStack>
 
