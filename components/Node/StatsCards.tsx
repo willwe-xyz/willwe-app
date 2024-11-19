@@ -1,102 +1,59 @@
 import React from 'react';
-import { Grid, Box, HStack, Text, useColorModeValue } from '@chakra-ui/react';
-import { Activity, Users, GitBranch, Signal } from 'lucide-react';
+import {
+  Box,
+  HStack,
+  Text,
+  Tooltip,
+} from '@chakra-ui/react';
+import { LucideIcon } from 'lucide-react';
 
-interface StatsCardsProps {
-  stats: {
-    totalValue: bigint;
-    totalMembers: number;
-    totalSignals: number;
-    avgValue: string;
-  };
+interface StatsCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ReactElement<LucideIcon>;
   color: string;
+  tooltip: string;
+  size?: 'sm' | 'md' | 'lg';
 }
 
-export const StatsCards: React.FC<StatsCardsProps> = ({ stats, color }) => {
-  // Theme colors
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue(`${color}20`, `${color}40`);
-  
-  const cards = [
-    {
-      label: 'Total Value',
-      value: stats.totalValue.toString(),
-      icon: Activity,
-      subtitle: `Average: ${stats.avgValue}`
-    },
-    {
-      label: 'Total Members',
-      value: stats.totalMembers.toString(),
-      icon: Users,
-      subtitle: 'Active participants'
-    },
-    {
-      label: 'Active Signals',
-      value: stats.totalSignals.toString(),
-      icon: Signal,
-      subtitle: 'Pending distributions'
-    },
-    {
-      label: 'Token Flow',
-      value: `${(Number(stats.avgValue) / Number(stats.totalValue) * 100).toFixed(2)}%`,
-      icon: GitBranch,
-      subtitle: 'Distribution rate'
-    }
-  ];
+export const StatsCard: React.FC<StatsCardProps> = ({
+  title,
+  value,
+  icon,
+  color,
+  tooltip,
+  size = 'sm'
+}) => {
+  const padding = size === 'sm' ? 3 : size === 'md' ? 4 : 5;
+  const titleSize = size === 'sm' ? 'xs' : size === 'md' ? 'sm' : 'md';
+  const valueSize = size === 'sm' ? 'lg' : size === 'md' ? 'xl' : '2xl';
 
   return (
-    <Grid 
-      templateColumns={{ 
-        base: "1fr", 
-        md: "repeat(2, 1fr)", 
-        lg: "repeat(4, 1fr)" 
-      }}
-      gap={4}
-      mb={8}
-    >
-      {cards.map((card, index) => {
-        const Icon = card.icon;
-        return (
-          <Box
-            key={index}
-            bg={bgColor}
-            p={6}
-            borderRadius="lg"
-            border="1px solid"
-            borderColor={borderColor}
-            transition="all 0.2s"
-            _hover={{
-              transform: 'translateY(-2px)',
-              shadow: 'md',
-              borderColor: color
-            }}
-          >
-            <HStack color={color} mb={2} spacing={3}>
-              <Icon size={20} />
-              <Text fontSize="sm" fontWeight="medium">
-                {card.label}
-              </Text>
-            </HStack>
-
-            <Text 
-              fontSize="2xl" 
-              fontWeight="bold"
-              mb={1}
-            >
-              {card.value}
-            </Text>
-
-            <Text 
-              fontSize="xs" 
-              color="gray.500"
-            >
-              {card.subtitle}
-            </Text>
-          </Box>
-        );
-      })}
-    </Grid>
+    <Tooltip label={tooltip}>
+      <Box
+        p={padding}
+        bg={`${color}.50`}
+        rounded="lg"
+        border="1px solid"
+        borderColor={`${color}.100`}
+        transition="all 0.2s"
+        _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
+        minW="150px"
+      >
+        <HStack color={`${color}.600`} mb={1} spacing={2}>
+          {React.cloneElement(icon, { size: size === 'sm' ? 14 : 16 })}
+          <Text fontSize={titleSize} fontWeight="medium">
+            {title}
+          </Text>
+        </HStack>
+        <Text 
+          fontSize={valueSize} 
+          fontWeight="bold"
+          color={`${color}.900`}
+        >
+          {typeof value === 'number' ? value.toLocaleString() : value}
+        </Text>
+      </Box>
+    </Tooltip>
   );
 };
-
-export default StatsCards;

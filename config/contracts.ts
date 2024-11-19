@@ -39,7 +39,7 @@ export const getExplorerLink = (
 ): string => {
   try {
     // Ensure we're using the chainId, not an address
-    if (!chainId || chainId.length > 10) {
+    if (!chainId ) {
       throw new Error('Invalid chain ID format');
     }
     

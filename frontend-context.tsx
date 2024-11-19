@@ -869,6 +869,19 @@ import {
   Alert,
   AlertIcon,
   Tooltip,
+  Table,
+  Tbody,
+  Tr,
+  Td,
+  Box,
+  Card,
+  CardHeader,
+  CardBody,
+  Badge,
+  HStack,
+  Link,
+  LinkIcon,
+  ExternalLink,
 } from '@chakra-ui/react';
 import {
   GitBranch,
@@ -884,6 +897,12 @@ import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
 import { deployments, ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
+import { RequirementsTable } from '../TokenOperations/RequirementsTable';
+import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
+import { Link as ChakraLink } from '@chakra-ui/react';
+import { ExternalLinkIcon } from '@chakra-ui/icons';
+
+const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
 export type NodeOperationsProps = {
   nodeId: string;
@@ -891,6 +910,13 @@ export type NodeOperationsProps = {
   selectedTokenColor?: string;
   onSuccess?: () => void;
 };
+
+interface MembraneCharacteristic {
+  title: string;
+  description?: string;
+  link?: string;
+}
+
 
 export const NodeOperations = ({
   nodeId,
@@ -1101,6 +1127,75 @@ export const NodeOperations = ({
       setIsProcessing(false);
     }
   }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess]);
+
+  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
+  const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [isValidatingMembrane, setIsValidatingMembrane] = useState(false);
+  const [membraneError, setMembraneError] = useState<string | null>(null);
+
+  const validateMembrane = useCallback(async (membraneId: string) => {
+    setIsValidatingMembrane(true);
+    setMembraneError(null);
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = await getEthersProvider();
+      
+      if (!provider) {
+        throw new Error('Provider not available');
+      }
+
+      const contract = new ethers.Contract(
+        deployments.Membrane[cleanChainId],
+        ABIs.Membrane,
+        provider
+      );
+
+      const membrane = await contract.getMembraneById(membraneId);
+      if (!membrane) throw new Error('Membrane not found');
+
+      // Use the IPFS_GATEWAY constant
+      const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
+      if (!response.ok) throw new Error('Failed to fetch membrane metadata');
+      
+      const metadata = await response.json();
+      setMembraneMetadata(metadata);
+
+      // Fetch token details
+      setIsLoadingTokens(true);
+      const requirements = await Promise.all(
+        membrane.tokens.map(async (tokenAddress: string, index: number) => {
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+            provider
+          );
+
+          const [symbol, decimals] = await Promise.all([
+            tokenContract.symbol(),
+            tokenContract.decimals()
+          ]);
+
+          return {
+            tokenAddress,
+            symbol,
+            requiredBalance: membrane.balances[index].toString(),
+            formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
+          };
+        })
+      );
+
+      setRequirements(requirements);
+    } catch (error) {
+      console.error('Error validating membrane:', error);
+      setMembraneError('Invalid membrane ID');
+      setMembraneMetadata(null);
+      setRequirements([]);
+    } finally {
+      setIsValidatingMembrane(false);
+      setIsLoadingTokens(false);
+    }
+  }, [chainId, getEthersProvider]);
 
   const handleSpawnWithMembrane = useCallback(async () => {
     if (!membraneId) {
@@ -1387,25 +1482,111 @@ export const NodeOperations = ({
       </Modal>
 
       {/* Membrane Modal */}
-      <Modal isOpen={activeModal === 'membrane'} onClose={() => setActiveModal(null)}>
+      <Modal 
+        isOpen={activeModal === 'membrane'} 
+        onClose={() => setActiveModal(null)}
+        size="lg"
+      >
         <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Spawn Node with Membrane</ModalHeader>
-          <ModalCloseButton />
+        <ModalContent maxW="600px">
+          <ModalHeader>
+            <Text>Spawn Node with Membrane</Text>
+            <ModalCloseButton />
+          </ModalHeader>
+          
           <ModalBody pb={6}>
-            <VStack spacing={4}>
+            <VStack spacing={4} align="stretch">
               <FormControl isRequired>
                 <FormLabel>Membrane ID</FormLabel>
                 <Input
                   value={membraneId}
-                  onChange={(e) => setMembraneId(e.target.value)}
+                  onChange={(e) => {
+                    setMembraneId(e.target.value);
+                    if (e.target.value) {
+                      validateMembrane(e.target.value);
+                    } else {
+                      setMembraneMetadata(null);
+                      setRequirements([]);
+                      setMembraneError(null);
+                    }
+                  }}
                   placeholder="Enter membrane ID"
-                  type="number"
+                  size="sm"
+                  fontFamily="mono"
+                  fontSize="sm"
                 />
               </FormControl>
 
-              {isProcessing && (
-                <Progress size="xs" isIndeterminate colorScheme="purple" />
+              {(isValidatingMembrane || isLoadingTokens) && (
+                <Box py={2}>
+                  <Progress size="xs" isIndeterminate colorScheme="purple" />
+                  <Text mt={2} fontSize="sm" color="gray.600" textAlign="center">
+                    {isValidatingMembrane ? 'Validating membrane...' : 'Loading token details...'}
+                  </Text>
+                </Box>
+              )}
+
+              {membraneError && (
+                <Alert status="error" size="sm">
+                  <AlertIcon />
+                  <Text fontSize="sm">{membraneError}</Text>
+                </Alert>
+              )}
+
+              {membraneMetadata && !membraneError && (
+                <Box>
+                  <Card variant="outline" bg="purple.50">
+                    <CardBody p={4}>
+                      <VStack align="stretch" spacing={3}>
+                        <HStack justify="space-between">
+                          <Text fontSize="md" fontWeight="bold">{membraneMetadata.name}</Text>
+                          <Badge colorScheme="purple" fontSize="xs">ID: {membraneId.slice(0, 8)}...</Badge>
+                        </HStack>
+                        
+                        {membraneMetadata.characteristics?.map((char, idx) => (
+                          <Box
+                            key={idx}
+                            p={2}
+                            bg="white"
+                            borderRadius="md"
+                            borderWidth="1px"
+                            borderColor="purple.100"
+                          >
+                            <HStack justify="space-between">
+                              <Text fontSize="sm">{char.title}</Text>
+                              {char.link && (
+                                <ChakraLink 
+                                  href={char.link} 
+                                  isExternal 
+                                  color="purple.500"
+                                  fontSize="xs"
+                                >
+                                  <HStack spacing={1}>
+                                    <Text>Open</Text>
+                                    <ExternalLinkIcon size={12} />
+                                  </HStack>
+                                </ChakraLink>
+                              )}
+                            </HStack>
+                            {char.description && (
+                              <Text fontSize="xs" color="gray.600" mt={1}>
+                                {char.description}
+                              </Text>
+                            )}
+                          </Box>
+                        ))}
+                      </VStack>
+                    </CardBody>
+                  </Card>
+
+                  <Box mt={4}>
+                    <Text fontSize="sm" fontWeight="medium" mb={2}>Token Requirements:</Text>
+                    <RequirementsTable
+                      requirements={requirements}
+                      chainId={chainId}
+                    />
+                  </Box>
+                </Box>
               )}
 
               <Button
@@ -1413,9 +1594,10 @@ export const NodeOperations = ({
                 onClick={handleSpawnWithMembrane}
                 isLoading={isProcessing}
                 width="100%"
-                isDisabled={!membraneId}
+                mt={4}
+                isDisabled={!membraneId || !!membraneError || isValidatingMembrane || isLoadingTokens}
               >
-                Create Node with Membrane
+                Spawn Node with Membrane
               </Button>
             </VStack>
           </ModalBody>
@@ -3741,165 +3923,56 @@ export default NodeViewContainer;
 import React from 'react';
 import {
   Table,
-  Thead,
   Tbody,
   Tr,
-  Th,
   Td,
-  Button,
+  Link,
   HStack,
   Text,
-  Link,
   Box,
-  useToast,
-  VStack,
-  Badge,
 } from '@chakra-ui/react';
-import { Copy, ExternalLink, Info } from 'lucide-react';
-import { MembraneRequirement, MembraneMetadata } from '../../types/chainData';
-import { getExplorerLink } from '../../config/contracts';
+import { ExternalLink } from 'lucide-react';
+import { getChainById } from '../../config/deployments';
 
 interface RequirementsTableProps {
-  requirements: MembraneRequirement[];
-  membraneMetadata: MembraneMetadata | null;
-  chainId: string; // Add chainId prop
+  requirements: Array<{
+    tokenAddress: string;
+    symbol: string;
+    formattedBalance: string;
+  }>;
+  chainId: string;
 }
 
 export const RequirementsTable: React.FC<RequirementsTableProps> = ({
   requirements,
-  membraneMetadata,
-  chainId
+  chainId,
 }) => {
-  const toast = useToast();
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({
-        title: "Copied to clipboard",
-        status: "success",
-        duration: 2000,
-        isClosable: true,
-      });
-    } catch (err) {
-      toast({
-        title: "Failed to copy",
-        description: "Please try copying manually",
-        status: "error",
-        duration: 2000,
-        isClosable: true,
-      });
-    }
-  };
-
-  if (!requirements.length && !membraneMetadata?.characteristics?.length) {
-    return (
-      <Box p={4} bg="gray.50" borderRadius="md" textAlign="center">
-        <Text color="gray.500">No requirements defined</Text>
-      </Box>
-    );
-  }
-
+  const chain = getChainById(chainId.replace('eip155:', ''));
+  
   return (
-    <Box w="100%" borderRadius="md" borderWidth="1px" overflow="hidden">
-      {/* Characteristics Section */}
-      {membraneMetadata?.characteristics && membraneMetadata.characteristics.length > 0 && (
-        <Box p={4} borderBottomWidth={requirements.length > 0 ? "1px" : "0"}>
-          <VStack align="stretch" spacing={3}>
-            <HStack>
-              <Info size={16} />
-              <Text fontWeight="semibold">Characteristics</Text>
-            </HStack>
-            
-            {membraneMetadata.characteristics.map((char, idx) => (
-              <HStack 
-                key={idx} 
-                justify="space-between"
-                p={2}
-                bg="gray.50"
-                borderRadius="md"
-              >
-                <Text fontSize="sm">{char.title}</Text>
-                {char.link && (
+    <Box borderWidth="1px" borderRadius="md" overflow="hidden">
+      <Table size="sm" variant="simple">
+        <Tbody>
+          {requirements.map((req, idx) => (
+            <Tr key={idx}>
+              <Td>
+                <HStack spacing={2}>
+                  <Text>{req.symbol}</Text>
                   <Link
-                    href={char.link}
+                    href={`${chain?.blockExplorers?.default.url}/address/${req.tokenAddress}`}
                     isExternal
                     color="purple.500"
                     fontSize="sm"
-                    display="flex"
-                    alignItems="center"
                   >
-                    View <ExternalLink size={14} style={{ marginLeft: 4 }} />
+                    <ExternalLink size={14} />
                   </Link>
-                )}
-              </HStack>
-            ))}
-          </VStack>
-        </Box>
-      )}
-
-      {/* Token Requirements Section */}
-      {requirements.length > 0 && (
-        <Box p={4}>
-          <VStack align="stretch" spacing={3}>
-            <HStack>
-              <Info size={16} />
-              <Text fontWeight="semibold">Token Requirements</Text>
-            </HStack>
-
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>Token</Th>
-                  <Th isNumeric>Required Balance</Th>
-                  <Th width="40%">Address</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {requirements.map((req, idx) => (
-                  <Tr key={idx}>
-                    <Td>
-                      <Badge colorScheme="purple">
-                        {req.symbol || 'Unknown'}
-                      </Badge>
-                    </Td>
-                    <Td isNumeric>
-                      <Text fontFamily="mono">
-                        {req.formattedBalance}
-                      </Text>
-                    </Td>
-                    <Td>
-                      <HStack spacing={1}>
-                        <Text 
-                          isTruncated 
-                          maxW="160px" 
-                          fontSize="sm"
-                          fontFamily="mono"
-                        >
-                          {req.tokenAddress}
-                        </Text>
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => copyToClipboard(req.tokenAddress)}
-                        >
-                          <Copy size={14} />
-                        </Button>
-                        <Link
-                          href={getExplorerLink(req.tokenAddress, chainId)}
-                          isExternal
-                        >
-                          <ExternalLink size={14} />
-                        </Link>
-                      </HStack>
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </VStack>
-        </Box>
-      )}
+                </HStack>
+              </Td>
+              <Td isNumeric>{req.formattedBalance}</Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
     </Box>
   );
 };
@@ -3951,7 +4024,6 @@ import { ethers } from 'ethers';
 import { usePrivy } from "@privy-io/react-auth";
 import { RequirementsTable } from './RequirementsTable';
 import { OperationConfirmation } from './OperationConfirmation';
-import { StatusIndicator } from './StatusIndicator';
 import { deployments, ABIs } from '../../config/contracts';
 import { NodeState, MembraneMetadata, MembraneRequirement } from '../../types/chainData';
 import { useTransaction } from '../../contexts/TransactionContext';
@@ -5940,10 +6012,12 @@ import {
   Link,
   Code,
 } from '@chakra-ui/react';
-import { Trash2, Plus, ExternalLink, Check } from 'lucide-react';
+import { Trash2, Plus, ExternalLink, Check, AlertTriangle } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
-import { useContractOperations } from '../hooks/useContractOperations';
 import { ERC20Bytecode, ERC20CreateABI } from '../const/envconst';
+import { ethers } from 'ethers';
+import { useTransactionHandler } from '../hooks/useTransactionHandler';
+import { getExplorerLink } from '../config/contracts';
 
 interface Recipient {
   address: string;
@@ -5969,9 +6043,12 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
   ]);
   const [deploymentState, setDeploymentState] = useState<'idle' | 'deploying' | 'complete'>('idle');
   const [deployedAddress, setDeployedAddress] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const toast = useToast();
-  const { executeContractCall, isLoading } = useContractOperations(chainId);
+  const { authenticated, ready, getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransactionHandler();
 
   // Recipients management
   const addRecipient = useCallback(() => {
@@ -5997,6 +6074,11 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
   // Deploy token
   const deployToken = async () => {
     try {
+      if (!authenticated || !ready) {
+        throw new Error('Please connect your wallet first');
+      }
+
+      setIsLoading(true);
       setDeploymentState('deploying');
 
       // Validate inputs
@@ -6009,42 +6091,61 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
         throw new Error('At least one valid recipient is required');
       }
 
-      // Execute deployment
-      const result = await executeContractCall(
-        'factory',
-        'deploy',
-        [
-          tokenName,
-          tokenSymbol,
-          validRecipients.map(r => r.address),
-          validRecipients.map(r => ethers.parseUnits(r.balance, 18))
-        ],
-        {
-          successMessage: 'Token deployed successfully',
-          onSuccess: () => {
-            setDeploymentState('complete');
-            onSuccess?.();
-          },
-          // Pass bytecode and ABI for contract deployment
-          deploymentData: {
-            bytecode: ERC20Bytecode,
-            abi: ERC20CreateABI
-          }
-        }
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      
+      const factory = new ethers.ContractFactory(
+        ERC20CreateABI,
+        ERC20Bytecode,
+        signer
       );
 
-      if (result.data) {
-        setDeployedAddress(result.data.address);
+      // Create deployment transaction
+      const deploymentTx = factory.deploy(
+        tokenName,
+        tokenSymbol,
+        validRecipients.map(r => r.address),
+        validRecipients.map(r => ethers.parseUnits(r.balance, 18))
+      );
+      // Execute transaction with proper lifecycle handling
+      const transactionResult = await executeTransaction(deploymentTx, chainId);
+
+      if (transactionResult.contractAddress) {
+        const deployedAddress = transactionResult.contractAddress;
+        setDeployedAddress(deployedAddress);
+        setDeploymentState('complete');
+        
+        toast({
+          title: 'Success',
+          description: (
+            <>
+              Token deployed successfully. View on explorer:{' '}
+              <Link href={getExplorerLink(transactionResult.txHash, chainId, 'tx')} isExternal>
+                {transactionResult.txHash.substring(0, 8)}...{transactionResult.txHash.substring(58)}
+                <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
+              </Link>
+            </>
+          ),
+          status: 'success',
+          duration: 5000,
+        });
+
+        onSuccess?.();
       }
 
     } catch (error: any) {
+      console.error('Token deployment error:', error);
+      setError(error.message);
+      setDeploymentState('idle');
+      
       toast({
-        title: "Deployment Failed",
-        description: error.message,
-        status: "error",
+        title: 'Failed to Deploy Token',
+        description: error.message || 'Transaction failed',
+        status: 'error',
         duration: 5000,
       });
-      setDeploymentState('idle');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -6060,114 +6161,116 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
         <Text color="gray.600">Deploy a new ERC20 token with custom distribution</Text>
       </Box>
 
-      {/* Form Content */}
+      {/* Scrollable Content Area */}
       <Box 
         overflowY="auto"
         flex="1"
-        pb="160px"
-        p={6}
+        pb="200px"
       >
-        <VStack spacing={6} align="stretch">
-          {/* Token Details */}
-          <FormControl isRequired>
-            <FormLabel>Token Name</FormLabel>
-            <Input
-              value={tokenName}
-              onChange={(e) => setTokenName(e.target.value)}
-              placeholder="Enter token name"
-            />
-          </FormControl>
+        <Box p={8}>
+          <VStack spacing={8} align="stretch">
+            {/* Token Details */}
+            <FormControl isRequired>
+              <FormLabel>Token Name</FormLabel>
+              <Input
+                value={tokenName}
+                onChange={(e) => setTokenName(e.target.value)}
+                placeholder="Enter token name"
+              />
+            </FormControl>
 
-          <FormControl isRequired>
-            <FormLabel>Token Symbol</FormLabel>
-            <Input
-              value={tokenSymbol}
-              onChange={(e) => setTokenSymbol(e.target.value)}
-              placeholder="Enter token symbol"
-            />
-          </FormControl>
+            <FormControl isRequired>
+              <FormLabel>Token Symbol</FormLabel>
+              <Input
+                value={tokenSymbol}
+                onChange={(e) => setTokenSymbol(e.target.value)}
+                placeholder="Enter token symbol"
+              />
+            </FormControl>
 
-          {/* Total Supply Display */}
-          <Box p={4} bg="gray.50" borderRadius="md">
-            <Text fontWeight="medium">
-              Total Supply: {totalSupply.toLocaleString()}
-            </Text>
-          </Box>
-
-          {/* Recipients */}
-          {recipients.map((recipient, index) => (
-            <Box 
-              key={index}
-              p={4}
-              bg="gray.50"
-              borderRadius="md"
-            >
-              <HStack spacing={4}>
-                <FormControl isRequired>
-                  <FormLabel fontSize="sm">Address</FormLabel>
-                  <Input
-                    placeholder="0x..."
-                    value={recipient.address}
-                    onChange={(e) => handleRecipientChange(index, 'address', e.target.value)}
-                  />
-                </FormControl>
-
-                <FormControl isRequired>
-                  <FormLabel fontSize="sm">Balance</FormLabel>
-                  <Input
-                    placeholder="Amount"
-                    value={recipient.balance}
-                    type="number"
-                    onChange={(e) => handleRecipientChange(index, 'balance', e.target.value)}
-                  />
-                </FormControl>
-
-                <IconButton
-                  aria-label="Remove recipient"
-                  icon={<Trash2 size={16} />}
-                  colorScheme="red"
-                  variant="ghost"
-                  onClick={() => removeRecipient(index)}
-                  alignSelf="flex-end"
-                  mb={1}
-                />
-              </HStack>
+            {/* Total Supply Display */}
+            <Box p={4} bg="gray.50" borderRadius="md">
+              <Text fontWeight="medium">
+                Total Supply: {totalSupply.toLocaleString()}
+              </Text>
             </Box>
-          ))}
 
-          <Button
-            leftIcon={<Plus size={16} />}
-            onClick={addRecipient}
-            variant="ghost"
-            size="sm"
-          >
-            Add Recipient
-          </Button>
+            {/* Recipients */}
+            {recipients.map((recipient, index) => (
+              <Box 
+                key={index}
+                p={4}
+                bg="gray.50"
+                borderRadius="md"
+              >
+                <HStack spacing={4}>
+                  <FormControl isRequired>
+                    <FormLabel fontSize="sm">Address</FormLabel>
+                    <Input
+                      placeholder="0x..."
+                      value={recipient.address}
+                      onChange={(e) => handleRecipientChange(index, 'address', e.target.value)}
+                    />
+                  </FormControl>
 
-          {/* Deployment Result */}
-          {deploymentState === 'complete' && deployedAddress && (
-            <Alert status="success" variant="subtle">
-              <VStack align="start" spacing={2}>
-                <Text fontWeight="bold">Token deployed successfully!</Text>
-                <HStack spacing={2} justify="space-between" width="100%">
-                  <Code fontFamily="mono" fontSize="sm">
-                    {deployedAddress}
-                  </Code>
-                  <Link
-                    href={`https://explorer.base.org/address/${deployedAddress}`}
-                    isExternal
-                    color="purple.500"
-                  >
-                    <HStack>
-                      <Text>View on Explorer</Text>
-                      <ExternalLink size={14} />
-                    </HStack>
-                  </Link>
+                  <FormControl isRequired>
+                    <FormLabel fontSize="sm">Balance</FormLabel>
+                    <Input
+                      placeholder="Amount"
+                      value={recipient.balance}
+                      type="number"
+                      onChange={(e) => handleRecipientChange(index, 'balance', e.target.value)}
+                    />
+                  </FormControl>
+
+                  <IconButton
+                    aria-label="Remove recipient"
+                    icon={<Trash2 size={16} />}
+                    colorScheme="red"
+                    variant="ghost"
+                    onClick={() => removeRecipient(index)}
+                    alignSelf="flex-end"
+                    mb={1}
+                  />
                 </HStack>
-              </VStack>
-            </Alert>
-          )}
-        </VStack>
+              </Box>
+            ))}
+
+            <Button
+              leftIcon={<Plus size={16} />}
+              onClick={addRecipient}
+              variant="ghost"
+              size="sm"
+            >
+              Add Recipient
+            </Button>
+
+            {/* Deployment Result */}
+            {deploymentState === 'complete' && deployedAddress && (
+              <Alert status="success" variant="subtle">
+                <AlertIcon />
+                <VStack align="start" spacing={2}>
+                  <Text fontWeight="bold">Token deployed successfully!</Text>
+                  <HStack spacing={2} justify="space-between" width="100%">
+                    <Code fontFamily="mono" fontSize="sm">
+                      {deployedAddress}
+                    </Code>
+                    <Link
+                      href={`https://explorer.base.org/address/${deployedAddress}`}
+                      isExternal
+                      color="purple.500"
+                    >
+                      <HStack>
+                        <Text>View on Explorer</Text>
+                        <ExternalLink size={14} />
+                      </HStack>
+                    </Link>
+                  </HStack>
+                </VStack>
+              </Alert>
+            )}
+          </VStack>
+        </Box>
       </Box>
 
       {/* Footer with Deploy Button */}
@@ -6662,8 +6765,6 @@ export default ActivityFeed;
 
 
 // File: ./components/RootNodeDetails.tsx
-// File: ./components/RootNodeDetails.tsx
-
 import React, { useMemo, useCallback, useState } from 'react';
 import {
   Box,
@@ -6689,6 +6790,7 @@ import {
   Check,
   AlertTriangle,
   RefreshCw,
+  ArrowUpRight
 } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from 'ethers';
@@ -6696,12 +6798,12 @@ import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance } from '../utils/formatters';
 import { useTransaction } from '../contexts/TransactionContext';
-import { NodeCard } from './Node/NodeCard';
-import {addressToNodeId} from '../utils/formatters';
+import { NodeCard } from '../components/Node/NodeCard';
 
 interface RootNodeDetailsProps {
   chainId: string;
   selectedToken: string;
+  userAddress: string;
   selectedTokenColor: string;
   onNodeSelect: (nodeId: string) => void;
   nodes: NodeState[];
@@ -6713,6 +6815,7 @@ interface RootNodeDetailsProps {
 export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   chainId,
   selectedToken,
+  userAddress,
   selectedTokenColor,
   onNodeSelect,
   nodes = [],
@@ -6818,50 +6921,43 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     setIsProcessing(true);
 
     try {
-      const result = await executeTransaction(
+      await executeTransaction(
         chainId,
         async () => {
-          const cleanChainId = chainId.replace('eip155:', '');
-          const contractAddress = deployments.WillWe[cleanChainId];
-          
-          if (!contractAddress) {
-            throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-          }
-
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
+          const cleanChainId = chainId.replace('eip155:', '');
           const contract = new ethers.Contract(
-            contractAddress,
+            deployments.WillWe[cleanChainId],
             ABIs.WillWe,
             signer
           );
 
-          return contract.spawnBranch(addressToNodeId(selectedToken), { gasLimit: 500000 });
+          return contract.spawnRootBranch(selectedToken, { gasLimit: 500000 });
         },
         {
           successMessage: 'New root node created successfully',
           errorMessage: 'Failed to create root node',
-          onSuccess: onRefresh
+          onSuccess: async () => {
+            if (onRefresh) {
+              await onRefresh();
+            }
+          }
         }
       );
-
-      if (!result) {
-        throw new Error('Transaction failed');
-      }
-
     } catch (error: any) {
       console.error('Error spawning root node:', error);
       toast({
         title: "Failed to Create Node",
-        description: error.message || 'Transaction failed',
+        description: error.message,
         status: "error",
         duration: 5000,
-        icon: <AlertTriangle size={16} />,
+        icon: <AlertTriangle size={16} />
       });
     } finally {
       setIsProcessing(false);
     }
-  }, [chainId, selectedToken, executeTransaction, getEthersProvider, toast, onRefresh]);
+  }, [chainId, selectedToken, getEthersProvider, executeTransaction, toast, onRefresh]);
 
   // Stats cards configuration
   const statsCards = [
@@ -6954,7 +7050,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             colorScheme="purple"
             isLoading={isProcessing}
             loadingText="Creating Node..."
-            isDisabled={!selectedToken || isProcessing}
+            isDisabled={!selectedToken || isProcessing || !userAddress}
           >
             New Root Node
           </Button>
@@ -7035,7 +7131,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
               onClick={handleSpawnNode}
               colorScheme="purple"
               isLoading={isProcessing}
-              isDisabled={!selectedToken || isProcessing}
+              isDisabled={!selectedToken || isProcessing || !userAddress}
             >
               Create Root Node
             </Button>
@@ -8110,10 +8206,10 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       return;
     }
 
-    if (!entityName || membershipConditions.length === 0) {
+    if (!entityName || characteristics.length === 0) {
       toast({
         title: 'Error',
-        description: 'Entity name and at least one membership condition are required',
+        description: 'Entity name and at least one characteristic are required',
         status: 'error',
         duration: 3000,
       });
@@ -8393,7 +8489,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
               onClick={handleSubmit}
               isLoading={isLoading}
               loadingText="Creating Entity"
-              isDisabled={!entityName || membershipConditions.length === 0 || isLoading}
+              isDisabled={!entityName || characteristics.length === 0 || isLoading}
             >
               Submit
             </Button>
@@ -8662,7 +8758,7 @@ export const getExplorerLink = (
 ): string => {
   try {
     // Ensure we're using the chainId, not an address
-    if (!chainId || chainId.length > 10) {
+    if (!chainId ) {
       throw new Error('Invalid chain ID format');
     }
     
@@ -8758,10 +8854,10 @@ export const deployments: Deployments = {
  */
 export function getChainById(chainId: string): Chain {
     if (! chainId)   throw new Error(`Unproper provided chain id ${chainId}`);
-    chainId =  (chainId.includes(":")) ? chainId.split(":")[1] : chainId;
+    const CID =  (chainId.includes(":")) ? chainId.split(":")[1] : chainId;
   for (const chain of Object.values(chains)) {
     if ('id' in chain) {
-      if (chain.id === Number(chainId)) {
+      if (chain.id === Number(CID)) {
         return chain as Chain;
       }
     }
@@ -13264,7 +13360,7 @@ export function useNodeDataLoading(chainId: string | undefined, nodeId: string |
 
 
 // File: ./hooks/useBalances.tsx
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { BalanceItem } from '@covalenthq/client-sdk';
 import { useCovalentBalances } from './useCovalentBalances';
 import { useWillBalances } from './useWillBalances';
@@ -13837,294 +13933,72 @@ export default useActivityFeed;
 // File: ./hooks/useContractOperations.ts
 // File: hooks/useContractOperations.ts
 
-import { useCallback } from 'react';
+import { useState } from 'react';
 import { ethers } from 'ethers';
-import { usePrivy } from '@privy-io/react-auth';
-import { useTransaction } from '../contexts/TransactionContext';
-import { deployments, ABIs, getRPCUrl } from '../config/contracts';
-import { NodeState, MembraneState } from '../types/chainData';
+import { usePrivy } from "@privy-io/react-auth";
 
-interface TokenInfo {
-  name: string;
-  symbol: string;
-  decimals: number;
-  totalSupply: string;
-}
-
-interface MembraneData {
-  tokens: string[];
-  balances: string[];
-  metadata: string;
-}
-
-export function useContractOperations(chainId: string) {
-  const { executeTransaction } = useTransaction();
-  const { getEthersProvider } = usePrivy();
-
-  // Helper to get contract instance
-  const getContract = useCallback(async (
-    contractName: keyof typeof deployments,
-    requireSigner: boolean = false
-  ) => {
-    const cleanChainId = chainId.replace('eip155:', '');
-    const address = deployments[contractName][cleanChainId];
-    
-    if (!address) {
-      throw new Error(`No ${contractName} contract found for chain ${chainId}`);
-    }
-    let provider;
-    if (requireSigner) {
-     provider = await getEthersProvider();
-    } else {
-     provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
-    }
-    if (!provider) {
-      throw new Error('Provider not available');
-    }
-
-    if (requireSigner) {
-      const signer = await provider.getSigner();
-      return new ethers.Contract(address, ABIs[contractName], signer);
-    }
-    
-    return new ethers.Contract(address, ABIs[contractName], provider);
-  }, [chainId, getEthersProvider]);
-
-  // Token Operations
-  const getTokenInfo = useCallback(async (tokenAddress: string): Promise<TokenInfo> => {
-    try {
-      const provider = await getEthersProvider();
-      if (!provider) throw new Error('Provider not available');
-
-      const tokenContract = new ethers.Contract(tokenAddress, ABIs.IERC20, provider);
-      
-      const [name, symbol, decimals, totalSupply] = await Promise.all([
-        tokenContract.name(),
-        tokenContract.symbol(),
-        tokenContract.decimals(),
-        tokenContract.totalSupply()
-      ]);
-
-      return {
-        name,
-        symbol,
-        decimals,
-        totalSupply: totalSupply.toString()
-      };
-    } catch (error) {
-      console.error('Error fetching token info:', error);
-      throw new Error(`Failed to fetch token info: ${error.message}`);
-    }
-  }, [getEthersProvider]);
-
-  // Node Operations
-  const spawnRootNode = useCallback(async (tokenAddress: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.spawnRootBranch(tokenAddress, { gasLimit: 500000 });
-      },
-      {
-        successMessage: 'Root node created successfully',
-        errorMessage: 'Failed to create root node'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  const spawnChildNode = useCallback(async (nodeId: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.spawnBranch(nodeId, { gasLimit: 400000 });
-      },
-      {
-        successMessage: 'Child node created successfully',
-        errorMessage: 'Failed to create child node'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  const spawnNodeWithMembrane = useCallback(async (
-    nodeId: string,
-    membraneId: string
-  ) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.spawnBranchWithMembrane(nodeId, membraneId, { gasLimit: 600000 });
-      },
-      {
-        successMessage: 'Node created with membrane successfully',
-        errorMessage: 'Failed to create node with membrane'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  // Membrane Operations
-  const createMembrane = useCallback(async (
-    tokens: string[],
-    balances: string[],
-    metadataCid: string
-  ) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('Membrane', true);
-        return contract.createMembrane(tokens, balances, metadataCid, { gasLimit: 500000 });
-      },
-      {
-        successMessage: 'Membrane created successfully',
-        errorMessage: 'Failed to create membrane'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  const getMembraneData = useCallback(async (membraneId: string): Promise<MembraneData> => {
-    try {
-      const contract = await getContract('Membrane', false);
-      const data = await contract.getMembraneById(membraneId);
-      console.log(data);
-      return {
-        tokens: data.tokens,
-        balances: data.balances.map((b: bigint) => b.toString()),
-        metadata: data.meta
-      };
-    } catch (error) {
-      console.error('Error fetching membrane data:', error);
-      throw new Error(`Failed to fetch membrane data: ${error.message}`);
-    }
-  }, [getContract]);
-
-  // Value Operations
-  const mint = useCallback(async (nodeId: string, amount: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.mint(nodeId, amount, { gasLimit: 300000 });
-      },
-      {
-        successMessage: 'Tokens minted successfully',
-        errorMessage: 'Failed to mint tokens'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  const burn = useCallback(async (nodeId: string, amount: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.burn(nodeId, amount, { gasLimit: 300000 });
-      },
-      {
-        successMessage: 'Tokens burned successfully',
-        errorMessage: 'Failed to burn tokens'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  // Membership Operations
-  const mintMembership = useCallback(async (nodeId: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.mintMembership(nodeId, { gasLimit: 200000 });
-      },
-      {
-        successMessage: 'Membership minted successfully',
-        errorMessage: 'Failed to mint membership'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  // Signal Operations
-  const sendSignal = useCallback(async (nodeId: string, signals: number[] = []) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.sendSignal(nodeId, signals, { gasLimit: 300000 });
-      },
-      {
-        successMessage: 'Signal sent successfully',
-        errorMessage: 'Failed to send signal'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  // Data Fetching Operations
-  const getNodeData = useCallback(async (nodeId: string): Promise<NodeState> => {
-    try {
-      const contract = await getContract('WillWe', false);
-      return await contract.getNodeData(nodeId);
-    } catch (error) {
-      console.error('Error fetching node data:', error);
-      throw new Error(`Failed to fetch node data: ${error.message}`);
-    }
-  }, [getContract]);
-
-  const getAllNodesForRoot = useCallback(async (
-    rootAddress: string,
-    userAddress: string
-  ): Promise<NodeState[]> => {
-    try {
-      const contract = await getContract('WillWe', false);
-      return await contract.getAllNodesForRoot(rootAddress, userAddress);
-    } catch (error) {
-      console.error('Error fetching root nodes:', error);
-      throw new Error(`Failed to fetch root nodes: ${error.message}`);
-    }
-  }, [getContract]);
-
-  // Distribution Operations
-  const redistribute = useCallback(async (nodeId: string) => {
-    return executeTransaction(
-      chainId,
-      async () => {
-        const contract = await getContract('WillWe', true);
-        return contract.redistributePath(nodeId, { gasLimit: 500000 });
-      },
-      {
-        successMessage: 'Value redistributed successfully',
-        errorMessage: 'Failed to redistribute value'
-      }
-    );
-  }, [chainId, executeTransaction, getContract]);
-
-  return {
-    // Token Operations
-    getTokenInfo,
-    
-    // Node Operations
-    spawnRootNode,
-    spawnChildNode,
-    spawnNodeWithMembrane,
-    getNodeData,
-    getAllNodesForRoot,
-    
-    // Membrane Operations
-    createMembrane,
-    getMembraneData,
-    
-    // Value Operations
-    mint,
-    burn,
-    
-    // Membership Operations
-    mintMembership,
-    
-    // Signal Operations
-    sendSignal,
-    
-    // Distribution Operations
-    redistribute
+interface ContractCallOptions {
+  successMessage?: string;
+  onSuccess?: () => void;
+  deploymentData?: {
+    bytecode: string;
+    abi: any[];
   };
 }
+
+export const useContractOperations = (chainId: string) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const { getEthersProvider } = usePrivy();
+
+  const executeContractCall = async (
+    contractType: string,
+    method: string,
+    args: any[],
+    options: ContractCallOptions = {}
+  ) => {
+    setIsLoading(true);
+    try {
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+
+      if (contractType === 'factory' && method === 'deploy') {
+        const factory = new ethers.ContractFactory(
+          options.deploymentData!.abi,
+          options.deploymentData!.bytecode,
+          signer
+        );
+
+        const contract = await factory.deploy(...args);
+        await contract.waitForDeployment();
+
+        if (options.onSuccess) {
+          options.onSuccess();
+        }
+
+        return {
+          success: true,
+          data: {
+            address: await contract.getAddress(),
+            contract
+          }
+        };
+      }
+
+      throw new Error('Unsupported contract operation');
+
+    } catch (error: any) {
+      console.error('Contract operation failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return {
+    executeContractCall,
+    isLoading
+  };
+};
 
 export default useContractOperations;
 
@@ -14280,169 +14154,79 @@ export function useNodeTransactions(chainId: string) {
 // File: ./hooks/useTransactionHandler.ts
 // File: ./hooks/useTransactionHandler.ts
 
+import { useToast } from '@chakra-ui/react';
 import { useCallback } from 'react';
-import { useToast, UseToastOptions, Box, Text, Link } from '@chakra-ui/react';
-import { ContractTransactionResponse, EventLog, Log } from 'ethers';
-import { getChainById } from '../config/contracts';
-import { ExternalLink } from 'lucide-react';
+import { getExplorerLink } from '../config/contracts';
 
-interface TransactionHandlerOptions {
-  pendingMessage?: string;
-  successMessage?: string;
-  errorMessage?: string;
-  onSuccess?: (receipt: any) => void;
-  onError?: (error: Error) => void;
+interface TransactionResult {
+  txHash: string;
+  contractAddress: string;
 }
 
-export function useTransactionHandler() {
+export const useTransactionHandler = () => {
   const toast = useToast();
 
-  const handleTransaction = useCallback(async <T extends ContractTransactionResponse>(
-    transaction: Promise<T>,
-    options: TransactionHandlerOptions = {}
-  ) => {
-    const {
-      pendingMessage = 'Transaction Pending',
-      successMessage = 'Transaction Successful',
-      errorMessage = 'Transaction Failed',
-      onSuccess,
-      onError
-    } = options;
-
-    let tx: T;
-    const toastId = 'transaction-toast';
+  const executeTransaction = useCallback(async (
+    deploymentPromise: Promise<any>,
+    chainId: string
+  ): Promise<TransactionResult> => {
+    const pendingToastId = toast({
+      title: 'Confirm Transaction',
+      description: 'Please confirm the transaction in your wallet',
+      status: 'info',
+      duration: null,
+      isClosable: false,
+    });
 
     try {
-      // Show pending toast
+      // Deploy contract
+      const contract = await deploymentPromise;
+      const tx = contract.deploymentTransaction();
+      if (!tx) throw new Error('No deployment transaction found');
+      
+      // Close the confirmation toast
+      toast.close(pendingToastId);
+      
+      // Show transaction hash toast with explorer link
       toast({
-        id: toastId,
-        title: 'Confirming Transaction',
-        description: pendingMessage,
-        status: 'info',
-        duration: null,
-        isClosable: false,
-      });
-
-      // Wait for transaction
-      tx = await transaction;
-
-      // Update toast to show transaction hash
-      toast.update(toastId, {
         title: 'Transaction Submitted',
-        description: `Transaction submitted. Waiting for confirmation...
-          View on Explorer: ${getChainById(tx.chainId.toString()).blockExplorers?.default.url}/tx/${tx.hash}`,
-        duration: null,
-      });
-
-      // Wait for confirmation
-      const receipt = await tx.wait();
-
-      // Clear pending toast
-      toast.close(toastId);
-
-      if (receipt.status === 1) {
-        // Success
-        toast({
-          title: 'Success',
-          description: successMessage,
-          status: 'success',
-          duration: 5000,
-          isClosable: true,
-        });
-
-        if (onSuccess) {
-          onSuccess(receipt);
-        }
-
-        return {
-          transaction: tx,
-          receipt,
-          events: parseReceiptEvents(receipt)
-        };
-      } else {
-        throw new Error('Transaction failed');
-      }
-
-    } catch (error: any) {
-      // Clear pending toast
-      toast.close(toastId);
-
-      // Show error toast
-      toast({
-        title: 'Error',
-        description: error.message || errorMessage,
-        status: 'error',
+        description: `Transaction Hash: ${tx.hash}\n View on explorer: ${getExplorerLink(tx.hash, chainId, 'tx')}`,
+        status: 'info',
         duration: 5000,
         isClosable: true,
       });
 
-      if (onError) {
-        onError(error);
+      // Get the contract address directly from the deployment
+      const deployedAddress = await contract.getAddress();
+
+      return {
+        txHash: tx.hash,
+        contractAddress: deployedAddress
+      };
+
+    } catch (error: any) {
+      // Close any pending toasts
+      toast.close(pendingToastId);
+
+      // Handle user rejection 
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        throw new Error('Transaction was rejected by user');
+      }
+
+      // Handle replacement transaction errors
+      if (error.code === 'TRANSACTION_REPLACED') {
+        if (error.reason === 'repriced') {
+          throw new Error('Transaction was replaced (speeded up)');
+        }
+        throw new Error('Transaction was replaced');
       }
 
       throw error;
     }
   }, [toast]);
 
-  const parseReceiptEvents = (receipt: any) => {
-    const events: (EventLog | Log)[] = [];
-    if (receipt.logs) {
-      events.push(...receipt.logs);
-    }
-    return events;
-  };
-
-  return { handleTransaction };
-}
-
-// Helper hook for common transaction patterns
-export function useTransactionPatterns() {
-  const { handleTransaction } = useTransactionHandler();
-
-  const handleNodeOperation = useCallback(async (
-    operation: () => Promise<ContractTransactionResponse>,
-    options: TransactionHandlerOptions = {}
-  ) => {
-    return handleTransaction(operation(), {
-      pendingMessage: 'Processing node operation...',
-      successMessage: 'Node operation completed successfully',
-      errorMessage: 'Node operation failed',
-      ...options
-    });
-  }, [handleTransaction]);
-
-  const handleMembraneOperation = useCallback(async (
-    operation: () => Promise<ContractTransactionResponse>,
-    options: TransactionHandlerOptions = {}
-  ) => {
-    return handleTransaction(operation(), {
-      pendingMessage: 'Processing membrane operation...',
-      successMessage: 'Membrane operation completed successfully',
-      errorMessage: 'Membrane operation failed',
-      ...options
-    });
-  }, [handleTransaction]);
-
-  const handleTokenOperation = useCallback(async (
-    operation: () => Promise<ContractTransactionResponse>,
-    options: TransactionHandlerOptions = {}
-  ) => {
-    return handleTransaction(operation(), {
-      pendingMessage: 'Processing token operation...',
-      successMessage: 'Token operation completed successfully',
-      errorMessage: 'Token operation failed',
-      ...options
-    });
-  }, [handleTransaction]);
-
-  return {
-    handleNodeOperation,
-    handleMembraneOperation,
-    handleTokenOperation
-  };
-}
-
-export default useTransactionHandler;
+  return { executeTransaction };
+};
 
 
 
@@ -16107,27 +15891,6 @@ export const formatBalance = (value: string | bigint | undefined | null): string
 export const formatPercentage = (value: number): string => {
   return (Math.round(value * 100) / 100).toFixed(2) + '%';
 };
-
-
-
-// File: ./types/nodeView.ts
-export interface ColorState {
-    contrastingColor: string;
-    reverseColor: string;
-    hoverColor: string;
-  }
-  
-  export interface NodeViewProps {
-    chainId?: string;
-    nodeId?: string;
-    colorState: ColorState;
-    cycleColors: () => void;
-  }
-  
-  export interface ServerSideProps {
-    initialChainId: string | null;
-    initialNodeId: string | null;
-  }
 
 
 
@@ -21301,25 +21064,6 @@ export const formatPercentage = (value: number): string => {
 export const formatPercentage = (value: number): string => {
   return (Math.round(value * 100) / 100).toFixed(2) + '%';
 };
-
-export interface ColorState {
-export interface ColorState {
-    contrastingColor: string;
-    reverseColor: string;
-    hoverColor: string;
-  }
-  
-  export interface NodeViewProps {
-    chainId?: string;
-    nodeId?: string;
-    colorState: ColorState;
-    cycleColors: () => void;
-  }
-  
-  export interface ServerSideProps {
-    initialChainId: string | null;
-    initialNodeId: string | null;
-  }
 
 export interface NodeBasicInfo {
 export interface NodeBasicInfo {

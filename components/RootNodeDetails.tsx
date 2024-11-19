@@ -1,6 +1,4 @@
-// File: ./components/RootNodeDetails.tsx
-
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import {
   Box,
   VStack,
@@ -14,6 +12,7 @@ import {
   Spinner,
   Grid,
   Tooltip,
+  Flex,
 } from '@chakra-ui/react';
 import { 
   Users,
@@ -25,15 +24,22 @@ import {
   Check,
   AlertTriangle,
   RefreshCw,
+  ArrowUpRight,
+  Wallet,
+  Copy
 } from 'lucide-react';
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
-import { formatBalance } from '../utils/formatters';
+import { formatBalance, addressToNodeId } from '../utils/formatters';
 import { useTransaction } from '../contexts/TransactionContext';
-import { NodeCard } from './Node/NodeCard';
-import {addressToNodeId} from '../utils/formatters';
+import { NodeHierarchyView } from './Node/NodeHierarchyView';
+import { StatsCard } from './Node/StatsCards'; 
+import { NodeFilters } from './Node/NodeFilters';
+import { NodeActions } from './Node/NodeActions';
+import { TokenNameDisplay } from './Token/TokenNameDisplay';
+import { useWillWeContract } from '../hooks/useWillWeContract';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -60,71 +66,93 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   const { getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
   const [isProcessing, setIsProcessing] = useState(false);
+  const { wallets } = useWallets();
+  const userAddress = wallets?.[0]?.address;
+  const willweContract = useWillWeContract();
+  const [totalSupplyValue, setTotalSupplyValue] = useState<bigint>(BigInt(0));
+
+  // Fetch total supply
+  useEffect(() => {
+    const fetchTotalSupply = async () => {
+      if (!selectedToken || !willweContract) return;
+      try {
+        const tokenId = addressToNodeId(selectedToken);
+        const supply = await willweContract.totalSupply(tokenId);
+        setTotalSupplyValue(supply);
+      } catch (error) {
+        console.error('Error fetching total supply:', {
+          error,
+          contractAddress: willweContract.target,
+          tokenId: selectedToken,
+          abi: ABIs.WillWe
+        });
+      }
+    };
+
+    if (willweContract) {
+      fetchTotalSupply();
+    }
+  }, [selectedToken, willweContract]);
 
   // Calculate stats and organize nodes
   const {
     baseNodes,
     derivedNodes,
-    totalValue,
     nodeValues,
     totalMembers,
     maxDepth,
-    totalSignals
+    totalSignals,
+    averageExpense
   } = useMemo(() => {
     if (!nodes?.length || !selectedToken) return {
       baseNodes: [],
       derivedNodes: [],
-      totalValue: BigInt(0),
       nodeValues: {},
       totalMembers: 0,
       maxDepth: 0,
-      totalSignals: 0
+      totalSignals: 0,
+      averageExpense: 0
     };
 
-    const tokenBigInt = ethers.toBigInt(selectedToken);
-    const tokenId = tokenBigInt.toString();
+    // Organize nodes into base and derived
+    const base = nodes.filter(node => !node.parentId);
+    const derived = nodes.filter(node => node.parentId);
 
-    // Filter base and derived nodes
-    const base = nodes.filter(node => 
-      node?.rootPath?.length === 1 && 
-      BigInt(node.rootPath[0]).toString() === tokenId
-    );
-
-    const derived = nodes.filter(node =>
-      node?.rootPath?.length > 1 && 
-      BigInt(node.rootPath[0]).toString() === tokenId
-    );
-
-    // Calculate stats
-    const stats = nodes.reduce((acc, node) => {
-      if (!node?.basicInfo?.[4]) return acc;
-
-      try {
-        const nodeValue = BigInt(node.basicInfo[4]);
-        return {
-          totalValue: acc.totalValue + nodeValue,
-          totalMembers: acc.totalMembers + (node.membersOfNode?.length || 0),
-          maxDepth: Math.max(acc.maxDepth, node.rootPath?.length || 0),
-          totalSignals: acc.totalSignals + (node.signals?.length || 0)
-        };
-      } catch {
-        return acc;
+    // Calculate unique members (addresses)
+    const uniqueAddresses = new Set<string>();
+    nodes.forEach(node => {
+      if (node.members) {
+        node.members.forEach(member => uniqueAddresses.add(member));
       }
-    }, {
-      totalValue: BigInt(0),
-      totalMembers: 0,
-      maxDepth: 0,
-      totalSignals: 0
     });
 
-    // Calculate node value percentages
+    // Calculate max depth
+    const depth = nodes.reduce((max, node) => {
+      return node.rootPath ? Math.max(max, node.rootPath.length) : max;
+    }, 0);
+
+    // Calculate average expense per day (convert from gwei/sec to ether/day)
+    const totalExpensePerSec = nodes.reduce((sum, node) => {
+      const expensePerSec = node.basicInfo?.[1] ? BigInt(node.basicInfo[1]) : BigInt(0);
+      return sum + expensePerSec;
+    }, BigInt(0));
+    
+    const nodesWithExpense = nodes.filter(node => node.basicInfo?.[1] && BigInt(node.basicInfo[1]) > 0).length;
+    const avgExpensePerSecGwei = nodesWithExpense > 0 ? 
+      Number(totalExpensePerSec) / nodesWithExpense : 
+      0;
+    
+    // Convert gwei/sec to ether/day
+    const avgExpensePerDay = (avgExpensePerSecGwei * 86400) / 1e9;
+
+    // Calculate node value percentages based on total supply
     const values: Record<string, number> = {};
-    if (stats.totalValue > BigInt(0)) {
+    if (totalSupplyValue > BigInt(0)) {
       nodes.forEach(node => {
         if (!node?.basicInfo?.[0] || !node?.basicInfo?.[4]) return;
         try {
           const nodeValue = BigInt(node.basicInfo[4]);
-          values[node.basicInfo[0]] = Number((nodeValue * BigInt(10000)) / stats.totalValue) / 100;
+          values[node.basicInfo[0]] = Number((nodeValue * BigInt(10000)) / totalSupplyValue) / 100;
         } catch {
           values[node.basicInfo[0]] = 0;
         }
@@ -134,10 +162,13 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     return {
       baseNodes: base,
       derivedNodes: derived,
-      ...stats,
       nodeValues: values,
+      totalMembers: uniqueAddresses.size,
+      maxDepth: depth,
+      totalSignals: 0,
+      averageExpense: avgExpensePerDay
     };
-  }, [nodes, selectedToken]);
+  }, [nodes, selectedToken, totalSupplyValue]);
 
   // Handle spawning a new root node
   const handleSpawnNode = useCallback(async () => {
@@ -154,59 +185,52 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     setIsProcessing(true);
 
     try {
-      const result = await executeTransaction(
+      await executeTransaction(
         chainId,
         async () => {
-          const cleanChainId = chainId.replace('eip155:', '');
-          const contractAddress = deployments.WillWe[cleanChainId];
-          
-          if (!contractAddress) {
-            throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-          }
-
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
+          const cleanChainId = chainId.replace('eip155:', '');
           const contract = new ethers.Contract(
-            contractAddress,
+            deployments.WillWe[cleanChainId],
             ABIs.WillWe,
             signer
           );
 
-          return contract.spawnBranch(addressToNodeId(selectedToken), { gasLimit: 500000 });
+          return contract.spawnBranch(selectedToken, { gasLimit: 500000 });
         },
         {
-          successMessage: 'New root node created successfully',
-          errorMessage: 'Failed to create root node',
-          onSuccess: onRefresh
+          successMessage: 'New node created successfully',
+          errorMessage: 'Failed to create node',
+          onSuccess: async () => {
+            if (onRefresh) {
+              await onRefresh();
+            }
+          }
         }
       );
-
-      if (!result) {
-        throw new Error('Transaction failed');
-      }
-
     } catch (error: any) {
-      console.error('Error spawning root node:', error);
+      console.error('Error spawning node:', error);
       toast({
         title: "Failed to Create Node",
-        description: error.message || 'Transaction failed',
+        description: error.message,
         status: "error",
         duration: 5000,
-        icon: <AlertTriangle size={16} />,
+        icon: <AlertTriangle size={16} />
       });
     } finally {
       setIsProcessing(false);
     }
-  }, [chainId, selectedToken, executeTransaction, getEthersProvider, toast, onRefresh]);
+  }, [chainId, selectedToken, getEthersProvider, executeTransaction, toast, onRefresh]);
 
   // Stats cards configuration
   const statsCards = [
     {
       title: 'Total Value',
-      value: formatBalance(totalValue),
+      value: formatBalance(totalSupplyValue),
       icon: <Activity size={16} />,
       color: 'purple',
-      tooltip: 'Total value locked in all nodes'
+      tooltip: 'Total supply of the token'
     },
     {
       title: 'Members',
@@ -228,7 +252,16 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       icon: <Signal size={16} />,
       color: 'orange',
       tooltip: 'Total active signals across all nodes'
-    }
+    },
+    <StatsCard
+      title="Average Inflation per Day"
+      value={averageExpense.toFixed(6)}
+      icon={<Wallet size={14} />}
+      color="red"
+      tooltip="Average expense per node in ETH/day"
+      size="sm"
+      suffix="ETH/day"
+    />
   ];
 
   if (isLoading) {
@@ -277,198 +310,181 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     );
   }
 
+
   return (
-    <Box p={6} bg="white" rounded="xl" shadow="sm">
-      {/* Header */}
-      <HStack justify="space-between" mb={8}>
-        <HStack spacing={4}>
-          <Button
-            leftIcon={<Plus size={16} />}
-            rightIcon={<GitBranchPlus size={16} />}
-            onClick={handleSpawnNode}
-            variant="outline"
-            colorScheme="purple"
-            isLoading={isProcessing}
-            loadingText="Creating Node..."
-            isDisabled={!selectedToken || isProcessing}
-          >
-            New Root Node
-          </Button>
-          {onRefresh && (
-            <Button
-              leftIcon={<RefreshCw size={16} />}
-              variant="ghost"
-              colorScheme="purple"
-              onClick={onRefresh}
-              isDisabled={isProcessing}
-            >
-              Refresh
-            </Button>
+    <Flex 
+      direction="column" 
+      h="calc(100vh - 80px)" // Adjust this value based on your navbar/header height
+      bg="white" 
+      rounded="xl" 
+      shadow="sm"
+      overflow="hidden" // Prevents content from spilling out
+    >
+      {/* Fixed Header Section */}
+      <Box p={4} borderBottom="1px" borderColor="gray.100">
+        <HStack justify="space-between" mb={4}>
+          <NodeActions
+            onSpawnNode={handleSpawnNode}
+            isProcessing={isProcessing}
+            selectedToken={selectedToken}
+            userAddress={userAddress}
+            onRefresh={onRefresh}
+          />
+          {selectedToken && (
+            <TokenNameDisplay 
+              tokenAddress={selectedToken}  
+              chainId={chainId}
+            />
           )}
         </HStack>
-        {selectedToken && (
-          <Badge colorScheme="purple" p={2}>
-            Token: {selectedToken.slice(0, 6)}...{selectedToken.slice(-4)}
-          </Badge>
-        )}
-      </HStack>
 
-      {/* Stats Cards */}
-      <Grid 
-        templateColumns={{ 
-          base: "1fr", 
-          md: "repeat(2, 1fr)", 
-          lg: "repeat(4, 1fr)" 
-        }}
-        gap={4}
-        mb={8}
-      >
-        {statsCards.map((stat, index) => (
-          <Tooltip key={index} label={stat.tooltip}>
-            <Box
-              p={4}
-              bg={`${stat.color}.50`}
-              rounded="lg"
-              border="1px solid"
-              borderColor={`${stat.color}.100`}
-              transition="all 0.2s"
-              _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
-            >
-              <HStack color={`${stat.color}.600`} mb={2}>
-                {stat.icon}
-                <Text fontSize="sm" fontWeight="medium">
-                  {stat.title}
-                </Text>
-              </HStack>
-              <Text 
-                fontSize="2xl" 
-                fontWeight="bold"
-                color={`${stat.color}.900`}
-              >
-                {stat.value}
-              </Text>
-            </Box>
-          </Tooltip>
-        ))}
-      </Grid>
-
-      {/* Node Sections */}
-      {baseNodes.length === 0 && derivedNodes.length === 0 ? (
-        <Box 
-          p={8} 
-          bg="gray.50" 
-          rounded="lg" 
-          textAlign="center"
-          border="2px dashed"
-          borderColor="gray.200"
+        {/* Adjusted Stats Cards */}
+        <Grid 
+          templateColumns="repeat(5, 1fr)"
+          gap={3}
+          maxW="100%"
+          mx="auto"
         >
-          <VStack spacing={4}>
-            <Text color="gray.600">
-              No nodes found. Create a new root node to get started.
-            </Text>
-            <Button
-              leftIcon={<Plus size={16} />}
-              onClick={handleSpawnNode}
-              colorScheme="purple"
-              isLoading={isProcessing}
-              isDisabled={!selectedToken || isProcessing}
-            >
-              Create Root Node
-            </Button>
-          </VStack>
-        </Box>
-      ) : (
-        <>
-          {/* Base Nodes Section */}
-          {baseNodes.length > 0 && (
-            <VStack align="stretch" spacing={4} mb={8}>
-              <Text fontSize="lg" fontWeight="semibold" color="gray.700">
-                Base Nodes
-              </Text>
-              <Box 
-                overflowX="auto" 
-                overflowY="hidden" 
-                pb={4}
-                sx={{
-                  '&::-webkit-scrollbar': {
-                    height: '8px',
-                  },
-                  '&::-webkit-scrollbar-track': {
-                    bg: 'gray.100',
-                    borderRadius: 'full',
-                  },
-                  '&::-webkit-scrollbar-thumb': {
-                    bg: 'purple.200',
-                    borderRadius: 'full',
-                    '&:hover': {
-                      bg: 'purple.300',
-                    },
-                  },
-                }}
-              >
-                <HStack spacing={4}>
-                  {baseNodes.map((node, index) => (
-                    <NodeCard
-                      key={node.basicInfo[0]}
-                      node={node}
-                      index={index}
-                      selectedTokenColor={selectedTokenColor}
-                      onNodeSelect={onNodeSelect}
-                      nodeValues={nodeValues}
-                      chainId={chainId}
-                    />
-                  ))}
-                </HStack>
-              </Box>
-            </VStack>
-          )}
+          <StatsCard
+            title="Total Value"
+            value={formatBalance(totalSupplyValue)}
+            icon={<Wallet size={14} />}
+            color="purple"
+            tooltip="Total supply of the token"
+            size="sm"
+          />
+          <StatsCard
+            title="Members"
+            value={totalMembers}
+            icon={<Users size={14} />}
+            color="blue"
+            tooltip="Total unique members across all nodes"
+            size="sm"
+          />
+          <StatsCard
+            title="Max Depth"
+            value={maxDepth}
+            icon={<GitBranch size={14} />}
+            color="green"
+            tooltip="Maximum depth of the node hierarchy"
+            size="sm"
+          />
+          <StatsCard
+            title="Active Signals"
+            value={totalSignals}
+            icon={<Signal size={14} />}
+            color="orange"
+            tooltip="Total active signals across all nodes"
+            size="sm"
+          />
+          <StatsCard
+            title="Average Expense"
+            value={averageExpense.toFixed(6)}
+            icon={<Wallet size={14} />}
+            color="red"
+            tooltip="Average expense per node in ETH/day"
+            size="sm"
+            suffix="ETH/day"
+          />
+        </Grid>
+      </Box>
 
-          {/* Derived Nodes Section */}
-          {derivedNodes.length > 0 && (
-            <VStack align="stretch" spacing={4}>
-              <Text fontSize="lg" fontWeight="semibold" color="gray.700">
-                Derived Nodes
-              </Text>
-              <Box 
-                overflowX="auto" 
-                overflowY="hidden" 
-                pb={4}
-                sx={{
-                  '&::-webkit-scrollbar': {
-                    height: '8px',
-                  },
-                  '&::-webkit-scrollbar-track': {
-                    bg: 'gray.100',
-                    borderRadius: 'full',
-                  },
-                  '&::-webkit-scrollbar-thumb': {
-                    bg: 'purple.200',
-                    borderRadius: 'full',
-                    '&:hover': {
-                      bg: 'purple.300',
-                    },
-                  },
-                }}
-              >
-                <HStack spacing={4}>
-                  {derivedNodes.map((node, index) => (
-                    <NodeCard
-                      key={node.basicInfo[0]}
-                      node={node}
-                      index={index}
-                      selectedTokenColor={selectedTokenColor}
-                      onNodeSelect={onNodeSelect}
-                      nodeValues={nodeValues}
-                      chainId={chainId}
-                    />
-                  ))}
-                </HStack>
-              </Box>
-            </VStack>
+      {/* Scrollable Content Section */}
+      <Flex 
+        direction="column" 
+        flex="1"
+        overflow="hidden"
+      >
+        {/* Filters - Fixed below header */}
+        <Box px={6} py={4} borderBottom="1px" borderColor="gray.100">
+          <NodeFilters
+            nodes={nodes}
+            onFilterChange={(filteredNodes) => {
+              // Implement filtering logic
+            }}
+          />
+        </Box>
+
+        {/* Scrollable Node Content */}
+        <Box 
+          flex="1"
+          overflowY="auto"
+          px={6}
+          py={4}
+          sx={{
+            '&::-webkit-scrollbar': {
+              width: '8px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(0, 0, 0, 0.05)',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(0, 0, 0, 0.1)',
+              borderRadius: '8px',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.15)',
+              },
+            },
+            // Add these styles to create a more distinct hierarchy
+            '.node-level-0': {
+              borderLeft: '0px solid',
+              ml: '0',
+            },
+            '.node-level-1': {
+              borderLeft: '2px solid',
+              borderColor: 'gray.200',
+              ml: '2',
+              pl: '4',
+            },
+            '.node-level-2': {
+              borderLeft: '2px solid',
+              borderColor: 'gray.300',
+              ml: '4',
+              pl: '4',
+            },
+            '.node-level-3': {
+              borderLeft: '2px solid',
+              borderColor: 'gray.400',
+              ml: '6',
+              pl: '4',
+            },
+            // Add more levels if needed
+          }}
+        >
+          {nodes.length === 0 ? (
+            <Box 
+              p={8} 
+              bg="gray.50" 
+              rounded="lg" 
+              textAlign="center"
+              border="2px dashed"
+              borderColor="gray.200"
+            >
+              <VStack spacing={4}>
+                <Text color="gray.600">
+                  No nodes found. Create a new root node to get started.
+                </Text>
+                <Button
+                  leftIcon={<Plus size={16} />}
+                  onClick={handleSpawnNode}
+                  colorScheme="purple"
+                  isLoading={isProcessing}
+                  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
+                >
+                  Create Root Node
+                </Button>
+              </VStack>
+            </Box>
+          ) : (
+            <NodeHierarchyView
+              nodes={nodes}
+              selectedTokenColor={selectedTokenColor}
+              onNodeSelect={onNodeSelect}
+              nodeValues={nodeValues}
+            />
           )}
-        </>
-      )}
-    </Box>
+        </Box>
+      </Flex>
+    </Flex>
   );
 };
 

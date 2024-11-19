@@ -177,10 +177,10 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       return;
     }
 
-    if (!entityName || membershipConditions.length === 0) {
+    if (!entityName || characteristics.length === 0) {
       toast({
         title: 'Error',
-        description: 'Entity name and at least one membership condition are required',
+        description: 'Entity name and at least one characteristic are required',
         status: 'error',
         duration: 3000,
       });
@@ -460,7 +460,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
               onClick={handleSubmit}
               isLoading={isLoading}
               loadingText="Creating Entity"
-              isDisabled={!entityName || membershipConditions.length === 0 || isLoading}
+              isDisabled={!entityName || characteristics.length === 0 || isLoading}
             >
               Submit
             </Button>

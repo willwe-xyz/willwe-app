@@ -40,7 +40,6 @@ import { ethers } from 'ethers';
 import { usePrivy } from "@privy-io/react-auth";
 import { RequirementsTable } from './RequirementsTable';
 import { OperationConfirmation } from './OperationConfirmation';
-import { StatusIndicator } from './StatusIndicator';
 import { deployments, ABIs } from '../../config/contracts';
 import { NodeState, MembraneMetadata, MembraneRequirement } from '../../types/chainData';
 import { useTransaction } from '../../contexts/TransactionContext';

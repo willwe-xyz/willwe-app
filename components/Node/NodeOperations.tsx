@@ -23,6 +23,19 @@ import {
   Alert,
   AlertIcon,
   Tooltip,
+  Table,
+  Tbody,
+  Tr,
+  Td,
+  Box,
+  Card,
+  CardHeader,
+  CardBody,
+  Badge,
+  HStack,
+  Link,
+  LinkIcon,
+  ExternalLink,
 } from '@chakra-ui/react';
 import {
   GitBranch,
@@ -38,6 +51,12 @@ import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
 import { deployments, ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
+import { RequirementsTable } from '../TokenOperations/RequirementsTable';
+import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
+import { Link as ChakraLink } from '@chakra-ui/react';
+import { ExternalLinkIcon } from '@chakra-ui/icons';
+
+const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
 export type NodeOperationsProps = {
   nodeId: string;
@@ -45,6 +64,13 @@ export type NodeOperationsProps = {
   selectedTokenColor?: string;
   onSuccess?: () => void;
 };
+
+interface MembraneCharacteristic {
+  title: string;
+  description?: string;
+  link?: string;
+}
+
 
 export const NodeOperations = ({
   nodeId,
@@ -255,6 +281,75 @@ export const NodeOperations = ({
       setIsProcessing(false);
     }
   }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess]);
+
+  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
+  const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [isValidatingMembrane, setIsValidatingMembrane] = useState(false);
+  const [membraneError, setMembraneError] = useState<string | null>(null);
+
+  const validateMembrane = useCallback(async (membraneId: string) => {
+    setIsValidatingMembrane(true);
+    setMembraneError(null);
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = await getEthersProvider();
+      
+      if (!provider) {
+        throw new Error('Provider not available');
+      }
+
+      const contract = new ethers.Contract(
+        deployments.Membrane[cleanChainId],
+        ABIs.Membrane,
+        provider
+      );
+
+      const membrane = await contract.getMembraneById(membraneId);
+      if (!membrane) throw new Error('Membrane not found');
+
+      // Use the IPFS_GATEWAY constant
+      const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
+      if (!response.ok) throw new Error('Failed to fetch membrane metadata');
+      
+      const metadata = await response.json();
+      setMembraneMetadata(metadata);
+
+      // Fetch token details
+      setIsLoadingTokens(true);
+      const requirements = await Promise.all(
+        membrane.tokens.map(async (tokenAddress: string, index: number) => {
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+            provider
+          );
+
+          const [symbol, decimals] = await Promise.all([
+            tokenContract.symbol(),
+            tokenContract.decimals()
+          ]);
+
+          return {
+            tokenAddress,
+            symbol,
+            requiredBalance: membrane.balances[index].toString(),
+            formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
+          };
+        })
+      );
+
+      setRequirements(requirements);
+    } catch (error) {
+      console.error('Error validating membrane:', error);
+      setMembraneError('Invalid membrane ID');
+      setMembraneMetadata(null);
+      setRequirements([]);
+    } finally {
+      setIsValidatingMembrane(false);
+      setIsLoadingTokens(false);
+    }
+  }, [chainId, getEthersProvider]);
 
   const handleSpawnWithMembrane = useCallback(async () => {
     if (!membraneId) {
@@ -541,25 +636,111 @@ export const NodeOperations = ({
       </Modal>
 
       {/* Membrane Modal */}
-      <Modal isOpen={activeModal === 'membrane'} onClose={() => setActiveModal(null)}>
+      <Modal 
+        isOpen={activeModal === 'membrane'} 
+        onClose={() => setActiveModal(null)}
+        size="lg"
+      >
         <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Spawn Node with Membrane</ModalHeader>
-          <ModalCloseButton />
+        <ModalContent maxW="600px">
+          <ModalHeader>
+            <Text>Spawn Node with Membrane</Text>
+            <ModalCloseButton />
+          </ModalHeader>
+          
           <ModalBody pb={6}>
-            <VStack spacing={4}>
+            <VStack spacing={4} align="stretch">
               <FormControl isRequired>
                 <FormLabel>Membrane ID</FormLabel>
                 <Input
                   value={membraneId}
-                  onChange={(e) => setMembraneId(e.target.value)}
+                  onChange={(e) => {
+                    setMembraneId(e.target.value);
+                    if (e.target.value) {
+                      validateMembrane(e.target.value);
+                    } else {
+                      setMembraneMetadata(null);
+                      setRequirements([]);
+                      setMembraneError(null);
+                    }
+                  }}
                   placeholder="Enter membrane ID"
-                  type="number"
+                  size="sm"
+                  fontFamily="mono"
+                  fontSize="sm"
                 />
               </FormControl>
 
-              {isProcessing && (
-                <Progress size="xs" isIndeterminate colorScheme="purple" />
+              {(isValidatingMembrane || isLoadingTokens) && (
+                <Box py={2}>
+                  <Progress size="xs" isIndeterminate colorScheme="purple" />
+                  <Text mt={2} fontSize="sm" color="gray.600" textAlign="center">
+                    {isValidatingMembrane ? 'Validating membrane...' : 'Loading token details...'}
+                  </Text>
+                </Box>
+              )}
+
+              {membraneError && (
+                <Alert status="error" size="sm">
+                  <AlertIcon />
+                  <Text fontSize="sm">{membraneError}</Text>
+                </Alert>
+              )}
+
+              {membraneMetadata && !membraneError && (
+                <Box>
+                  <Card variant="outline" bg="purple.50">
+                    <CardBody p={4}>
+                      <VStack align="stretch" spacing={3}>
+                        <HStack justify="space-between">
+                          <Text fontSize="md" fontWeight="bold">{membraneMetadata.name}</Text>
+                          <Badge colorScheme="purple" fontSize="xs">ID: {membraneId.slice(0, 8)}...</Badge>
+                        </HStack>
+                        
+                        {membraneMetadata.characteristics?.map((char, idx) => (
+                          <Box
+                            key={idx}
+                            p={2}
+                            bg="white"
+                            borderRadius="md"
+                            borderWidth="1px"
+                            borderColor="purple.100"
+                          >
+                            <HStack justify="space-between">
+                              <Text fontSize="sm">{char.title}</Text>
+                              {char.link && (
+                                <ChakraLink 
+                                  href={char.link} 
+                                  isExternal 
+                                  color="purple.500"
+                                  fontSize="xs"
+                                >
+                                  <HStack spacing={1}>
+                                    <Text>Open</Text>
+                                    <ExternalLinkIcon size={12} />
+                                  </HStack>
+                                </ChakraLink>
+                              )}
+                            </HStack>
+                            {char.description && (
+                              <Text fontSize="xs" color="gray.600" mt={1}>
+                                {char.description}
+                              </Text>
+                            )}
+                          </Box>
+                        ))}
+                      </VStack>
+                    </CardBody>
+                  </Card>
+
+                  <Box mt={4}>
+                    <Text fontSize="sm" fontWeight="medium" mb={2}>Token Requirements:</Text>
+                    <RequirementsTable
+                      requirements={requirements}
+                      chainId={chainId}
+                    />
+                  </Box>
+                </Box>
               )}
 
               <Button
@@ -567,9 +748,10 @@ export const NodeOperations = ({
                 onClick={handleSpawnWithMembrane}
                 isLoading={isProcessing}
                 width="100%"
-                isDisabled={!membraneId}
+                mt={4}
+                isDisabled={!membraneId || !!membraneError || isValidatingMembrane || isLoadingTokens}
               >
-                Create Node with Membrane
+                Spawn Node with Membrane
               </Button>
             </VStack>
           </ModalBody>

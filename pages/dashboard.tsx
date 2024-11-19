@@ -12,7 +12,7 @@ import {
   useToast 
 } from '@chakra-ui/react';
 import { MainLayout } from '../components/Layout/MainLayout';
-import RootNodeDetails from '../components/RootNodeDetails';
+import { RootNodeDetails } from '../components/RootNodeDetails';
 import ActivityFeed from '../components/ActivityFeed/ActivityFeed';
 import { useNode } from '../contexts/NodeContext';
 import { useColorManagement } from '../hooks/useColorManagement';

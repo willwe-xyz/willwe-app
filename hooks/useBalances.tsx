@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { BalanceItem } from '@covalenthq/client-sdk';
 import { useCovalentBalances } from './useCovalentBalances';
 import { useWillBalances } from './useWillBalances';
