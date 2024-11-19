@@ -1,34 +1,32 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { usePrivy } from '@privy-io/react-auth';
 import { deployments, ABIs } from '../config/contracts';
+import { getRPCUrl } from '../config/contracts';
 
 interface WillWeContract extends ethers.Contract {
   totalSupply(nodeId: string): Promise<bigint>;
 }
 
-export const useWillWeContract = () => {
-  const { getEthersProvider } = usePrivy();
+export const useWillWeContract = (chainId: string) => {
   const [contract, setContract] = useState<WillWeContract | null>(null);
-
+  console.log('chainId', chainId);
   useEffect(() => {
     const initContract = async () => {
       try {
-        const provider = await getEthersProvider();
-        if (!provider) throw new Error('Provider not available');
+        const rpcUrl = getRPCUrl(chainId);
+        if (!rpcUrl) throw new Error(`No RPC URL found for chain ${chainId}`);
 
-        const signer = await provider.getSigner();
-        const cleanChainId = (await signer.getChainId()).toString();
-        const willWeAddress = deployments.WillWe[cleanChainId];
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const willWeAddress = deployments.WillWe[chainId];
 
         if (!willWeAddress) {
-          throw new Error(`No WillWe contract found for chain ${cleanChainId}`);
+          throw new Error(`No WillWe contract found for chain ${chainId}`);
         }
 
         const willWeContract = new ethers.Contract(
           willWeAddress,
           ABIs.WillWe,
-          signer
+          provider
         ) as WillWeContract;
 
         if (typeof willWeContract.totalSupply !== 'function') {
@@ -44,7 +42,7 @@ export const useWillWeContract = () => {
     };
 
     initContract();
-  }, [getEthersProvider]);
+  }, [chainId]);
 
   return contract;
 }

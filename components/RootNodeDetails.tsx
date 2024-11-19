@@ -68,7 +68,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const { wallets } = useWallets();
   const userAddress = wallets?.[0]?.address;
-  const willweContract = useWillWeContract();
+  const willweContract = useWillWeContract(chainId);
   const [totalSupplyValue, setTotalSupplyValue] = useState<bigint>(BigInt(0));
 
   // Fetch total supply
