@@ -5,6 +5,7 @@
     "@tsconfig/next/tsconfig"
   ],
   "compilerOptions": {
+    "noUnusedLocals": false,
     "strict": false,
     "lib": [
       "dom",
