@@ -11,17 +11,26 @@ import {
   Button,
   Alert,
   AlertIcon,
-  Tooltip,
   Progress,
+  InputGroup,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
+  InputRightAddon,
 } from '@chakra-ui/react';
 import { usePrivy } from "@privy-io/react-auth";
-import { useTransaction } from '../../../contexts/TransactionContext';
-import { useContractOperations } from '../../../hooks/useContractOperations';
+import { useNodeTransactions } from '../../../hooks/useNodeTransactions';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { fetchIPFSMetadata } from '../../../utils/ipfs';
 import { deployments, ABIs, getRPCUrl } from '../../../config/contracts';
-import { ethers } from 'ethers';
+import { ethers, formatUnits } from 'ethers';
 import { NodeState } from '../../../types/chainData';
+import MembraneSection from './MembraneSection';
+import InflationSection from './InflationSection';
+import SignalSlider from './SignalSlider';
+import Link from 'next/link';
 
 
 interface SignalFormProps {
@@ -42,43 +51,162 @@ type ChildData = {
 
 const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData, onSuccess }) => {
   const { user, ready } = usePrivy();
-  const { sendSignal } = useContractOperations(chainId);
+  const { signal } = useNodeTransactions(chainId);
 
   // State declarations
   const [childrenData, setChildrenData] = useState<ChildData[]>([]);
   const [loadingChildren, setLoadingChildren] = useState(true);
   const [sliderValues, setSliderValues] = useState<Record<string, number>>({});
-  const [userSignals, setUserSignals] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalAllocation, setTotalAllocation] = useState(0);
+  const [eligibilityImpacts, setEligibilityImpacts] = useState<{ [key: string]: string }>({});
+  const [membraneValues, setMembraneValues] = useState<Record<string, string>>({});
+  const [inflationRates, setInflationRates] = useState<Record<string, string>>({});
+  const [isValidating, setIsValidating] = useState<Record<string, boolean>>({});
+  const [membraneMetadata, setMembraneMetadata] = useState<Record<string, any>>({});
+  const [membraneRequirements, setMembraneRequirements] = useState<Record<string, any>>({});
 
-  // Handle slider changes
-  const handleSliderChange = useCallback((nodeId: string, value: number) => {
-    setSliderValues(prev => {
-      const newValues = { ...prev, [nodeId]: value };
-      const total = Object.values(newValues).reduce((sum, val) => sum + val, 0);
-      setTotalAllocation(total);
-      return newValues;
-    });
+  // Handlers
+  const handleMembraneChange = useCallback((nodeId: string, value: string) => {
+    setMembraneValues(prev => ({
+      ...prev,
+      [nodeId]: value
+    }));
   }, []);
 
-  // Handle form submission
+  const handleInflationChange = useCallback((nodeId: string, value: string) => {
+    setInflationRates(prev => ({
+      ...prev,
+      [nodeId]: value
+    }));
+  }, []);
+
+  // Utility functions
+  const fetchIPFSMetadata = useCallback(async (ipfsHash: string) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_IPFS_GATEWAY}${ipfsHash}`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching IPFS metadata:', error);
+      return null;
+    }
+  }, []);
+
+  // Add getContract utility function
+  const getContract = useCallback(async () => {
+    const cleanChainId = chainId.replace('eip155:', '');
+    const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+    return new ethers.Contract(
+      deployments.WillWe[cleanChainId],
+      ABIs.WillWe,
+      provider
+    );
+  }, [chainId]);
+
+  // Calculate eligibility impact function
+  const calculateEligibilityImpact = useCallback(async (childId: string, newValue: number) => {
+    if (!user?.wallet?.address) {
+      console.warn('User wallet not ready');
+      return;
+    }
+
+    try {
+      const contract = await getContract();
+      const currentSignal = sliderValues[childId] || 0;
+      
+      const newEligibility = await contract.calculateUserTargetedPreferenceAmount(
+        childId,
+        nodeId,
+        newValue,
+        user.wallet.address
+      );
+      
+      const currentEligibility = await contract.calculateUserTargetedPreferenceAmount(
+        childId,
+        nodeId,
+        currentSignal,
+        user.wallet.address
+      );
+
+      const impact = newEligibility.sub(currentEligibility);
+      const formattedImpact = ethers.formatUnits(impact, 18);
+      
+      setEligibilityImpacts(prev => ({
+        ...prev,
+        [childId]: formattedImpact
+      }));
+    } catch (error) {
+      console.error('Error calculating eligibility impact:', error);
+    }
+  }, [getContract, nodeId, sliderValues, user?.wallet?.address]);
+
+  // Event handlers after all utility functions
+  const handleSliderChange = useCallback((childId: string, newValue: number) => {
+    setSliderValues(prev => ({
+      ...prev,
+      [childId]: newValue
+    }));
+
+    // Recalculate total with 2 decimal precision
+    const newTotal = Object.values({
+      ...sliderValues,
+      [childId]: newValue
+    }).reduce((sum, val) => sum + val, 0);
+    
+    setTotalAllocation(Number(newTotal.toFixed(2)));
+  }, [sliderValues]);
+
+  // New input change handler
+  const handleInputChange = useCallback(async (childId: string, value: string) => {
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+      const updatedValues = {
+        ...sliderValues,
+        [childId]: numValue / 100
+      };
+      setSliderValues(updatedValues);
+      
+      // Calculate new total allocation
+      const newTotal = Object.values(updatedValues).reduce((sum, val) => sum + (val * 100), 0);
+      setTotalAllocation(newTotal);
+      
+      await calculateEligibilityImpact(childId, numValue / 100);
+    }
+  }, [calculateEligibilityImpact, sliderValues]);
+
   const handleSubmit = useCallback(async () => {
     if (Math.abs(totalAllocation - 100) > 0.01) {
       setError('Total allocation must equal 100%');
       return;
     }
-
+  
     try {
       setIsSubmitting(true);
       setError(null);
-
-      const signalArray = childrenData.map(child => 
-        Math.round(sliderValues[child.nodeId] * 100)
-      );
-
-      await sendSignal(nodeId, signalArray);
+  
+      // Convert signals to basis points
+      const signalArray = [
+        // Convert membrane value to number or default to 0
+        parseInt(membraneValues[nodeId] || '0'),
+        // Convert inflation value to number or default to 0
+        parseInt(inflationRates[nodeId] || '0'),
+        // Add the child node signals converted to basis points
+        ...childrenData.map(child => {
+          // Convert percentage directly to basis points
+          // If slider shows 75.66%, this should become 7566 basis points
+          return Math.round(sliderValues[child.nodeId] * 100)
+        })
+      ];
+  
+      // Verify the sum of child signals equals 10000 (100.00%)
+      const childSignalsSum = signalArray.slice(2).reduce((sum, val) => sum + val, 0);
+      if (childSignalsSum !== 10000) {
+        throw new Error(`Invalid signal sum: ${childSignalsSum}. Expected 10000 basis points.`);
+      }
+      console.log("Submitting signals:", signalArray);
+      await signal(nodeId, signalArray);
       if (onSuccess) onSuccess();
       
     } catch (error: any) {
@@ -87,7 +215,16 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
     } finally {
       setIsSubmitting(false);
     }
-  }, [childrenData, sliderValues, sendSignal, nodeId, totalAllocation, onSuccess]);
+  }, [
+    childrenData, 
+    sliderValues, 
+    signal, 
+    nodeId, 
+    totalAllocation, 
+    onSuccess, 
+    membraneValues, 
+    inflationRates
+  ]);
 
   // Fetch children data
   const fetchChildrenData = useCallback(async () => {
@@ -134,19 +271,29 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
             // Keep the default membraneName (last 6 chars of nodeId)
           }
 
-          const eligibilityPerSecond = await contract.calculateUserTargetedPreferenceAmount(
-            node.basicInfo[0],
-            nodeId,
-            existingSignals[index]?.[0] || 0,
-            user.wallet.address
-          );
+          let eligibilityPerSecond;
+          try {
+            eligibilityPerSecond = await contract.calculateUserTargetedPreferenceAmount(
+              node.basicInfo[0],
+              nodeId,
+              existingSignals[index]?.[0] || 0,
+              user.wallet.address
+            );
+          } catch (error) {
+            console.debug('Error calculating preference amount, defaulting to 0:', error);
+            eligibilityPerSecond = BigInt(0);
+          }
+
+          // Convert basis points to percentage for initial slider value
+          const currentSignalBasisPoints = Number(existingSignals[index]?.[0] || 0);
+          const currentSignalPercentage = currentSignalBasisPoints / 100;
 
           return {
             nodeId: node.basicInfo[0],
             parentId: nodeId,
             membraneId: node.basicInfo[5],
             membraneName,
-            currentSignal: Number(existingSignals[index]?.[0] || 0) / 100,
+            currentSignal: currentSignalBasisPoints, // Keep original basis points for lastSignal
             eligibilityPerSecond: eligibilityPerSecond.toString()
           };
         })
@@ -154,16 +301,19 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
       setChildrenData(childrenWithMetadata);
       
-      // Initialize with existing signals
+      // Initialize sliders with percentage values
       const initialValues = Object.fromEntries(
         childrenWithMetadata.map(child => [
           child.nodeId,
-          child.currentSignal
+          child.currentSignal / 100 // Convert basis points to percentage
         ])
       );
       
       setSliderValues(initialValues);
-      setUserSignals(initialValues);
+      
+      // Calculate initial total
+      const initialTotal = Object.values(initialValues).reduce((sum, val) => sum + val, 0);
+      setTotalAllocation(Number(initialTotal.toFixed(2)));
       
     } catch (error) {
       console.error('Error fetching children data:', error);
@@ -210,68 +360,95 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   // Render main component
   return (
     <VStack spacing={6} width="100%">
-      {childrenData.map(child => (
-        <Box key={child.nodeId} width="100%" p={4} borderWidth={1} borderRadius="md">
-          <VStack align="stretch" spacing={2}>
-            <HStack justify="space-between">
-              <Text fontWeight="medium">{child.membraneName}</Text>
-              <Text color="gray.600" fontSize="sm">
-                {sliderValues[child.nodeId]?.toFixed(1)}%
-              </Text>
-            </HStack>
-
-            <Tooltip
-              label={`Current allocation: ${sliderValues[child.nodeId]?.toFixed(1)}%`}
-              placement="top"
-            >
-              <Slider
-                value={sliderValues[child.nodeId] || 0}
-                onChange={(v) => handleSliderChange(child.nodeId, v)}
-                min={0}
-                max={100}
-                step={0.1}
-                isDisabled={isSubmitting}
-              >
-                <SliderTrack>
-                  <SliderFilledTrack />
-                </SliderTrack>
-                <SliderThumb />
-              </Slider>
-            </Tooltip>
-
-            <Text fontSize="xs" color="gray.500">
-              Previous: {userSignals[child.nodeId]?.toFixed(1)}%
-            </Text>
-          </VStack>
-        </Box>
-      ))}
-
-      <Box width="100%" p={4} bg="gray.50" borderRadius="md">
-        <HStack justify="space-between">
-          <Text>Total Allocation:</Text>
-          <Text 
-            fontWeight="bold"
-            color={Math.abs(totalAllocation - 100) < 0.01 ? 'green.500' : 'red.500'}
-          >
-            {totalAllocation.toFixed(1)}%
-          </Text>
-        </HStack>
+      {/* Membrane Section - Full width */}
+      <Box width="100%">
+        <MembraneSection
+          membraneId={membraneValues[nodeId] || ''}
+          setMembraneId={(value) => handleMembraneChange(nodeId, value)}
+          membraneMetadata={membraneMetadata[nodeId]}
+          membraneRequirements={membraneRequirements[nodeId] || []}
+          isLoadingMembrane={false}
+          isValidating={isValidating[nodeId] || false}
+          isProcessing={isSubmitting}
+        />
       </Box>
 
-      <Button
-        colorScheme="purple"
-        width="100%"
-        onClick={handleSubmit}
-        isLoading={isSubmitting}
-        loadingText="Submitting Signals..."
-        isDisabled={
-          isSubmitting || 
-          Math.abs(totalAllocation - 100) > 0.01 ||
-          !user?.wallet?.address
-        }
-      >
-        Submit Signals
-      </Button>
+      {/* Inflation Section - Full width */}
+      <Box width="100%">
+        <InflationSection
+          inflationRate={inflationRates[nodeId] || ''}
+          setInflationRate={(value) => handleInflationChange(nodeId, value)}
+          isProcessing={isSubmitting}
+        />
+      </Box>
+
+      {/* Signal Sliders Section */}
+      <VStack spacing={4} width="100%">
+        {childrenData.map((child) => (
+          <Box key={child.nodeId} width="100%" p={4} borderWidth="1px" borderRadius="md">
+            <VStack spacing={4} align="stretch">
+              <Link href={`/nodes/${chainId}/${child.nodeId}`} passHref>
+                <Text 
+                  cursor="pointer" 
+                  color="purple.500" 
+                  _hover={{ 
+                    textDecoration: 'underline',
+                    color: 'purple.600'
+                  }}
+                  fontWeight="medium"
+                >
+                  {child.membraneName || child.nodeId.slice(-6)}
+                </Text>
+              </Link>
+              
+              <SignalSlider
+                nodeId={nodeId}
+                parentId={child.nodeId}
+                childId={child.nodeId}
+                value={sliderValues[child.nodeId] }
+                lastSignal={(child.currentSignal).toString()}
+                balance={child.eligibilityPerSecond}
+                eligibilityPerSecond={child.eligibilityPerSecond}
+                totalInflationPerSecond="0" // Add this from parent node data if available
+                onChange={(v) => handleSliderChange(child.nodeId, v)}
+                onChangeEnd={(v) => handleSliderChange(child.nodeId, v)}
+                isDisabled={isSubmitting}
+                selectedTokenColor="purple.500"
+                chainId={chainId}
+              />
+            </VStack>
+          </Box>
+        ))}
+
+        {/* Total Allocation */}
+        <Box width="100%" p={4} bg="gray.50" borderRadius="md">
+          <HStack justify="space-between">
+            <Text>Total Allocation:</Text>
+            <Text 
+              fontWeight="bold"
+              color={Math.abs(totalAllocation - 100) < 0.01 ? 'green.500' : 'red.500'}
+            >
+              {totalAllocation.toFixed(2)}%
+            </Text>
+          </HStack>
+        </Box>
+
+        {/* Submit Button */}
+        <Button
+          colorScheme="purple"
+          width="100%"
+          onClick={handleSubmit}
+          isLoading={isSubmitting}
+          loadingText="Submitting Signals..."
+          isDisabled={
+            isSubmitting || 
+            Math.abs(totalAllocation - 100) > 0.01 ||
+            !user?.wallet?.address
+          }
+        >
+          Submit Signals
+        </Button>
+      </VStack>
     </VStack>
   );
 };

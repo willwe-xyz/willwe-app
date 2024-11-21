@@ -23,12 +23,12 @@ export const InflationSection: React.FC<InflationSectionProps> = ({
 }) => {
   return (
     <Box p={4} bg="purple.50" borderRadius="lg">
-      <Text fontSize="lg" fontWeight="semibold" mb={4}>
+      <Box mb={4}>
         <HStack>
           <Activity size={16} />
-          <Text>Inflation Rate</Text>
+          <Text fontSize="lg" fontWeight="semibold">Inflation Rate</Text>
         </HStack>
-      </Text>
+      </Box>
 
       <FormControl>
         <FormLabel>Rate (gwei/sec)</FormLabel>

@@ -19,3 +19,20 @@ export const validateSignals = (signals: number[]): boolean => {
   const sum = signals.reduce((acc, val) => acc + val, 0);
   return Math.abs(sum - 100) < 0.001; // Allow for small floating point errors
 };
+
+export const formatUnits = (value: string, decimals: number = 2): string => {
+  const num = parseFloat(value);
+  return num.toFixed(decimals);
+};
+
+export const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): ((...args: Parameters<T>) => void) => {
+  let timeout: NodeJS.Timeout;
+  
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};

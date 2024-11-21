@@ -18,10 +18,10 @@ import {
   Link,
   Code,
 } from '@chakra-ui/react';
-import { Trash2, Plus, ExternalLink, Check, AlertTriangle } from 'lucide-react';
+import { Trash2, Plus, ExternalLink, Check } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
 import { ERC20Bytecode, ERC20CreateABI } from '../const/envconst';
-import { ethers } from 'ethers';
+import { ContractRunner, ethers, Provider } from 'ethers';
 import { useTransactionHandler } from '../hooks/useTransactionHandler';
 import { getExplorerLink } from '../config/contracts';
 
@@ -45,11 +45,10 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
   const [tokenName, setTokenName] = useState('');
   const [tokenSymbol, setTokenSymbol] = useState('');
   const [recipients, setRecipients] = useState<Recipient[]>([
-    { address: '', balance: '' }
+    { address: userAddress || '', balance: '' }
   ]);
   const [deploymentState, setDeploymentState] = useState<'idle' | 'deploying' | 'complete'>('idle');
   const [deployedAddress, setDeployedAddress] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const toast = useToast();
@@ -96,14 +95,19 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
       if (validRecipients.length === 0) {
         throw new Error('At least one valid recipient is required');
       }
-
       const provider = await getEthersProvider();
-      const signer = await provider.getSigner();
+      const signer = provider.getSigner();
+      const runner: ContractRunner = {
+        call: signer.call.bind(signer),
+        sendTransaction: signer.sendTransaction.bind(signer),
+        estimateGas: signer.estimateGas.bind(signer),
+        provider: provider as unknown as Provider
+          };
       
       const factory = new ethers.ContractFactory(
         ERC20CreateABI,
         ERC20Bytecode,
-        signer
+        runner
       );
 
       // Create deployment transaction
@@ -141,7 +145,6 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
 
     } catch (error: any) {
       console.error('Token deployment error:', error);
-      setError(error.message);
       setDeploymentState('idle');
       
       toast({

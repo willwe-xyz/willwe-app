@@ -17,7 +17,6 @@ import {
   AlertIcon,
   Progress,
   Text,
-  Badge,
   useToast,
   Link,
   IconButton,
@@ -34,12 +33,12 @@ import {
   Copy,
   Check,
   AlertTriangle,
-  Info,
 } from 'lucide-react';
 import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
 import { validateToken } from '../utils/tokenValidation';
 import { getExplorerLink } from '../config/contracts';
+
 interface DefineEntityProps {
   chainId: string;
   onSubmit?: () => void;
@@ -226,10 +225,11 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         throw new Error(`No Membrane contract found for chain ${chainId}`);
       }
 
+      
       const contract = new ethers.Contract(
         membraneAddress,
         ABIs.Membrane,
-        signer
+        signer as unknown as ethers.Signer
       );
 
       // Prepare transaction parameters
@@ -284,7 +284,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
 
         setCreationResult({
           membraneId,
-          txHash: receipt.hash,
+          txHash: receipt.transactionHash,
           timestamp: Date.now()
         });
 

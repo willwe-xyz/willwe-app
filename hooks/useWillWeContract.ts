@@ -5,11 +5,20 @@ import { getRPCUrl } from '../config/contracts';
 
 interface WillWeContract extends ethers.Contract {
   totalSupply(nodeId: string): Promise<bigint>;
+  getChildParentEligibilityPerSec(
+    childId: string,
+    parentId: string
+  ): Promise<bigint>;
+  calculateUserTargetedPreferenceAmount(
+    childId: string,
+    parentId: string,
+    signal: number,
+    user: string
+  ): Promise<bigint>;
 }
 
 export const useWillWeContract = (chainId: string) => {
   const [contract, setContract] = useState<WillWeContract | null>(null);
-  console.log('chainId', chainId);
   useEffect(() => {
     const initContract = async () => {
       try {

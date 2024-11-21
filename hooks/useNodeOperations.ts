@@ -71,7 +71,8 @@ export function useNodeOperations(chainId: string) {
       chainId,
       async () => {
         const contract = await getContract();
-        return contract.sendSignal(nodeId, signals, { gasLimit: 300000 });
+        const gasEstimate = await contract.sendSignal.estimateGas(nodeId, signals);
+        return contract.sendSignal(nodeId, signals, { gasLimit: gasEstimate });
       },
       {
         successMessage: 'Signal sent successfully',

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Slider,
@@ -11,6 +12,12 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { formatBalance } from '../../../utils/formatters';
+import { formatUnits } from './utils';
+import { usePrivy } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
+import { getContract } from 'viem';
+import { useWillWeContract } from '../../../hooks/useWillWeContract';
+import { Link as RouterLink } from 'react-router-dom';
 
 interface SignalSliderProps {
   nodeId: string;
@@ -25,78 +32,144 @@ interface SignalSliderProps {
   onChangeEnd: (value: number) => void;
   isDisabled?: boolean;
   selectedTokenColor: string;
+  chainId: string;
+  nodeName?: string;
 }
 
+// Separate impact display component
+const EligibilityImpact = memo(({ impact }: { impact: string | null }) => {
+  if (!impact) return null;
+  return (
+    <Text fontSize="xs" color={parseFloat(impact) >= 0 ? "green.500" : "red.500"}>
+      Impact: {parseFloat(impact) >= 0 ? "+" : ""}
+      {formatUnits(impact, 10)} tokens/day
+    </Text>
+  );
+});
+
 export const SignalSlider: React.FC<SignalSliderProps> = ({
-  nodeId,
-  value,
+  nodeId,        // This is the parent/NodeDetails node id
+  parentId,      // This is the child/slider node id
+  value: externalValue,
   lastSignal,
   balance,
-  eligibilityPerSecond,
-  totalInflationPerSecond,
   onChange,
   onChangeEnd,
   isDisabled,
   selectedTokenColor,
+  chainId,
+  nodeName,
 }) => {
-  // Calculate percentages
-  const eligibilityPercentage = totalInflationPerSecond !== '0' 
-    ? (Number(eligibilityPerSecond) / Number(totalInflationPerSecond)) * 100 
-    : 0;
+  const { user } = usePrivy();
+  const contract = useWillWeContract(chainId);
+  const [localValue, setLocalValue] = useState(externalValue);
+  const [eligibilityImpact, setEligibilityImpact] = useState<string | null>(null);
+
+  // Convert basis points to percentage for display only - this should never change while sliding
+  const lastPreferencePercentage = (parseInt(lastSignal) / 100).toFixed(2);
+
+  // Update local value when external value changes
+  useEffect(() => {
+    setLocalValue(externalValue);
+  }, [externalValue]);
+
+  const calculateEligibilityImpact = useCallback(async (newValue: number) => {
+    if (!user?.wallet?.address || !contract) return;
+    try {
+      // Convert percentage to basis points for contract interaction
+      const newValueBasis = Math.round(newValue * 100);
+      
+      let newEligibility, currentEligibility;
+      
+      try {
+        // Calculate current eligibility first (with last signal)
+        currentEligibility = await contract.calculateUserTargetedPreferenceAmount(
+          parentId,    // childId (slider node)
+          nodeId,      // parentId (NodeDetails node)
+          parseInt(lastSignal),
+          user.wallet.address
+        );
+
+        // Calculate new eligibility with the proposed signal value
+        newEligibility = await contract.calculateUserTargetedPreferenceAmount(
+          parentId,    // childId (slider node)
+          nodeId,      // parentId (NodeDetails node)
+          newValueBasis,
+          user.wallet.address
+        );
+
+        // Calculate the difference
+        const impact = newEligibility - currentEligibility;
+        const formattedImpact = ethers.formatUnits(impact, 18);
+        // Calculate daily impact (multiply by seconds in a day)
+        const dailyImpact = parseFloat(formattedImpact) * (24 * 60 * 60);
+        setEligibilityImpact(dailyImpact.toString());
+      } catch (error) {
+        console.error('Error calculating eligibility:', error);
+        setEligibilityImpact("0");
+      }
+    } catch (error) {
+      console.error('Error in eligibility impact calculation:', error);
+      setEligibilityImpact("0");
+    }
+  }, [nodeId, parentId, lastSignal, user?.wallet?.address, contract]);
+
+  // Handle local changes without propagating to parent immediately
+  const handleChange = useCallback((v: number) => {
+    setLocalValue(v);
+  }, []);
+
+  // Only notify parent when sliding ends
+  const handleChangeEnd = useCallback((v: number) => {
+    setLocalValue(v);
+    onChange(v);
+    onChangeEnd(v);
+    calculateEligibilityImpact(v);
+  }, [onChange, onChangeEnd, calculateEligibilityImpact]);
 
   return (
     <VStack align="stretch" spacing={2} width="100%" mb={4}>
       <HStack justify="space-between">
         <Text fontSize="sm" color="gray.600">
-          Balance: {formatBalance(balance)}
-        </Text>
-        <Text fontSize="sm" color="gray.600">
-          Last Signal: {lastSignal}%
+          Last Preference: {lastPreferencePercentage}%
         </Text>
       </HStack>
 
-      <Box position="relative" py={4}>
-        <Tooltip
-          label={`Current Eligibility: ${eligibilityPercentage.toFixed(2)}%`}
-          placement="top"
+      <Slider
+        value={localValue}
+        onChange={handleChange}
+        onChangeEnd={handleChangeEnd}
+        min={0}
+        max={100}
+        step={0.1}
+        isDisabled={isDisabled}
+      >
+        <SliderTrack 
+          bg={`${selectedTokenColor}20`} 
+          h="4px"
         >
-          <Box
-            position="absolute"
-            left={`${eligibilityPercentage}%`}
-            top="0"
-            height="100%"
-            width="2px"
-            bg={`${selectedTokenColor}40`}
-            zIndex={1}
+          <SliderFilledTrack bg={selectedTokenColor} />
+        </SliderTrack>
+        <Tooltip
+          label={`${localValue.toFixed(1)}%`}
+          placement="top"
+          bg={selectedTokenColor}
+        >
+          <SliderThumb 
+            boxSize={6} 
+            bg="white" 
+            borderWidth="2px"
+            borderColor={selectedTokenColor}
+            _focus={{
+              boxShadow: `0 0 0 3px ${selectedTokenColor}40`
+            }}
           />
         </Tooltip>
+      </Slider>
 
-        <Slider
-          aria-label="signal-strength"
-          value={value}
-          min={0}
-          max={100}
-          step={0.1}
-          onChange={onChange}
-          onChangeEnd={onChangeEnd}
-          isDisabled={isDisabled}
-        >
-          <SliderTrack bg={`${selectedTokenColor}20`}>
-            <SliderFilledTrack bg={selectedTokenColor} />
-          </SliderTrack>
-          <SliderThumb boxSize={6} bg={selectedTokenColor}>
-            <Box color="white" fontSize="xs">
-              {value.toFixed(1)}
-            </Box>
-          </SliderThumb>
-        </Slider>
-      </Box>
-
-      <Text fontSize="xs" color="gray.500" textAlign="right">
-        Current Eligibility: {formatBalance(eligibilityPerSecond)}/sec ({eligibilityPercentage.toFixed(2)}%)
-      </Text>
+      <EligibilityImpact impact={eligibilityImpact} />
     </VStack>
   );
 };
 
-export default SignalSlider;
+export default memo(SignalSlider);

@@ -21,13 +21,24 @@ export interface UserSignal {
 
 // Matches the smart contract's NodeState struct exactly
 export interface NodeState {
-  basicInfo: string[];      // Length 9 array of strings
+  basicInfo: [
+    nodeId: string,           // basicInfo[0]
+    inflation: string,        // basicInfo[1]
+    balanceAnchor: string,   // basicInfo[2] - balance in parent reserve
+    balanceBudget: string,   // basicInfo[3] - budget
+    value: string,           // basicInfo[4] - valuation denominated in root token
+    membraneId: string,      // basicInfo[5] - membrane id
+    balanceOfUser: string,   // basicInfo[6] - balance of current user in this node
+    eligibilityPerSec: string, // basicInfo[7] - redistribution eligibility from parent per sec
+    lastRedistribution: string // basicInfo[8] - last redistribution timestamp
+  ];
   membraneMeta: string;     // IPFS hash or metadata string
   membersOfNode: string[];  // Array of ethereum addresses
   childrenNodes: string[];  // Array of node IDs
   rootPath: string[];       // Array of node IDs from root to this node
   signals: UserSignal[];    // Array of UserSignal structs
 }
+
 
 // For membrane-related data
 export interface MembraneRequirement {

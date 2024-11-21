@@ -7,7 +7,6 @@ import {
   Button,
   VStack,
   Code,
-  useToast
 } from '@chakra-ui/react';
 import { AlertTriangle } from 'lucide-react';
 
@@ -22,7 +21,7 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
+  public override state: State = {
     hasError: false,
     error: null,
     errorInfo: null
@@ -36,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
     };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
     this.setState({
       error,
@@ -52,7 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
     });
   };
 
-  public render() {
+  public override render() {
     if (this.state.hasError) {
       return (
         <Container maxW="container.md" py={10}>

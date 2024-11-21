@@ -42,8 +42,6 @@ export default function HeaderButtons({
   chainId,
   logout,
   login,
-  selectedNodeId,
-  onNodeSelect,
   isTransacting,
   buttonHoverBg = 'purple.50'
 }: HeaderButtonsProps) {

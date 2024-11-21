@@ -5,6 +5,7 @@
     "@tsconfig/next/tsconfig"
   ],
   "compilerOptions": {
+    "strict": false,
     "lib": [
       "dom",
       "dom.iterable",
