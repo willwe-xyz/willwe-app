@@ -4,12 +4,15 @@ import { ContractTransactionResponse } from 'ethers';
 import { ExternalLink } from 'lucide-react';
 import { getChainById } from '../../config/contracts';
 import { useTransaction } from '../../contexts/TransactionContext';
+import { usePrivy } from '@privy-io/react-auth';
+
 
 interface TransactionHandlerProps {
   children: React.ReactNode;
+  chainId: string;
 }
 
-export const TransactionHandler: React.FC<TransactionHandlerProps> = ({ children }) => {
+export const TransactionHandler: React.FC<TransactionHandlerProps> = ({ children, chainId }) => {
   const { isTransacting, currentHash, error } = useTransaction();
   const toast = useToast();
 
@@ -24,7 +27,7 @@ export const TransactionHandler: React.FC<TransactionHandlerProps> = ({ children
           <Box>
             <Text mb={2}>Transaction submitted. Waiting for confirmation...</Text>
             <Link 
-              href={`${getChainById(currentHash.chainId.toString()).blockExplorers?.default.url}/tx/${currentHash.hash}`}
+              href={`${getChainById(String(chainId)).blockExplorers?.default.url}/tx/${currentHash}`}
               isExternal
               display="flex"
               alignItems="center"

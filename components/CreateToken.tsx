@@ -1,5 +1,5 @@
 // File: /components/CreateToken.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   VStack,
   HStack,
@@ -21,7 +21,7 @@ import {
 import { Trash2, Plus, ExternalLink, Check } from 'lucide-react';
 import { usePrivy } from "@privy-io/react-auth";
 import { ERC20Bytecode, ERC20CreateABI } from '../const/envconst';
-import { ContractRunner, ethers, Provider } from 'ethers';
+import { ContractRunner, ethers, Provider, TransactionRequest } from 'ethers';
 import { useTransactionHandler } from '../hooks/useTransactionHandler';
 import { getExplorerLink } from '../config/contracts';
 
@@ -53,7 +53,7 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
 
   const toast = useToast();
   const { authenticated, ready, getEthersProvider } = usePrivy();
-  const { executeTransaction } = useTransactionHandler();
+  const { executeTransaction } = useTransactionHandler(chainId);
 
   // Recipients management
   const addRecipient = useCallback(() => {
@@ -98,11 +98,17 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
       const provider = await getEthersProvider();
       const signer = provider.getSigner();
       const runner: ContractRunner = {
-        call: signer.call.bind(signer),
-        sendTransaction: signer.sendTransaction.bind(signer),
-        estimateGas: signer.estimateGas.bind(signer),
+        call: async (tx: TransactionRequest) => await signer.call(tx as any),
+        sendTransaction: async (tx: TransactionRequest) => {
+          const response = await signer.sendTransaction(tx as any);
+          return response as unknown as ethers.TransactionResponse;
+        },
+        estimateGas: async (tx: TransactionRequest) => {
+          const estimate = await signer.estimateGas(tx as any);
+          return BigInt(estimate.toString());
+        },
         provider: provider as unknown as Provider
-          };
+      };
       
       const factory = new ethers.ContractFactory(
         ERC20CreateABI,
@@ -118,8 +124,7 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
         validRecipients.map(r => ethers.parseUnits(r.balance, 18))
       );
       // Execute transaction with proper lifecycle handling
-      const transactionResult = await executeTransaction(deploymentTx, chainId);
-
+      const transactionResult = await executeTransaction(deploymentTx);
       if (transactionResult.contractAddress) {
         const deployedAddress = transactionResult.contractAddress;
         setDeployedAddress(deployedAddress);

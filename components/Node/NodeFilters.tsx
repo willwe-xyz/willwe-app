@@ -40,12 +40,13 @@ export const NodeFilters: React.FC<NodeFiltersProps> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const handleSearch = (term: string) => {
-    setSearchTerm(term);
-    const filtered = nodes.filter(node => 
-      node.basicInfo[0]?.toLowerCase().includes(term.toLowerCase()) ||
-      (node.metadata?.name || '').toLowerCase().includes(term.toLowerCase())
-    );
-    onFilterChange(filtered);
+    /// @todo implement search with membrane metadata
+    // setSearchTerm(term);
+    // const filtered = nodes.filter(node => 
+    //   node.basicInfo[0]?.toLowerCase().includes(term.toLowerCase()) ||
+    //   (node.membraneMeta?. || '').toLowerCase().includes(term.toLowerCase())
+    // );
+    // onFilterChange(filtered);
   };
 
   const handleSort = (field: string) => {

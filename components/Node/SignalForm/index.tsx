@@ -3,22 +3,11 @@ import {
   VStack,
   HStack,
   Text,
-  Slider,
-  SliderTrack,
-  SliderFilledTrack,
-  SliderThumb,
   Box,
-  Button,
+  Button, 
   Alert,
   AlertIcon,
   Progress,
-  InputGroup,
-  NumberInput,
-  NumberInputField,
-  NumberInputStepper,
-  NumberIncrementStepper,
-  NumberDecrementStepper,
-  InputRightAddon,
 } from '@chakra-ui/react';
 import { usePrivy } from "@privy-io/react-auth";
 import { useNodeTransactions } from '../../../hooks/useNodeTransactions';
@@ -59,7 +48,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   const [sliderValues, setSliderValues] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalAllocation, setTotalAllocation] = useState(0);
+  const [totalAllocation, setTotalAllocation] = useState<number>(0);
   const [eligibilityImpacts, setEligibilityImpacts] = useState<{ [key: string]: string }>({});
   const [membraneValues, setMembraneValues] = useState<Record<string, string>>({});
   const [inflationRates, setInflationRates] = useState<Record<string, string>>({});
@@ -153,9 +142,9 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
     const newTotal = Object.values({
       ...sliderValues,
       [childId]: newValue
-    }).reduce((sum, val) => sum + val, 0);
+    }).reduce((sum, val) => sum + (val || 0), 0);
     
-    setTotalAllocation(Number(newTotal.toFixed(2)));
+    setTotalAllocation(Number(newTotal));
   }, [sliderValues]);
 
   // New input change handler
@@ -228,7 +217,27 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
   // Fetch children data
   const fetchChildrenData = useCallback(async () => {
-    if (!ready || !chainId || !parentNodeData || !user?.wallet?.address) {
+    // Add more detailed validation
+    if (!ready) {
+      console.log('Privy not ready');
+      setLoadingChildren(false);
+      return;
+    }
+    
+    if (!chainId) {
+      console.log('No chainId provided');
+      setLoadingChildren(false);
+      return;
+    }
+    
+    if (!parentNodeData) {
+      console.log('No parent node data');
+      setLoadingChildren(false);
+      return;
+    }
+    
+    if (!user?.wallet?.address) {
+      console.log('No wallet address');
       setLoadingChildren(false);
       return;
     }
@@ -236,11 +245,24 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
     try {
       const cleanChainId = chainId.replace('eip155:', '');
       const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+      
+      // Validate contract address
+      if (!deployments.WillWe[cleanChainId]) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+      
       const contract = new ethers.Contract(
         deployments.WillWe[cleanChainId],
         ABIs.WillWe,
         provider
       );
+
+      // Validate children nodes exist
+      if (!parentNodeData.childrenNodes || parentNodeData.childrenNodes.length === 0) {
+        setChildrenData([]);
+        setLoadingChildren(false);
+        return;
+      }
 
       const childNodes = await contract.getNodes(parentNodeData.childrenNodes);
       const existingSignals = await contract.getUserNodeSignals(
@@ -248,76 +270,82 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         nodeId
       );
 
+      // Add validation for childNodes
+      if (!childNodes || childNodes.length === 0) {
+        throw new Error('No child nodes returned from contract');
+      }
+
       const childrenWithMetadata = await Promise.all(
         childNodes.map(async (node: any, index: number) => {
-          // Default to last 6 chars of nodeId
+          // Validate node data
+          if (!node?.basicInfo?.[0]) {
+            console.error('Invalid node data:', node);
+            return null;
+          }
+
+          // Rest of your mapping logic...
           let membraneName = node.basicInfo[0].slice(-6);
           
           try {
-            // Check if membraneMeta exists and is a valid CID
             if (node.membraneMeta && typeof node.membraneMeta === 'string' && node.membraneMeta.trim() !== '') {
-              const metadataUrl = `${'https://underlying-tomato-locust.myfilebase.com/ipfs/'}${node.membraneMeta.replace('ipfs://', '')}`;
-              console.log('Fetching metadata from:', metadataUrl);
+              // Hardcode the IPFS gateway URL and use CID directly
+              const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
+              const metadataUrl = `${IPFS_GATEWAY}${node.membraneMeta.trim()}`;
+              
+              console.log('Fetching metadata from:', metadataUrl); // Debug log
               
               const response = await fetch(metadataUrl);
-              if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+              if (response.ok) {
+                const metadata = await response.json();
+                membraneName = metadata.title || metadata.name || membraneName;
+              } else {
+                console.error('Failed to fetch metadata:', response.status, response.statusText);
               }
-              const metadata = await response.json();
-              membraneName = metadata.title || metadata.name || membraneName;
             }
           } catch (error) {
             console.error('Error fetching membrane metadata:', error);
-            // Keep the default membraneName (last 6 chars of nodeId)
+            // Continue with default membraneName
           }
 
-          let eligibilityPerSecond;
-          try {
-            eligibilityPerSecond = await contract.calculateUserTargetedPreferenceAmount(
-              node.basicInfo[0],
-              nodeId,
-              existingSignals[index]?.[0] || 0,
-              user.wallet.address
-            );
-          } catch (error) {
-            console.debug('Error calculating preference amount, defaulting to 0:', error);
-            eligibilityPerSecond = BigInt(0);
-          }
-
-          // Convert basis points to percentage for initial slider value
           const currentSignalBasisPoints = Number(existingSignals[index]?.[0] || 0);
-          const currentSignalPercentage = currentSignalBasisPoints / 100;
 
           return {
             nodeId: node.basicInfo[0],
             parentId: nodeId,
             membraneId: node.basicInfo[5],
             membraneName,
-            currentSignal: currentSignalBasisPoints, // Keep original basis points for lastSignal
-            eligibilityPerSecond: eligibilityPerSecond.toString()
+            currentSignal: currentSignalBasisPoints,
+            eligibilityPerSecond: '0' // Default to 0 if calculation fails
           };
         })
       );
 
-      setChildrenData(childrenWithMetadata);
+      // Filter out any null values from failed mappings
+      const validChildren = childrenWithMetadata.filter(child => child !== null);
       
-      // Initialize sliders with percentage values
+      if (validChildren.length === 0) {
+        throw new Error('No valid children data could be processed');
+      }
+
+      setChildrenData(validChildren);
+      
+      // Initialize sliders
       const initialValues = Object.fromEntries(
-        childrenWithMetadata.map(child => [
+        validChildren.map(child => [
           child.nodeId,
-          child.currentSignal / 100 // Convert basis points to percentage
+          child.currentSignal / 100
         ])
       );
       
       setSliderValues(initialValues);
       
-      // Calculate initial total
-      const initialTotal = Object.values(initialValues).reduce((sum, val) => sum + val, 0);
-      setTotalAllocation(Number(initialTotal.toFixed(2)));
-      
+      // Calculate initial total with explicit typing
+      const initialTotal = Object.values(initialValues).reduce((sum: number, val: unknown) => sum + (Number(val) || 0), 0);
+      setTotalAllocation(Number(initialTotal));
+
     } catch (error) {
-      console.error('Error fetching children data:', error);
-      setError(error.message || 'Failed to load children nodes');
+      console.error('Error in fetchChildrenData:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load children nodes');
     } finally {
       setLoadingChildren(false);
     }
@@ -428,7 +456,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
               fontWeight="bold"
               color={Math.abs(totalAllocation - 100) < 0.01 ? 'green.500' : 'red.500'}
             >
-              {totalAllocation.toFixed(2)}%
+              {Number(totalAllocation).toFixed(2)}%
             </Text>
           </HStack>
         </Box>

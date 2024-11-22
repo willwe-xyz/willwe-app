@@ -34,8 +34,6 @@ import {
   Badge,
   HStack,
   Link,
-  LinkIcon,
-  ExternalLink,
 } from '@chakra-ui/react';
 import {
   GitBranch,
@@ -46,7 +44,7 @@ import {
   Trash,
   ChevronDown,
 } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
 import { deployments, ABIs } from '../../config/contracts';
@@ -55,6 +53,8 @@ import { RequirementsTable } from '../TokenOperations/RequirementsTable';
 import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
 import { Link as ChakraLink } from '@chakra-ui/react';
 import { ExternalLinkIcon } from '@chakra-ui/icons';
+
+
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -71,6 +71,8 @@ interface MembraneCharacteristic {
   link?: string;
 }
 
+// Add this type definition near the top of the file
+type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
 
 export const NodeOperations = ({
   nodeId,
@@ -79,7 +81,7 @@ export const NodeOperations = ({
   onSuccess
 }: NodeOperationsProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeModal, setActiveModal] = useState(null);
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [membraneId, setMembraneId] = useState('');
   const [mintAmount, setMintAmount] = useState('');
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -92,7 +94,7 @@ export const NodeOperations = ({
   
   // Fetch node data to check membership
   const { data: nodeData } = useNodeData(chainId, nodeId);
-  const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address);
+  const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address || '');
 
   const checkAllowance = useCallback(async () => {
     try {
@@ -112,11 +114,14 @@ export const NodeOperations = ({
 
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-      
-      // Get ERC20 token contract
+
       const tokenContract = new ethers.Contract(
         tokenAddress,
-        ['function allowance(address,address) view returns (uint256)'],
+        [
+          'function allowance(address,address) view returns (uint256)',
+          'function approve(address,uint256) returns (bool)'
+        ],
+        //@ts-ignore
         signer
       );
 
@@ -126,9 +131,8 @@ export const NodeOperations = ({
       );
       
       setAllowance(currentAllowance.toString());
-      const allowanceBigInt = BigInt(currentAllowance);
       const requiredAmount = ethers.parseUnits(mintAmount || '0', 18);
-      setNeedsApproval(allowanceBigInt < BigInt(requiredAmount));
+      setNeedsApproval(BigInt(currentAllowance) < BigInt(requiredAmount));
     } catch (error) {
       console.error('Error checking allowance:', error);
       toast({
@@ -141,52 +145,45 @@ export const NodeOperations = ({
   }, [chainId, nodeData?.rootPath, user?.wallet?.address, mintAmount, getEthersProvider, toast]);
 
   const handleApprove = useCallback(async () => {
-    if (!nodeData?.rootPath?.[0]) {
-      toast({
-        title: 'Error',
-        description: 'Token address not available',
-        status: 'error',
-        duration: 3000
-      });
+    if (!nodeData?.rootPath?.[0] || isProcessing) {
       return;
     }
 
-    setIsProcessing(true);
     try {
       const tokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
+      
       const tokenContract = new ethers.Contract(
         tokenAddress,
-        ['function approve(address,uint256)'],
+        [
+          'function approve(address,uint256) returns (bool)',
+          'function allowance(address,address) view returns (uint256)'
+        ],
+        //@ts-ignore
         signer
       );
 
-      const tx = await tokenContract.approve(
-        deployments.WillWe[chainId.replace('eip155:', '')],
-        ethers.MaxUint256
+      await executeTransaction(
+        chainId,
+        async () => {
+          const tx = await tokenContract.approve(
+            deployments.WillWe[chainId.replace('eip155:', '')],
+            ethers.MaxUint256
+          );
+          return tx;
+        },
+        {
+          successMessage: 'Approval granted successfully',
+          onSuccess: async () => {
+            await checkAllowance();
+          }
+        }
       );
-      await tx.wait();
-      
-      await checkAllowance();
-      toast({
-        title: 'Success',
-        description: 'Approval granted successfully',
-        status: 'success',
-        duration: 3000
-      });
     } catch (error) {
       console.error('Approval error:', error);
-      toast({
-        title: 'Error',
-        description: error.message,
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
     }
-  }, [chainId, nodeData?.rootPath, getEthersProvider, checkAllowance, toast]);
+  }, [chainId, nodeData?.rootPath, getEthersProvider, checkAllowance, isProcessing]);
 
   const checkNodeBalance = useCallback(async () => {
     try {
@@ -211,6 +208,7 @@ export const NodeOperations = ({
         [
           'function balanceOf(address account, uint256 id) view returns (uint256)'
         ],
+        //@ts-ignore
         signer
       );
 
@@ -240,7 +238,8 @@ export const NodeOperations = ({
 
   // Operation handlers
   const handleSpawnNode = useCallback(async () => {
-    setIsProcessing(true);
+    if (isProcessing) return;
+    
     try {
       const cleanChainId = chainId.replace('eip155:', '');
       const contractAddress = deployments.WillWe[cleanChainId];
@@ -248,6 +247,13 @@ export const NodeOperations = ({
       if (!contractAddress) {
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
+
+      toast({
+        title: 'Confirm Transaction',
+        description: 'Please sign the transaction in your wallet',
+        status: 'info',
+        duration: null
+      });
 
       await executeTransaction(
         chainId,
@@ -257,9 +263,21 @@ export const NodeOperations = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            //@ts-ignore
             signer
           );
-          return contract.spawnBranch(nodeId, { gasLimit: 400000 });
+          
+          toast({
+            title: 'Transaction Pending',
+            description: 'Your transaction is being processed',
+            status: 'loading',
+            duration: null
+          });
+
+          const tx = await contract.spawnBranch(nodeId, {
+            gasLimit: BigInt(400000)
+          });
+          return tx;
         },
         {
           successMessage: 'Node spawned successfully',
@@ -273,14 +291,12 @@ export const NodeOperations = ({
       console.error('Failed to spawn node:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Transaction failed',
         status: 'error',
         duration: 5000
       });
-    } finally {
-      setIsProcessing(false);
     }
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess]);
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
   const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
@@ -302,6 +318,7 @@ export const NodeOperations = ({
       const contract = new ethers.Contract(
         deployments.Membrane[cleanChainId],
         ABIs.Membrane,
+        //@ts-ignore
         provider
       );
 
@@ -322,6 +339,7 @@ export const NodeOperations = ({
           const tokenContract = new ethers.Contract(
             tokenAddress,
             ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+            //@ts-ignore
             provider
           );
 
@@ -379,6 +397,7 @@ export const NodeOperations = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            //@ts-ignore
             signer
           );
           return contract.spawnBranchWithMembrane(nodeId, membraneId, { gasLimit: 600000 });
@@ -395,6 +414,7 @@ export const NodeOperations = ({
       console.error('Failed to spawn node with membrane:', error);
       toast({
         title: 'Error',
+        //@ts-ignore
         description: error.message,
         status: 'error',
         duration: 5000
@@ -409,7 +429,17 @@ export const NodeOperations = ({
     try {
       await executeTransaction(
         chainId,
-        async (contract) => contract.mintMembership(nodeId),
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            deployments.WillWe[chainId.replace('eip155:', '')],
+            ABIs.WillWe,
+            //@ts-ignore
+            signer
+          );
+          return contract.mintMembership(nodeId);
+        },
         {
           successMessage: 'Membership minted successfully',
           onSuccess
@@ -419,6 +449,7 @@ export const NodeOperations = ({
       console.error('Failed to mint membership:', error);
       toast({
         title: 'Error',
+        //@ts-ignore
         description: error.message,
         status: 'error',
         duration: 5000
@@ -429,7 +460,9 @@ export const NodeOperations = ({
   }, [chainId, nodeId, executeTransaction, toast, onSuccess]);
 
   const handleRedistribute = useCallback(async () => {
+    if (isProcessing) return;
     setIsProcessing(true);
+    
     try {
       const cleanChainId = chainId.replace('eip155:', '');
       const contractAddress = deployments.WillWe[cleanChainId];
@@ -437,6 +470,13 @@ export const NodeOperations = ({
       if (!contractAddress) {
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
+
+      toast({
+        title: 'Confirm Transaction',
+        description: 'Please sign the transaction in your wallet',
+        status: 'info',
+        duration: null
+      });
 
       await executeTransaction(
         chainId,
@@ -446,8 +486,17 @@ export const NodeOperations = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            //@ts-ignore
             signer
           );
+
+          toast({
+            title: 'Transaction Pending',
+            description: 'Your transaction is being processed',
+            status: 'loading',
+            duration: null
+          });
+
           return contract.redistributePath(nodeId, { gasLimit: 500000 });
         },
         {
@@ -459,19 +508,18 @@ export const NodeOperations = ({
       console.error('Failed to redistribute:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Transaction failed',
         status: 'error',
         duration: 5000
       });
     } finally {
       setIsProcessing(false);
     }
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess]);
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess, isProcessing]);
 
   const handleMintPath = useCallback(async () => {
-    if (!mintAmount) return;
+    if (!mintAmount || isProcessing) return;
     
-    setIsProcessing(true);
     try {
       const cleanChainId = chainId.replace('eip155:', '');
       const contractAddress = deployments.WillWe[cleanChainId];
@@ -488,9 +536,13 @@ export const NodeOperations = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            //@ts-ignore
             signer
           );
-          return contract.mintPath(nodeId, ethers.parseUnits(mintAmount, 18), { gasLimit: 500000 });
+          
+          return await contract.mintPath(nodeId, ethers.parseUnits(mintAmount, 18), {
+            gasLimit: BigInt(500000)
+          });
         },
         {
           successMessage: 'Tokens minted successfully',
@@ -502,16 +554,8 @@ export const NodeOperations = ({
       );
     } catch (error) {
       console.error('Failed to mint tokens:', error);
-      toast({
-        title: 'Error',
-        description: error.message,
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
     }
-  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, toast, onSuccess]);
+  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing]);
 
   const handleBurnPath = useCallback(async () => {
     if (!burnAmount) return;
@@ -535,6 +579,7 @@ export const NodeOperations = ({
             [
               'function burnPath(uint256 target_, uint256 amount) external'
             ],
+            //@ts-ignore
             signer
           );
           
@@ -547,14 +592,14 @@ export const NodeOperations = ({
           onSuccess: () => {
             setActiveModal(null);
             onSuccess?.();
-          },
-          gasLimit: 300000
+          } 
         }
       );
     } catch (error) {
       console.error('Failed to burn path:', error);
       toast({
         title: 'Error',
+        //@ts-ignore
         description: error.message,
         status: 'error',
         duration: 5000
@@ -717,14 +762,14 @@ export const NodeOperations = ({
                                 >
                                   <HStack spacing={1}>
                                     <Text>Open</Text>
-                                    <ExternalLinkIcon size={12} />
+                                    <ExternalLinkIcon width={5} height={5} />
                                   </HStack>
                                 </ChakraLink>
                               )}
                             </HStack>
-                            {char.description && (
+                            {char.title && (
                               <Text fontSize="xs" color="gray.600" mt={1}>
-                                {char.description}
+                                {char.title}
                               </Text>
                             )}
                           </Box>

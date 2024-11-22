@@ -41,7 +41,7 @@ export const StatsCard: React.FC<StatsCardProps> = ({
         minW="150px"
       >
         <HStack color={`${color}.600`} mb={1} spacing={2}>
-          {React.cloneElement(icon, { size: size === 'sm' ? 14 : 16 })}
+          {React.cloneElement(icon as React.ReactElement<any>, { style: { width: size === 'sm' ? 14 : 16, height: size === 'sm' ? 14 : 16 } } )}
           <Text fontSize={titleSize} fontWeight="medium">
             {title}
           </Text>

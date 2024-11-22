@@ -21,6 +21,7 @@ interface MainLayoutProps {
     contrastingColor: string;
     reverseColor: string;
     cycleColors: () => void;
+    onNodeSelect: (nodeId: string) => void;
   };
 }
 

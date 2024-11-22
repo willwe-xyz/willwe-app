@@ -162,7 +162,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId={chainId}
   selectedTokenColor={selectedTokenColor}
   onSuccess={refetch}
-  rootTokenAddress={nodeIdToAddress(nodeData.rootPath[0])}
 />
 
         </HStack>
@@ -262,7 +261,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                   <Td>{signal.MembraneInflation[0] || 'Unknown'}</Td>
                   <Td>{signal.MembraneInflation[1] || '0'}</Td>
                   <Td>{new Date(Number(signal.lastRedistSignal[0] || '0')).toLocaleString()}</Td>
-                  <Td isNumeric>{formatBalance(signal.MembraneInflation[1] || '0')}</Td>
+                  <Td isNumeric>{formatBalance(String(signal.MembraneInflation[1]) || '0')}</Td>
                 </Tr>
               ))}
             </Tbody>

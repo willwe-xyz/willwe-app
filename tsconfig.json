@@ -1,17 +1,14 @@
 {
   "extends": [
-    "@tsconfig/strictest/tsconfig",
-    "@tsconfig/node18/tsconfig",
     "@tsconfig/next/tsconfig"
   ],
   "compilerOptions": {
+    "strict": true,
     "noUnusedLocals": false,
-    "strict": false,
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "noUnusedParameters": false,
+    "allowUnusedLabels": true,
+    "allowUnreachableCode": true,
+    "lib": ["dom", "dom.iterable", "esnext"],
     "plugins": [
       { "name": "viem/ts-plugin" }
     ],
@@ -25,9 +22,6 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "noImplicitReturns": false,
-    "noPropertyAccessFromIndexSignature": false,
-    "exactOptionalPropertyTypes": false,
     "moduleResolution": "node",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true

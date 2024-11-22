@@ -9,12 +9,11 @@ interface TransactionResult {
   contractAddress: string;
 }
 
-export const useTransactionHandler = () => {
+export const useTransactionHandler = (chainId: string) => {
   const toast = useToast();
 
   const executeTransaction = useCallback(async (
-    deploymentPromise: Promise<any>,
-    chainId: string
+    deploymentPromise: Promise<any>   
   ): Promise<TransactionResult> => {
     const pendingToastId = toast({
       title: 'Confirm Transaction',

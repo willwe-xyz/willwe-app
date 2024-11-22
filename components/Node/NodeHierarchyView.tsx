@@ -8,7 +8,7 @@ import {
   Grid,
   GridItem,
 } from '@chakra-ui/react';
-import { NodeState } from '../types/chainData';
+import { NodeState } from '../../types/chainData';
 
 interface NodeHierarchyViewProps {
   nodes: NodeState[];

@@ -17,7 +17,6 @@ import { usePrivy } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { getContract } from 'viem';
 import { useWillWeContract } from '../../../hooks/useWillWeContract';
-import { Link as RouterLink } from 'react-router-dom';
 
 interface SignalSliderProps {
   nodeId: string;
