@@ -55,6 +55,7 @@ export const MembraneSection: React.FC<MembraneSectionProps> = ({
 
         <Input
           value={membraneId}
+          type="text"
           onChange={(e) => setMembraneId(e.target.value)}
           placeholder="Enter membrane ID"
           isDisabled={isProcessing}

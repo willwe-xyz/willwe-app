@@ -38,7 +38,7 @@ export const TokenProvider: React.FC<TokenProviderProps> = ({ children }) => {
       if (!selectedToken) return null;
 
       const provider = await getEthersProvider();
-      const contract = new ethers.Contract(selectedToken, ABIs.IERC20, provider);
+      const contract = new ethers.Contract(selectedToken, ABIs.IERC20, provider as unknown as ethers.ContractRunner);
 
       const [name, symbol, decimals, totalSupply] = await Promise.all([
         contract.name(),

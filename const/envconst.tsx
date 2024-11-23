@@ -8,8 +8,6 @@ import { Chain } from "viem";
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 export const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET;
 export const COV_APIKEY= process.env.COV_APIKEY;
-export const SUPABASE_URL : string = process.env.SUPABASE_URL
-export const SUPABASE_KEY : string = process.env.SUPABASE_KEY
 
 
 

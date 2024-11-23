@@ -62,6 +62,7 @@ interface EntityMetadata {
 }
 
 export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit }) => {
+  console.log('chainId', chainId);
   // Form state
   const [entityName, setEntityName] = useState('');
   const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);

@@ -10,7 +10,6 @@ import {
   Stack,
   FormErrorMessage,
 } from '@chakra-ui/react';
-import { OperationParams } from '../types';
 
 interface OperationFormProps {
   operation: string;

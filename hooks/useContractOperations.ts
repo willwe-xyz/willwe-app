@@ -32,6 +32,7 @@ export const useContractOperations = (chainId: string) => {
         const factory = new ethers.ContractFactory(
           options.deploymentData!.abi,
           options.deploymentData!.bytecode,
+          //@ts-ignore
           signer
         );
 

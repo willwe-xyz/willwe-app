@@ -38,6 +38,19 @@ type ChildData = {
   eligibilityPerSecond: string;
 };
 
+interface MembraneMetadata {
+  id: string;
+  name: string;
+}
+
+interface MembraneRequirement {
+  tokenAddress: string;
+  amount: string;
+  symbol: string;
+  requiredBalance: string;
+  formattedBalance: string;
+}
+
 const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData, onSuccess }) => {
   const { user, ready } = usePrivy();
   const { signal } = useNodeTransactions(chainId);
@@ -53,16 +66,81 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   const [membraneValues, setMembraneValues] = useState<Record<string, string>>({});
   const [inflationRates, setInflationRates] = useState<Record<string, string>>({});
   const [isValidating, setIsValidating] = useState<Record<string, boolean>>({});
-  const [membraneMetadata, setMembraneMetadata] = useState<Record<string, any>>({});
-  const [membraneRequirements, setMembraneRequirements] = useState<Record<string, any>>({});
+  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
+  const [membraneRequirements, setMembraneRequirements] = useState<MembraneRequirement[]>([]);
 
-  // Handlers
+  // Move this function before handleMembraneChange
+  const validateAndFetchMembraneData = useCallback(async (membraneId: string) => {
+    if (!membraneId) return;
+    setIsValidating(prev => ({ ...prev, [nodeId]: true }));
+    
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+      const membraneContract = new ethers.Contract(
+        deployments.Membrane[cleanChainId],
+        ABIs.Membrane,
+        provider
+      );
+
+      // Fetch membrane data from contract
+      const membrane = await membraneContract.getMembraneById(membraneId);
+      
+      if (!membrane) {
+        throw new Error('Invalid membrane ID');
+      }
+
+      // Fetch metadata from IPFS if available
+      if (membrane.meta) {
+        const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
+        const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
+        if (!response.ok) throw new Error('Failed to fetch membrane metadata');
+        const metadata = await response.json();
+        setMembraneMetadata({
+          id: membraneId,
+          name: metadata.name || `Membrane ${membraneId}`
+        });
+      }
+
+      // Process token requirements
+      const requirements = await Promise.all(
+        membrane.tokens.map(async (tokenAddress: string, index: number) => {
+          const tokenContract = new ethers.Contract(
+            tokenAddress,
+            ['function symbol() view returns (string)'],
+            provider
+          );
+
+          const symbol = await tokenContract.symbol();
+          const balance = membrane.balances[index];
+          
+          return {
+            tokenAddress,
+            symbol,
+            amount: balance.toString(),
+            requiredBalance: balance.toString(),
+            formattedBalance: ethers.formatUnits(balance, 18)
+          };
+        })
+      );
+
+      setMembraneRequirements(requirements);
+    } catch (err) {
+      console.error('Error validating membrane:', err);
+      setMembraneMetadata(null);
+      setMembraneRequirements([]);
+    } finally {
+      setIsValidating(prev => ({ ...prev, [nodeId]: false }));
+    }
+  }, [chainId, nodeId]);
+
   const handleMembraneChange = useCallback((nodeId: string, value: string) => {
     setMembraneValues(prev => ({
       ...prev,
       [nodeId]: value
     }));
-  }, []);
+    validateAndFetchMembraneData(value);
+  }, [validateAndFetchMembraneData]);
 
   const handleInflationChange = useCallback((nodeId: string, value: string) => {
     setInflationRates(prev => ({
@@ -177,25 +255,28 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   
       // Convert signals to basis points
       const signalArray = [
-        // Convert membrane value to number or default to 0
-        parseInt(membraneValues[nodeId] || '0'),
-        // Convert inflation value to number or default to 0
-        parseInt(inflationRates[nodeId] || '0'),
-        // Add the child node signals converted to basis points
+        // Convert membrane value to string or default to '0'
+        (membraneValues[nodeId] || '0').toString(),
+        // Convert inflation value to string or default to '0'
+        (inflationRates[nodeId] || '0').toString(),
+        // Add the child node signals converted to basis points as strings
         ...childrenData.map(child => {
-          // Convert percentage directly to basis points
-          // If slider shows 75.66%, this should become 7566 basis points
-          return Math.round(sliderValues[child.nodeId] * 100)
+          // Convert percentage to basis points (multiply by 100)
+          // If slider shows 75.66%, this becomes 7566
+          const basisPoints = Math.round(sliderValues[child.nodeId] * 100);
+          // Convert to string and ensure no scientific notation
+          return basisPoints.toLocaleString('fullwide', { useGrouping: false });
         })
       ];
   
       // Verify the sum of child signals equals 10000 (100.00%)
-      const childSignalsSum = signalArray.slice(2).reduce((sum, val) => sum + val, 0);
+      const childSignalsSum = signalArray.slice(2).reduce((sum, val) => sum + Number(val), 0);
       if (childSignalsSum !== 10000) {
         throw new Error(`Invalid signal sum: ${childSignalsSum}. Expected 10000 basis points.`);
       }
       console.log("Submitting signals:", signalArray);
-      await signal(nodeId, signalArray);
+      console.log("Signal array as strings:", signalArray.map(String));
+      await signal(nodeId, signalArray.map(String));
       if (onSuccess) onSuccess();
       
     } catch (error: any) {
@@ -393,8 +474,8 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         <MembraneSection
           membraneId={membraneValues[nodeId] || ''}
           setMembraneId={(value) => handleMembraneChange(nodeId, value)}
-          membraneMetadata={membraneMetadata[nodeId]}
-          membraneRequirements={membraneRequirements[nodeId] || []}
+          membraneMetadata={membraneMetadata}
+          membraneRequirements={membraneRequirements}
           isLoadingMembrane={false}
           isValidating={isValidating[nodeId] || false}
           isProcessing={isSubmitting}

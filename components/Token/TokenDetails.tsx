@@ -23,7 +23,12 @@ export const TokenDetails: React.FC<TokenDetailsProps> = ({ tokenAddress, chainI
       if (!tokenAddress || !chainId) return null;
 
       const provider = await getEthersProvider();
-      const contract = new ethers.Contract(tokenAddress, ABIs.IERC20, provider);
+      const contract = new ethers.Contract(
+        tokenAddress, 
+        ABIs.IERC20, 
+        //@ts-ignore
+        provider
+      );
 
       const [name, symbol, decimals, totalSupply] = await Promise.all([
         contract.name(),

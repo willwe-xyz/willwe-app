@@ -1,21 +1,22 @@
 // pages/404.js
 
 import { Box, Heading, Text, Button } from '@chakra-ui/react';
+import { Global, css } from '@emotion/react';
 
 const Custom404 = () => {
+  const styles = {
+    container: {
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#f7fafc'
+    }
+  };
+
   return (
-    <Box 
-      position="relative"
-      overflow="hidden"
-      display="flex"
-      flexDirection="column"
-      alignItems="center"
-      justifyContent="center"
-      height="100vh"
-      textAlign="center"
-      bg="gray.50"
-      p={4}
-    >
+    <div style={styles.container}>
       {/* Animated Background */}
       <Box
         position="absolute"
@@ -48,16 +49,20 @@ const Custom404 = () => {
         Try again
       </Button>
 
-      {/* Add animation keyframes */}
-      <style jsx global>{`
-        @keyframes backgroundAnimation {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-      `}</style>
-    </Box>
+      {/* Add Global styles using Emotion */}
+      <Global
+        styles={css`
+          @keyframes backgroundAnimation {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+        `}
+      />
+    </div>
   );
 };
+
+Custom404.displayName = 'Custom404';
 
 export default Custom404;

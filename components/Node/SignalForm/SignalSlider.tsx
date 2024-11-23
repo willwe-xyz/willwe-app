@@ -46,6 +46,9 @@ const EligibilityImpact = memo(({ impact }: { impact: string | null }) => {
   );
 });
 
+// Add this line to fix the display-name error
+EligibilityImpact.displayName = 'EligibilityImpact';
+
 export const SignalSlider: React.FC<SignalSliderProps> = ({
   nodeId,        // This is the parent/NodeDetails node id
   parentId,      // This is the child/slider node id
@@ -171,4 +174,6 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
   );
 };
 
-export default memo(SignalSlider);
+SignalSlider.displayName = 'SignalSlider';
+
+export default SignalSlider;

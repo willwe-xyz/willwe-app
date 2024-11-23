@@ -133,9 +133,10 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
       const contract = new ethers.Contract(
         deployments.Membrane[cleanChainId],
         ABIs.Membrane,
+        //@ts-ignore
         provider
       );
-
+      //@ts-ignore
       const membrane = await contract.getMembraneById(membraneId);
       if (!membrane) throw new Error('Membrane not found');
 
@@ -153,6 +154,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
           const tokenContract = new ethers.Contract(
             tokenAddress,
             ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
+            //@ts-ignore
             provider
           );
 
@@ -264,7 +266,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
 
               {inputError && (
                 <Alert status="error" mt={2} size="sm">
-                  <AlertIcon as={AlertTriangle} size={14} />
+                  <AlertIcon as={AlertTriangle} width={5} height={5} />
                   {inputError}
                 </Alert>
               )}
@@ -335,7 +337,6 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
                 {/* Requirements Table */}
                 <RequirementsTable
                   requirements={requirements}
-                  membraneMetadata={membraneMetadata}
                   chainId={chainId}
                 />
 

@@ -17,6 +17,7 @@
     "stripInternal": true,
     "allowJs": true,
     "noEmit": true,
+    "noEmitOnError": false,
     "module": "esnext",
     "resolveJsonModule": true,
     "isolatedModules": true,

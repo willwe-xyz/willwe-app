@@ -48,7 +48,7 @@ export const TransactionHandler: React.FC<TransactionHandlerProps> = ({ children
         toast.close(toastId);
       }
     };
-  }, [isTransacting, currentHash, toast]);
+  }, [isTransacting, currentHash, toast, chainId]);
 
   // Show error toast if needed
   React.useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { ethers } from 'ethers';
+import { ethers, ContractRunner } from 'ethers';
 import {
   ButtonGroup,
   Button,
@@ -34,6 +34,7 @@ import {
   Badge,
   HStack,
   Link,
+  ToastId
 } from '@chakra-ui/react';
 import {
   GitBranch,
@@ -236,9 +237,11 @@ export const NodeOperations = ({
     }
   }, [chainId, nodeData?.rootPath, user?.wallet?.address, nodeId, getEthersProvider, toast]);
 
-  // Operation handlers
   const handleSpawnNode = useCallback(async () => {
     if (isProcessing) return;
+    
+    let confirmToastId: ToastId | undefined;
+    let pendingToastId: ToastId | undefined;
     
     try {
       const cleanChainId = chainId.replace('eip155:', '');
@@ -248,7 +251,7 @@ export const NodeOperations = ({
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
 
-      toast({
+      confirmToastId = toast({
         title: 'Confirm Transaction',
         description: 'Please sign the transaction in your wallet',
         status: 'info',
@@ -258,16 +261,17 @@ export const NodeOperations = ({
       await executeTransaction(
         chainId,
         async () => {
+          if (confirmToastId) toast.close(confirmToastId);
+          
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
-            //@ts-ignore
-            signer
+            signer as unknown as ContractRunner
           );
           
-          toast({
+          pendingToastId = toast({
             title: 'Transaction Pending',
             description: 'Your transaction is being processed',
             status: 'loading',
@@ -282,12 +286,16 @@ export const NodeOperations = ({
         {
           successMessage: 'Node spawned successfully',
           onSuccess: () => {
+            if (pendingToastId) toast.close(pendingToastId);
             setActiveModal(null);
             onSuccess?.();
           }
         }
       );
     } catch (error) {
+      if (confirmToastId) toast.close(confirmToastId);
+      if (pendingToastId) toast.close(pendingToastId);
+      
       console.error('Failed to spawn node:', error);
       toast({
         title: 'Error',
@@ -296,7 +304,7 @@ export const NodeOperations = ({
         duration: 5000
       });
     }
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+  }, [chainId, nodeId, isProcessing, executeTransaction, getEthersProvider, toast, onSuccess, setActiveModal]);
 
   const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
   const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
@@ -314,40 +322,38 @@ export const NodeOperations = ({
       if (!provider) {
         throw new Error('Provider not available');
       }
-
+  
       const contract = new ethers.Contract(
         deployments.Membrane[cleanChainId],
         ABIs.Membrane,
         //@ts-ignore
-        provider
+        provider.getSigner()
       );
-
+  
       const membrane = await contract.getMembraneById(membraneId);
       if (!membrane) throw new Error('Membrane not found');
-
-      // Use the IPFS_GATEWAY constant
+  
       const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
       if (!response.ok) throw new Error('Failed to fetch membrane metadata');
       
       const metadata = await response.json();
       setMembraneMetadata(metadata);
-
-      // Fetch token details
+  
       setIsLoadingTokens(true);
       const requirements = await Promise.all(
         membrane.tokens.map(async (tokenAddress: string, index: number) => {
           const tokenContract = new ethers.Contract(
             tokenAddress,
             ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
-            //@ts-ignore
-            provider
+            //@ts-ignore  
+            provider.getSigner()
           );
-
+  
           const [symbol, decimals] = await Promise.all([
             tokenContract.symbol(),
             tokenContract.decimals()
           ]);
-
+  
           return {
             tokenAddress,
             symbol,
@@ -356,7 +362,7 @@ export const NodeOperations = ({
           };
         })
       );
-
+  
       setRequirements(requirements);
     } catch (error) {
       console.error('Error validating membrane:', error);
@@ -367,7 +373,17 @@ export const NodeOperations = ({
       setIsValidatingMembrane(false);
       setIsLoadingTokens(false);
     }
-  }, [chainId, getEthersProvider]);
+  }, [
+    chainId,
+    getEthersProvider,
+    setIsValidatingMembrane,
+    setMembraneError,
+    setMembraneMetadata,
+    setRequirements,
+    setIsLoadingTokens,
+    IPFS_GATEWAY
+  ]);
+
 
   const handleSpawnWithMembrane = useCallback(async () => {
     if (!membraneId) {
@@ -379,7 +395,7 @@ export const NodeOperations = ({
       });
       return;
     }
-
+  
     setIsProcessing(true);
     try {
       const cleanChainId = chainId.replace('eip155:', '');
@@ -388,7 +404,7 @@ export const NodeOperations = ({
       if (!contractAddress) {
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
-
+  
       await executeTransaction(
         chainId,
         async () => {
@@ -414,15 +430,24 @@ export const NodeOperations = ({
       console.error('Failed to spawn node with membrane:', error);
       toast({
         title: 'Error',
-        //@ts-ignore
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Transaction failed',
         status: 'error',
         duration: 5000
       });
     } finally {
       setIsProcessing(false);
     }
-  }, [chainId, nodeId, membraneId, executeTransaction, getEthersProvider, toast, onSuccess]);
+  }, [
+    chainId,
+    nodeId,
+    membraneId,
+    executeTransaction,
+    getEthersProvider,
+    toast,
+    onSuccess,
+    setActiveModal,
+    setIsProcessing
+  ]);  
 
   const handleMintMembership = useCallback(async () => {
     setIsProcessing(true);

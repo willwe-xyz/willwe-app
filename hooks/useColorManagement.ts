@@ -34,7 +34,7 @@ export const useColorManagement = () => {
     const [r, g, b] = hexToRgb(hex);
     const reverse = [255 - r, 255 - g, 255 - b];
     if (alpha === 1) {
-      return rgbToHex(...reverse);
+      return rgbToHex(reverse[0], reverse[1], reverse[2]);
     }
     return `rgba(${reverse[0]}, ${reverse[1]}, ${reverse[2]}, ${alpha})`;
   }, [hexToRgb, rgbToHex]);

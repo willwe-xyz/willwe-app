@@ -15,12 +15,11 @@ export function useBalances(
   userAddress: string | undefined,
   chainId: string | undefined
 ): UseBalancesResult {
-  const {
-    balances,
-    isLoading: isBalancesLoading,
-    error: balancesError,
-    refetch: refetchBalances
-  } = useCovalentBalances(userAddress || '', chainId || '');
+  const covalentBalancesResult = useCovalentBalances(userAddress || '', chainId || '');
+  const balances = covalentBalancesResult.balances;
+  const protocolBalancesResult = covalentBalancesResult.protocolBalances;
+  const isBalancesLoading = covalentBalancesResult.isLoading;
+  const balancesError = covalentBalancesResult.error;
 
   const {
     willBalanceItems: protocolBalances,
@@ -30,10 +29,10 @@ export function useBalances(
 
   const isLoading = isBalancesLoading || isProtocolBalancesLoading;
   const error = balancesError || protocolBalancesError;
-
   const refetch = useCallback(() => {
-    refetchBalances();
-  }, [refetchBalances]);
+    covalentBalancesResult.refetch();
+    useWillBalances(chainId || '').refetch();
+  }, [covalentBalancesResult, useWillBalances, chainId]);
 
   return {
     balances,
@@ -61,10 +60,10 @@ export function mergeBalances(
     }
   });
   
-  return mergedBalances.sort((a, b) => {
+  return mergedBalances.sort((a: BalanceItem, b: BalanceItem) => {
     // Convert bigint balance strings to BigInt for proper comparison
-    const aUserBalance = BigInt(a.balance);
-    const bUserBalance = BigInt(b.balance);
+    const aUserBalance  = BigInt(a.balance || '0');
+    const bUserBalance = BigInt(b.balance || '0');
     
     const aProtocolBalance = BigInt(
       protocolBalances.find(p => p.contract_address === a.contract_address)?.balance || '0'

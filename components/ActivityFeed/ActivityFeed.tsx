@@ -43,18 +43,19 @@ interface ActivityFeedProps {
   selectedToken?: string;
 }
 
-export const ActivityFeed: React.FC<ActivityFeedProps> = ({
+export function ActivityFeed({
   activities = [],
   isLoading = false,
   error = null,
   onRefresh,
   selectedToken
-}) => {
+}: ActivityFeedProps) {
   // Theme colors
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.100', 'gray.700');
+  const bgColor = useColorModeValue('gray.50', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
   const textColor = useColorModeValue('gray.600', 'gray.400');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
+  const emptyStateBg = useColorModeValue('gray.50', 'gray.700');
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -171,7 +172,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
             flexDirection="column"
             alignItems="center"
             justifyContent="center"
-            bg={useColorModeValue('gray.50', 'gray.700')}
+            bg={emptyStateBg}
             borderRadius="lg"
           >
             <Activity size={32} className="text-gray-400 mb-4" />
@@ -250,6 +251,6 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
       </VStack>
     </Box>
   );
-};
+}
 
 export default ActivityFeed;

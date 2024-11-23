@@ -115,14 +115,15 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     };
 
     // Organize nodes into base and derived
-    const base = nodes.filter(node => !node.parentId);
-    const derived = nodes.filter(node => node.parentId);
+    const base = nodes.filter(node => node.rootPath.length === 1);
+    const derived = nodes.filter(node => node.rootPath.length > 1);
 
     // Calculate unique members (addresses)
     const uniqueAddresses = new Set<string>();
     nodes.forEach(node => {
-      if (node.members) {
-        node.members.forEach(member => uniqueAddresses.add(member));
+      if (node.membersOfNode) {
+        const members = node.membersOfNode;
+        members.forEach((member: string) => uniqueAddresses.add(member));
       }
     });
 
@@ -194,7 +195,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           const contract = new ethers.Contract(
             deployments.WillWe[cleanChainId],
             ABIs.WillWe,
-            signer
+            signer as unknown as ethers.ContractRunner
           );
 
           return contract.spawnBranch(selectedToken, { gasLimit: 500000 });
@@ -223,46 +224,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     }
   }, [chainId, selectedToken, getEthersProvider, executeTransaction, toast, onRefresh]);
 
-  // Stats cards configuration
-  const statsCards = [
-    {
-      title: 'Total Value',
-      value: formatBalance(totalSupplyValue),
-      icon: <Activity size={16} />,
-      color: 'purple',
-      tooltip: 'Total supply of the token'
-    },
-    {
-      title: 'Members',
-      value: totalMembers.toString(),
-      icon: <Users size={16} />,
-      color: 'blue',
-      tooltip: 'Total unique members across all nodes'
-    },
-    {
-      title: 'Max Depth',
-      value: maxDepth.toString(),
-      icon: <GitBranch size={16} />,
-      color: 'green',
-      tooltip: 'Maximum depth of the node hierarchy'
-    },
-    {
-      title: 'Active Signals',
-      value: totalSignals.toString(),
-      icon: <Signal size={16} />,
-      color: 'orange',
-      tooltip: 'Total active signals across all nodes'
-    },
-    <StatsCard
-      title="Average Inflation per Day"
-      value={averageExpense.toFixed(6)}
-      icon={<Wallet size={14} />}
-      color="red"
-      tooltip="Average expense per node in ETH/day"
-      size="sm"
-      suffix="ETH/day"
-    />
-  ];
+
 
   if (isLoading) {
     return (
@@ -384,7 +346,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             color="red"
             tooltip="Average expense per node in ETH/day"
             size="sm"
-            suffix="ETH/day"
           />
         </Grid>
       </Box>

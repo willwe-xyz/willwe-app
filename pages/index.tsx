@@ -29,12 +29,14 @@ const BackgroundLetter = React.memo(({ children, color, x, y, z }) => (
   </motion.div>
 ));
 
-export default function HomePage() {
+BackgroundLetter.displayName = 'BackgroundLetter';
+
+const Home: React.FC = () => {
   const { login, ready, authenticated, user, logout } = usePrivy();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
-  const handleMouseMove = useCallback((e) => {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     setMousePosition({ x: e.clientX, y: e.clientY });
   }, []);
 
@@ -116,7 +118,6 @@ export default function HomePage() {
         <>
           <Head>
             <title>WillWe · Home</title>
-            <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Roboto+Mono&family=Open+Sans&display=swap" rel="stylesheet" />
           </Head>
     
           <motion.main
@@ -244,6 +245,10 @@ export default function HomePage() {
       );
     }
   }
+
+  Home.displayName = 'Home';
+
+  export default Home;
 
   
 

@@ -7,7 +7,7 @@ const fetchBalances = async (address: string, chainId: string): Promise<{balance
 
   const apiKey = getCovalentApiKey();
   const covalentClient = new CovalentClient(apiKey);
-  const cleanChainId = chainId.replace('eip155:', '') as ChainID;
+  const cleanChainId = chainId.replace('eip155:', '') as unknown as ChainID;
 
   // Get regular balances
   const balanceResponse = await covalentClient.BalanceService.getTokenBalancesForWalletAddress(cleanChainId, address);
@@ -30,22 +30,23 @@ export const useCovalentBalances = (address: string, chainId: string) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    const loadBalances = async () => {
-      try {
-        const { balances, protocolBalances } = await fetchBalances(address, chainId);
-        setBalances(balances);
-        setProtocolBalances(protocolBalances);
-        setIsLoading(false);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-        setIsLoading(false);
-      }
-    };
+  const loadBalances = async () => {
+    setIsLoading(true);
+    try {
+      const { balances, protocolBalances } = await fetchBalances(address, chainId);
+      setBalances(balances);
+      setProtocolBalances(protocolBalances);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadBalances();
   }, [address, chainId]);
 
-  return { balances, protocolBalances, isLoading, error };
+  return { balances, protocolBalances, isLoading, error, refetch: loadBalances };
 };

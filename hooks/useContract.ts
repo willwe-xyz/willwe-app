@@ -31,7 +31,7 @@ export function useContract(
         const contract = new ethers.Contract(
           address,
           ABIs[contractName],
-          signer
+          signer as unknown as ethers.ContractRunner
         );
 
         setContract(contract);

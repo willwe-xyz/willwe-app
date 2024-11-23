@@ -4,7 +4,6 @@ import { useRouter } from 'next/router';
 import { usePrivy } from "@privy-io/react-auth";
 import { 
   Box, 
-  VStack, 
   Text, 
   Spinner, 
   Alert, 

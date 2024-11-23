@@ -14,24 +14,24 @@ export function useNodeTransactions(chainId: string) {
     return new ethers.Contract(
       deployments.WillWe[cleanChainId],
       ABIs.WillWe,
+      // @ts-ignore
       provider.getSigner()
     );
   }, [chainId, getEthersProvider]);
 
-  const signal = useCallback(async (nodeId: string, signals: number[], onSuccess?: () => void) => {
+  const signal = useCallback(async (nodeId: string, signals: string[], onSuccess?: () => void) => {
     const contract = await getContract();
     
+
     return executeTransaction(
       chainId,
       async () => {
         const gasEstimate = await contract.sendSignal.estimateGas(nodeId, signals);
-        // const gasEstimate = 800_000;
         const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
         const feeData = await provider.getFeeData();
-        console.log('nodeid - signals', nodeId, signals);
-
+        
         return contract.sendSignal(nodeId, signals, {
-          gasLimit: Math.ceil(Number(gasEstimate) * 1.4), // Add 20% buffer to gas estimate
+          gasLimit: Math.ceil(Number(gasEstimate) * 1.4),
           maxFeePerGas: feeData.maxFeePerGas,
           maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
         });

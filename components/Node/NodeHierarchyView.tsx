@@ -28,6 +28,10 @@ export const NodeHierarchyView: React.FC<NodeHierarchyViewProps> = ({
   onNodeSelect,
   nodeValues,
 }) => {
+  // Move the color mode values to the component level
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.600');
+
   // Build hierarchy tree
   const buildHierarchyTree = (nodes: NodeState[]): HierarchyNode[] => {
     const nodeMap = new Map<string, HierarchyNode>();
@@ -65,8 +69,6 @@ export const NodeHierarchyView: React.FC<NodeHierarchyViewProps> = ({
 
   const renderNode = (hierarchyNode: HierarchyNode, level: number = 0) => {
     const { node, children } = hierarchyNode;
-    const bgColor = useColorModeValue('white', 'gray.800');
-    const borderColor = useColorModeValue('gray.200', 'gray.600');
     const depth = node.rootPath?.length || 0;
 
     // Calculate indentation and sizing based on depth

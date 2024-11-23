@@ -52,6 +52,7 @@ const TokenValueOperations: React.FC<TokenValueOperationsProps> = ({
       const willWeContract = new ethers.Contract(
         deployments.WillWe[chainId.replace('eip155:', '')],
         ABIs.WillWe,
+        //@ts-ignore
         provider
       );
       const path = await willWeContract.getFidPath(nodeId);
@@ -61,6 +62,7 @@ const TokenValueOperations: React.FC<TokenValueOperationsProps> = ({
       const tokenContract = new ethers.Contract(
         ethers.getAddress(rootToken),
         ABIs.IERC20,
+        //@ts-ignore
         provider
       );
 
@@ -89,6 +91,7 @@ const TokenValueOperations: React.FC<TokenValueOperationsProps> = ({
       const willWeContract = new ethers.Contract(
         deployments.WillWe[chainId.replace('eip155:', '')],
         ABIs.WillWe,
+        //@ts-ignore
         provider
       );
       
@@ -98,6 +101,7 @@ const TokenValueOperations: React.FC<TokenValueOperationsProps> = ({
       const tokenContract = new ethers.Contract(
         ethers.getAddress(rootToken),
         ABIs.IERC20,
+        //@ts-ignore
         signer
       );
 
