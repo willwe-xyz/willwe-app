@@ -27,7 +27,7 @@ function AppContent({ Component, pageProps }: AppProps) {
 
   return (
     <ErrorBoundary>
-      <TransactionProvider toast={toast}>
+      <TransactionProvider>
         <NodeProvider>
           <Component {...pageProps} />
         </NodeProvider>
@@ -109,8 +109,6 @@ function MyApp(props: AppProps) {
             showWalletLoginFirst: true,
           },
         }}
-        onSuccess={handlePrivyLoginSuccess}
-        onError={handlePrivyLoginError}
       >
         <ChakraProvider theme={customTheme}>
           <AppContent {...props} />

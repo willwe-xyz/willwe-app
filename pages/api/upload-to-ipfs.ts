@@ -25,7 +25,9 @@ console.log("uploadtoipfs, request:", req);
     const objectName = `entity-${Date.now()}.json`;
     const uploadedObject = await objectManager.upload(
       objectName,
-      Buffer.from(JSON.stringify(data))
+      Buffer.from(JSON.stringify(data)),
+      'application/json',
+      process.env.FILEBASE_BUCKET_NAME
     );
 
     res.status(200).json({ cid: uploadedObject.cid });

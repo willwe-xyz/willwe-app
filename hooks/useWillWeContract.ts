@@ -3,18 +3,18 @@ import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
 import { getRPCUrl } from '../config/contracts';
 
-interface WillWeContract extends ethers.Contract {
-  totalSupply(nodeId: string): Promise<bigint>;
-  getChildParentEligibilityPerSec(
+interface WillWeContract extends ethers.BaseContract {
+  totalSupply: (nodeId: string) => Promise<bigint>;
+  getChildParentEligibilityPerSec: (
     childId: string,
     parentId: string
-  ): Promise<bigint>;
-  calculateUserTargetedPreferenceAmount(
+  ) => Promise<bigint>;
+  calculateUserTargetedPreferenceAmount: (
     childId: string,
     parentId: string,
     signal: number,
     user: string
-  ): Promise<bigint>;
+  ) => Promise<bigint>;
 }
 
 export const useWillWeContract = (chainId: string) => {
@@ -36,7 +36,7 @@ export const useWillWeContract = (chainId: string) => {
           willWeAddress,
           ABIs.WillWe,
           provider
-        ) as WillWeContract;
+        ) as unknown as WillWeContract;
 
         if (typeof willWeContract.totalSupply !== 'function') {
           console.error('totalSupply function not found in contract ABI:', ABIs.WillWe);

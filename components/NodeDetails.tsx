@@ -32,6 +32,7 @@ import  SignalForm  from './Node/SignalForm/index';
 import { formatBalance } from '../utils/formatters';
 import { useNodeTransactions } from '../hooks/useNodeTransactions';
 import {nodeIdToAddress} from '../utils/formatters';
+import { NodeState } from '../types/chainData';
 
 interface NodeDetailsProps {
   chainId: string;
@@ -44,7 +45,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
   onNodeSelect,
-  selectedTokenColor
+  selectedTokenColor,
 }) => {
   // Hooks
   const { user } = usePrivy();

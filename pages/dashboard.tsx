@@ -69,6 +69,9 @@ export default function DashboardPage() {
     contrastingColor: colorState.contrastingColor,
     reverseColor: colorState.reverseColor,
     cycleColors,
+    onNodeSelect: (nodeId: string) => {
+      handleNodeSelect(nodeId);
+    },
   };
 
   // Empty dashboard state

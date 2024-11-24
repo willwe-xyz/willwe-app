@@ -16,7 +16,7 @@ const fetchBalances = async (address: string, chainId: string): Promise<{balance
   // Get protocol balances
   const protocolResponse = await covalentClient.BalanceService.getTokenBalancesForWalletAddress(cleanChainId, address, {
     nft: false,
-    'no-spam': true,
+    noSpam: true,
     quoteCurrency: 'USD'
   });
   const protocolBalances = protocolResponse.data?.items || [];

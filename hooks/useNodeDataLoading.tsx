@@ -30,7 +30,7 @@ export function useNodeDataLoading(chainId: string | undefined, nodeId: string |
       const contract = new ethers.Contract(
         contractAddress,
         ABIs.WillWe,
-        provider
+        provider as unknown as ethers.ContractRunner
       );
 
       console.log('Fetching node data for:', {
@@ -52,10 +52,8 @@ export function useNodeDataLoading(chainId: string | undefined, nodeId: string |
         membersOfNode: nodeData.membersOfNode || [],
         childrenNodes: nodeData.childrenNodes || [],
         rootPath: nodeData.rootPath || [],
-        signals: (nodeData.signals || []).map(signal => ({
-          MembraneInflation: signal.MembraneInflation || [],
-          lastRedistSignal: signal.lastRedistSignal || []
-        }))
+        signals: nodeData.signals || [],
+        membraneMeta: nodeData.membraneMeta || null
       };
 
       setData(transformedData);

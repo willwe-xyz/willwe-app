@@ -19,10 +19,11 @@ interface NodeSignalsResult {
 export function useNodeSignals(node: NodeState): NodeSignalsResult {
   return useMemo(() => {
     const processSignal = (signal: UserSignal): SignalData[] => {
-      return signal.MembraneAndInflation.map(([membrane, inflation], index) => ({
+      // @ts-ignore
+      return signal.MembraneInflation.map(([membrane, inflation], index) => ({
         membrane,
         inflation,
-        timestamp: Number(signal.lastReidstriSig[index]) || Date.now(),
+        timestamp: Number(signal.lastRedistSignal[index]) || Date.now(),
         value: inflation
       }));
     };

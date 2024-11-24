@@ -31,6 +31,7 @@ export function useMembraneOperations(chainId: string) {
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.Membrane,
+            // @ts-ignore
             signer
           );
 
@@ -62,11 +63,7 @@ export function useMembraneOperations(chainId: string) {
 
           const membraneId = ethers.toBigInt(membraneCreatedLog.topics[1]).toString();
 
-          return {
-            tx,
-            receipt,
-            membraneId
-          };
+          return tx;
         },
         {
           successMessage: 'Membrane created successfully',
@@ -74,10 +71,6 @@ export function useMembraneOperations(chainId: string) {
         }
       );
       
-      if (!result) {
-        throw new Error('Transaction failed');
-      }
-
       return result;
 
     } catch (error) {
@@ -102,6 +95,7 @@ export function useMembraneOperations(chainId: string) {
       const contract = new ethers.Contract(
         contractAddress,
         ABIs.Membrane,
+        // @ts-ignore
         provider
       );
 
@@ -125,6 +119,7 @@ export function useMembraneOperations(chainId: string) {
       const contract = new ethers.Contract(
         contractAddress,
         ABIs.Membrane,
+        // @ts-ignore
         provider
       );
 

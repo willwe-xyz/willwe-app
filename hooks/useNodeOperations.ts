@@ -19,7 +19,7 @@ export function useNodeOperations(chainId: string) {
       if (!address) {
         throw new Error(`No contract deployment found for chain ${chainId}`);
       }
-
+      // @ts-ignore
       return new ethers.Contract(address, ABIs.WillWe, signer);
     } catch (error) {
       console.error('Contract initialization error:', error);

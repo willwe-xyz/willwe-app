@@ -44,12 +44,9 @@ const NodePage = () => {
     <AppLayout>
       <Box flex={1} overflow="auto" bg="gray.50" p={6}>
         <NodeDetails
-          chainId={chainId.toString()}
+          chainId={chainId as string}
           nodeId={nodeId.toString()}
           selectedTokenColor={colorState.contrastingColor}
-          nodeData={nodeData}
-          isLoading={isLoading}
-          error={error}
         />
       </Box>
     </AppLayout>

@@ -3,7 +3,6 @@ import { usePrivy } from "@privy-io/react-auth";
 import Head from "next/head";
 import { Spinner, Heading, Text, Button, VStack, Box, chakra } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
-import { AllStacks } from '../components/AllStacks';
 import DashboardPage from './dashboard';
 
 const WideText = chakra(Text, {
@@ -13,7 +12,15 @@ const WideText = chakra(Text, {
   },
 });
 
-const BackgroundLetter = React.memo(({ children, color, x, y, z }) => (
+interface BackgroundLetterProps {
+  children: React.ReactNode;
+  color: string;
+  x: number;
+  y: number;
+  z: number;
+}
+
+const BackgroundLetter = React.memo<BackgroundLetterProps>(({ children, color, x, y, z }) => (
   <motion.div
     style={{
       position: 'absolute',
@@ -65,7 +72,7 @@ const Home: React.FC = () => {
     return { centerX, centerY, maxDistance, rightShift };
   }, [windowSize]);
 
-  const getTransform = useCallback((baseX, baseY, baseZ, letter) => {
+  const getTransform = useCallback((baseX: number, baseY: number, baseZ: number, letter: string) => {
     const dx = mousePosition.x - centerX;
     const dy = mousePosition.y - centerY;
     const distance = Math.sqrt(dx ** 2 + dy ** 2);
