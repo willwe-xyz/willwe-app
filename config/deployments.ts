@@ -1,10 +1,12 @@
 import { Chain} from 'viem';
 import * as chains from 'viem/chains';
 import { InterfaceAbi } from 'ethers';
+import { Network } from 'alchemy-sdk';
 
 type Deployments = { [key: string]: { [key: string]: string } };
 type ABIKP = { [key: string]: InterfaceAbi };
 
+// Hekla
 // ###############################
 // Foundation Agent Safe at:  0xE9a6CaCD129732dc840051676e9cab2490dbE851
 // Will:  0x82Cb12995f4861D317a6C7C72917BE3C243222a6
@@ -13,26 +15,35 @@ type ABIKP = { [key: string]: InterfaceAbi };
 // WillWe:  0x88AB91578876A7fC13F9F4A9332083Ddfb062049
 // ###############################
 
+// OP sepolia
+// ###############################
+// Foundation Agent Safe at:  0xe63414103C2F622088EeE13044eFf5985C79a2c1
+// Will:  0x633776AA32a4B6CcB902F05858403442440998fb
+// Membrane:  0xDd8Ec4A5cE284232d5A0E20fe902EC202A4e45b5
+// Execution:  0x6e1F24ABA923AC00DfdEfa1cEd924981ba7F4D95
+// WillWe:  0x086488D71DFF137C426eaA50396eA55A26dBa4da
+// ###############################
+
 
 export const deployments: Deployments = {
   "WillWe": {
     "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-    "11155420": "0x264336ec33fab9CC7859b2C5b431f42020a20E75",
+    "11155420": "0x086488D71DFF137C426eaA50396eA55A26dBa4da",
     "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
   },
   "Membrane": {
     "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-    "11155420": "0x36C70f035c39e4072822F8C33C4427ae59298451",
+    "11155420": "0xDd8Ec4A5cE284232d5A0E20fe902EC202A4e45b5",
     "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
   },
   "Execution": {
     "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-    "11155420": "0xEDf98928d9513051D75e72244e0b4DD254DB1462",
+    "11155420": "0x6e1F24ABA923AC00DfdEfa1cEd924981ba7F4D95",
     "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
   },
   "RVI": {
     "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-    "11155420": "0x9d814170537951fE8eD28A534CDE9F30Fd731A64",
+    "11155420": "0x633776AA32a4B6CcB902F05858403442440998fb",
     "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
   }
 };
@@ -54,6 +65,41 @@ export function getChainById(chainId: string): Chain {
   }
   throw new Error(`Chain with id ${chainId} not found`); 
 }
+
+export function getAlchemyNetwork(chainId: number | string): Network {
+    // Convert chainId to string for consistent comparison
+    const chain = String(chainId);
+    
+    switch (chain) {
+      // Ethereum
+      case '1':
+        return Network.ETH_MAINNET;
+      case '11155111':
+        return Network.ETH_SEPOLIA;
+      // Polygon
+      case '137':
+        return Network.MATIC_MAINNET;
+      // Arbitrum
+      case '42161':
+        return Network.ARB_MAINNET;
+      case '421614':
+        return Network.ARB_SEPOLIA;
+      // Optimism
+      case '10':
+        return Network.OPT_MAINNET;
+      case '11155420':
+        return Network.OPT_SEPOLIA;
+      // Base
+      case '8453':
+        return Network.BASE_MAINNET;
+      case '84532':
+        return Network.BASE_SEPOLIA;
+      // Default to mainnet if chain is not supported
+      default:
+        return Network.ETH_MAINNET;
+    }
+}
+
 
 export const ABIs: ABIKP = {
     "WillWe" :   [

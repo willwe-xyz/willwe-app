@@ -2,15 +2,15 @@
 
 // Reflects the smart contract's basic info array structure
 export interface NodeBasicInfo {
-  nodeId: string;        // basicInfo[0]
-  inflation: string;     // basicInfo[1]
-  balanceAnchor: string; // basicInfo[2]
-  balanceBudget: string; // basicInfo[3]
-  value: string;         // basicInfo[4]
-  membraneId: string;    // basicInfo[5]
-  balanceOfUser: string; // basicInfo[6]
-  eligibilityPerSec: string; // basicInfo[7]
-  lastRedistribution: string; // basicInfo[8]
+  nodeId: string;              // basicInfo[0]
+  inflation: string;           // basicInfo[1]
+  balanceAnchor: string;      // basicInfo[2] - balance in parent reserve
+  balanceBudget: string;      // basicInfo[3] - budget
+  value: string;              // basicInfo[4] - valuation denominated in root token
+  membraneId: string;         // basicInfo[5] - membrane id
+  balanceOfUser: string;      // basicInfo[6] - balance of current user in this node
+  eligibilityPerSec: string;  // basicInfo[7] - redistribution eligibility from parent per sec
+  lastRedistribution: string; // basicInfo[8] - last redistribution timestamp
 }
 
 // Matches the smart contract's UserSignal struct
@@ -32,13 +32,13 @@ export interface NodeState {
     eligibilityPerSec: string, // basicInfo[7] - redistribution eligibility from parent per sec
     lastRedistribution: string // basicInfo[8] - last redistribution timestamp
   ];
-  membraneMeta: string;     // IPFS hash or metadata string
-  membersOfNode: string[];  // Array of ethereum addresses
-  childrenNodes: string[];  // Array of node IDs
-  rootPath: string[];       // Array of node IDs from root to this node
-  signals: UserSignal[];    // Array of UserSignal structs
+  membraneMeta: string;      // IPFS hash or metadata string
+  membersOfNode: string[];   // Array of ethereum addresses
+  childrenNodes: string[];   // Array of node IDs
+  rootPath: string[];        // Array of node IDs from root to this node
+  signals: UserSignal[];     // Array of UserSignal structs
+  ancestors: string[];       // Array of ancestor node IDs
 }
-
 
 // For membrane-related data
 export interface MembraneRequirement {
@@ -70,6 +70,7 @@ export interface TransformedNodeData {
   childrenNodes: string[];
   rootPath: string[];
   signals: UserSignal[];
+  ancestors: string[];
 }
 
 // For computed statistics
@@ -139,6 +140,7 @@ export const isValidNodeState = (data: any): data is NodeState => {
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
     Array.isArray(data.rootPath) &&
+    Array.isArray(data.ancestors) &&
     Array.isArray(data.signals) &&
     data.signals.every((signal: any) =>
       Array.isArray(signal.MembraneInflation) &&
@@ -177,6 +179,7 @@ export const transformNodeData = (nodeData: NodeState): TransformedNodeData => {
     membersOfNode: nodeData.membersOfNode,
     childrenNodes: nodeData.childrenNodes,
     rootPath: nodeData.rootPath,
-    signals: nodeData.signals
+    signals: nodeData.signals,
+    ancestors: nodeData.ancestors
   };
 };

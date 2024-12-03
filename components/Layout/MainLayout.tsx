@@ -4,7 +4,7 @@ import React, { ReactNode, useCallback } from 'react';
 import { Box } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
-import { useCovalentBalances } from '../../hooks/useCovalentBalances';
+import { useAlchemyBalances } from '../../hooks/useAlchemyBalances';
 import Header from './Header';
 import BalanceList from '../BalanceList';
 import { useNode } from '../../contexts/NodeContext';
@@ -35,9 +35,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
     balances, 
     protocolBalances, 
     isLoading: balancesLoading 
-  } = useCovalentBalances(
-    user?.wallet?.address || '',
-    headerProps?.chainId || ''
+  } = useAlchemyBalances(
+    user?.wallet?.address,
+    headerProps?.chainId
   );
 
   // Handle token selection with navigation

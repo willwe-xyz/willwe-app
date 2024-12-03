@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 import { 
   Box, 
   Text, 
@@ -12,9 +13,12 @@ import {
   useColorModeValue
 } from '@chakra-ui/react';
 import { Copy, ChevronRight } from 'lucide-react';
-import { ethers } from 'ethers';
-import { useWillWeContract } from '../../hooks/useWillWeContract';
+import { usePrivy } from '@privy-io/react-auth';
+import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
+import DualTreemap from './DualTreemap';
+import { nodeIdToAddress } from '../../utils/formatters';
+import router from 'next/router';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -27,13 +31,45 @@ interface NodeInfoProps {
 const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
-  const contract = useWillWeContract(chainId);
+  const [tokenSymbol, setTokenSymbol] = useState<string>('');
   const toast = useToast();
-
+  
   // Theme colors
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const bgColor = useColorModeValue('white', 'gray.800');
   const mutedColor = useColorModeValue('gray.600', 'gray.400');
+
+  const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId), {
+    chainId: Number(chainId),
+    name: `${chainId}`,
+  });
+  const tokenAddress = nodeIdToAddress(node.rootPath[0]);
+
+
+  const tokenContract = new ethers.Contract(
+    tokenAddress, 
+    ABIs.IERC20,
+    provider
+  );
+
+  // Fetch token symbol
+  useEffect(() => {
+    const fetchTokenSymbol = async () => {
+      if (!node?.rootPath?.[0] || !chainId) return;
+      
+      try {
+     
+        
+        const symbol = await tokenContract.symbol();
+        setTokenSymbol(symbol);
+      } catch (error) {
+        console.error('Error fetching token symbol:', error);
+        setTokenSymbol('token');
+      }
+    };
+
+    fetchTokenSymbol();
+  }, [node?.rootPath, chainId]);
 
   // Load membrane metadata
   useEffect(() => {
@@ -60,22 +96,19 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   }, [node.membraneMeta]);
 
   // Format values
-  const formatGweiPerDay = (gweiPerSecond: string): string => {
-    try {
-      const perSecond = ethers.parseUnits(gweiPerSecond, 'gwei');
-      const perDay = perSecond * BigInt(86400); // seconds in a day
-      return ethers.formatEther(perDay);
-    } catch (error) {
-      console.error('Error formatting gwei per day:', error);
-      return '0';
-    }
+  const formatCurrency = (value: string): string => {
+    const number = parseFloat(value);
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(number);
   };
 
   // Calculate metrics
   const metrics = {
-    inflation: formatGweiPerDay(node.basicInfo[1]),
+    inflation: formatCurrency(node.basicInfo[1]),
     budget: node.basicInfo[3],
-    inflow: formatGweiPerDay(node.basicInfo[7])
+    inflow: formatCurrency(node.basicInfo[7])
   };
 
   // Handle node ID copy
@@ -88,6 +121,9 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     });
   };
 
+
+  
+
   return (
     <Box 
       p={6} 
@@ -96,60 +132,73 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
       border="1px" 
       borderColor={borderColor}
     >
-      {/* Title Section */}
-      <VStack align="stretch" spacing={2} mb={6}>
-        <HStack justify="space-between" maxW="100%">
-          {isLoadingTitle ? (
-            <Skeleton height="24px" width="200px" />
-          ) : (
-            <Text fontSize="lg" fontWeight="bold" isTruncated>
-              {membraneTitle || `Node ${node.basicInfo[0].slice(-6)}`}
-            </Text>
-          )}
-        </HStack>
-        <HStack spacing={2}>
-          <Text fontSize="sm" color={mutedColor} isTruncated>
-            {node.basicInfo[0].slice(0, 6)}...{node.basicInfo[0].slice(-4)}
-          </Text>
-          <IconButton
-            aria-label="Copy node ID"
-            icon={<Copy size={14} />}
-            size="xs"
-            variant="ghost"
-            onClick={handleCopyNodeId}
+      <HStack align="start" spacing={6}>
+        {/* Left Section */}
+        <VStack align="stretch" flex="1">
+          {/* Title Section */}
+          <VStack align="stretch" spacing={2} mb={6}>
+            <HStack justify="space-between" maxW="100%">
+              {isLoadingTitle ? (
+                <Skeleton height="24px" width="200px" />
+              ) : (
+                <Text fontSize="lg" fontWeight="bold" isTruncated>
+                  {membraneTitle || `Node ${node.basicInfo[0].slice(-6)}`}
+                </Text>
+              )}
+            </HStack>
+            <HStack spacing={2}>
+              <Text fontSize="sm" color={mutedColor} isTruncated>
+                {node.basicInfo[0].slice(0, 6)}...{node.basicInfo[0].slice(-4)}
+              </Text>
+              <IconButton
+                aria-label="Copy node ID"
+                icon={<Copy size={14} />}
+                size="xs"
+                variant="ghost"
+                onClick={handleCopyNodeId}
+              />
+            </HStack>
+          </VStack>
+
+          {/* Updated Metrics Grid */}
+          <VStack align="stretch" spacing={4}>
+            <HStack justify="space-between">
+              <Text fontSize="sm" color={mutedColor}>Inflation</Text>
+              <Text fontWeight="medium">{formatCurrency(metrics.inflation)} {tokenSymbol}/day</Text>
+            </HStack>
+
+            <HStack justify="space-between">
+              <Text fontSize="sm" color={mutedColor}>Budget</Text>
+              <Text fontWeight="medium">{formatCurrency(ethers.formatEther(metrics.budget))} {tokenSymbol}</Text>
+            </HStack>
+
+            <HStack justify="space-between">
+              <Text fontSize="sm" color={mutedColor}>Inflow</Text>
+              <Text fontWeight="medium">{formatCurrency(metrics.inflow)} {tokenSymbol}/day</Text>
+            </HStack>
+
+            <HStack justify="space-between">
+              <Text fontSize="sm" color={mutedColor}>Members</Text>
+              <Text fontWeight="medium">{node.membersOfNode.length}</Text>
+            </HStack>
+
+            <HStack justify="space-between">
+              <Text fontSize="sm" color={mutedColor}>Sub-Nodes</Text>
+              <Text fontWeight="medium">{node.childrenNodes.length}</Text>
+            </HStack>
+          </VStack>
+        </VStack>
+
+        {/* Right Section - Surface Map */}
+        <Box flex="1" h="100%" minH="300px">
+          <DualTreemap 
+            nodeData={node}
+            chainId={chainId}
           />
-        </HStack>
-      </VStack>
+        </Box>
+      </HStack>
 
-      {/* Metrics Grid */}
-      <VStack align="stretch" spacing={4}>
-        <HStack justify="space-between">
-          <Text fontSize="sm" color={mutedColor}>Inflation</Text>
-          <Text fontWeight="medium">{metrics.inflation} tokens/day</Text>
-        </HStack>
-
-        <HStack justify="space-between">
-          <Text fontSize="sm" color={mutedColor}>Budget</Text>
-          <Text fontWeight="medium">{ethers.formatEther(metrics.budget)} tokens</Text>
-        </HStack>
-
-        <HStack justify="space-between">
-          <Text fontSize="sm" color={mutedColor}>Inflow</Text>
-          <Text fontWeight="medium">{metrics.inflow} tokens/day</Text>
-        </HStack>
-
-        <HStack justify="space-between">
-          <Text fontSize="sm" color={mutedColor}>Members</Text>
-          <Text fontWeight="medium">{node.membersOfNode.length}</Text>
-        </HStack>
-
-        <HStack justify="space-between">
-          <Text fontSize="sm" color={mutedColor}>Sub-Nodes</Text>
-          <Text fontWeight="medium">{node.childrenNodes.length}</Text>
-        </HStack>
-      </VStack>
-
-      {/* Path/Breadcrumbs */}
+      {/* Path/Breadcrumbs
       {node.rootPath.length > 0 && (
         <HStack 
           mt={6} 
@@ -181,9 +230,8 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             </React.Fragment>
           ))}
         </HStack>
-      )}
+      )} */}
     </Box>
   );
 };
-
 export default NodeInfo;

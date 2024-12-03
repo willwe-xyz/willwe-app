@@ -1,11 +1,10 @@
 import { useCallback } from 'react';
-import { BalanceItem } from '@covalenthq/client-sdk';
-import { useCovalentBalances } from './useCovalentBalances';
+import { useAlchemyBalances, AlchemyTokenBalance } from './useAlchemyBalances';
 import { useWillBalances } from './useWillBalances';
 
 interface UseBalancesResult {
-  balances: BalanceItem[];
-  protocolBalances: BalanceItem[];
+  balances: AlchemyTokenBalance[];
+  protocolBalances: AlchemyTokenBalance[];
   isLoading: boolean;
   error: Error | null;
   refetch: () => void;
@@ -15,11 +14,10 @@ export function useBalances(
   userAddress: string | undefined,
   chainId: string | undefined
 ): UseBalancesResult {
-  const covalentBalancesResult = useCovalentBalances(userAddress || '', chainId || '');
-  const balances = covalentBalancesResult.balances;
-  const protocolBalancesResult = covalentBalancesResult.protocolBalances;
-  const isBalancesLoading = covalentBalancesResult.isLoading;
-  const balancesError = covalentBalancesResult.error;
+  const alchemyBalancesResult = useAlchemyBalances(userAddress, chainId);
+  const balances = alchemyBalancesResult.balances;
+  const isBalancesLoading = alchemyBalancesResult.isLoading;
+  const balancesError = alchemyBalancesResult.error;
 
   const {
     willBalanceItems: protocolBalances,
@@ -30,9 +28,9 @@ export function useBalances(
   const isLoading = isBalancesLoading || isProtocolBalancesLoading;
   const error = balancesError || protocolBalancesError;
   const refetch = useCallback(() => {
-    covalentBalancesResult.refetch();
+    alchemyBalancesResult.refetch();
     useWillBalances(chainId || '').refetch();
-  }, [covalentBalancesResult, useWillBalances, chainId]);
+  }, [alchemyBalancesResult, useWillBalances, chainId]);
 
   return {
     balances,
@@ -45,14 +43,14 @@ export function useBalances(
 
 // Helper function to merge user and protocol balances
 export function mergeBalances(
-  userBalances: BalanceItem[],
-  protocolBalances: BalanceItem[]
-): BalanceItem[] {
+  userBalances: AlchemyTokenBalance[],
+  protocolBalances: AlchemyTokenBalance[]
+): AlchemyTokenBalance[] {
   const mergedBalances = [...userBalances];
   
   protocolBalances.forEach(protocolBalance => {
     const existingIndex = mergedBalances.findIndex(
-      balance => balance.contract_address === protocolBalance.contract_address
+      balance => balance.contractAddress === protocolBalance.contractAddress
     );
     
     if (existingIndex === -1) {
@@ -60,17 +58,17 @@ export function mergeBalances(
     }
   });
   
-  return mergedBalances.sort((a: BalanceItem, b: BalanceItem) => {
-    // Convert bigint balance strings to BigInt for proper comparison
-    const aUserBalance  = BigInt(a.balance || '0');
-    const bUserBalance = BigInt(b.balance || '0');
+  return mergedBalances.sort((a: AlchemyTokenBalance, b: AlchemyTokenBalance) => {
+    // Convert balance strings to BigInt for proper comparison
+    const aUserBalance = BigInt(a.tokenBalance || '0');
+    const bUserBalance = BigInt(b.tokenBalance || '0');
     
     const aProtocolBalance = BigInt(
-      protocolBalances.find(p => p.contract_address === a.contract_address)?.balance || '0'
+      protocolBalances.find(p => p.contractAddress === a.contractAddress)?.tokenBalance || '0'
     );
     
     const bProtocolBalance = BigInt(
-      protocolBalances.find(p => p.contract_address === b.contract_address)?.balance || '0'
+      protocolBalances.find(p => p.contractAddress === b.contractAddress)?.tokenBalance || '0'
     );
     
     // Calculate total balances

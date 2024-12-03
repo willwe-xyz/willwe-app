@@ -18,7 +18,7 @@ import { useNodeData } from '../hooks/useNodeData';
 import { NodeOperations } from './Node/NodeOperations';
 import SignalForm from './Node/SignalForm/index';
 import NodeInfo from './Node/NodeInfo';
-  import { SignalHistory } from './Node/SignalHistory';
+import { SignalHistory } from './Node/SignalHistory';
 
 interface NodeDetailsProps {
   chainId: string;
@@ -79,6 +79,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
+  const tokenSymbol = nodeData?.basicInfo[1];
+
+
   return (
     <Box
       borderRadius="lg"
@@ -97,6 +100,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           chainId={chainId}
           onNodeSelect={onNodeSelect}
         />
+
+
       </Box>
 
       {/* Operations */}

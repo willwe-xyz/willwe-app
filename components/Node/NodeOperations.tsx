@@ -484,9 +484,13 @@ export const NodeOperations = ({
     }
   }, [chainId, nodeId, executeTransaction, toast, onSuccess]);
 
+  
   const handleRedistribute = useCallback(async () => {
     if (isProcessing) return;
     setIsProcessing(true);
+    
+    let confirmToastId: ToastId | undefined;
+    let pendingToastId: ToastId | undefined;
     
     try {
       const cleanChainId = chainId.replace('eip155:', '');
@@ -496,7 +500,7 @@ export const NodeOperations = ({
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
 
-      toast({
+      confirmToastId = toast({
         title: 'Confirm Transaction',
         description: 'Please sign the transaction in your wallet',
         status: 'info',
@@ -506,6 +510,8 @@ export const NodeOperations = ({
       await executeTransaction(
         chainId,
         async () => {
+          if (confirmToastId) toast.close(confirmToastId);
+          
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
           const contract = new ethers.Contract(
@@ -515,7 +521,7 @@ export const NodeOperations = ({
             signer
           );
 
-          toast({
+          pendingToastId = toast({
             title: 'Transaction Pending',
             description: 'Your transaction is being processed',
             status: 'loading',
@@ -526,10 +532,16 @@ export const NodeOperations = ({
         },
         {
           successMessage: 'Value redistributed successfully',
-          onSuccess
+          onSuccess: () => {
+            if (pendingToastId) toast.close(pendingToastId);
+            onSuccess?.();
+          }
         }
       );
     } catch (error) {
+      if (confirmToastId) toast.close(confirmToastId);
+      if (pendingToastId) toast.close(pendingToastId);
+      
       console.error('Failed to redistribute:', error);
       toast({
         title: 'Error',

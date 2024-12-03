@@ -15,6 +15,8 @@ interface WillWeContract extends ethers.BaseContract {
     signal: number,
     user: string
   ) => Promise<bigint>;
+  getNodeData: (nodeId: string) => Promise<NodeState>;
+  getNodes: (nodeIds: string[]) => Promise<NodeState[]>;
 }
 
 export const useWillWeContract = (chainId: string) => {

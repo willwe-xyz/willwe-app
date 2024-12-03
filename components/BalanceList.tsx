@@ -4,7 +4,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import { Box, HStack, IconButton, useToken } from '@chakra-ui/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import TokenBalance from './TokenBalance';
-import { BalanceItem } from '@covalenthq/client-sdk';
+import { AlchemyTokenBalance } from '../hooks/useAlchemyBalances';
 
 interface BalanceListProps {
   selectedToken: string;
@@ -14,8 +14,8 @@ interface BalanceListProps {
   hoverColor: string;
   userAddress: string;
   chainId: string;
-  balances: BalanceItem[];
-  protocolBalances: BalanceItem[];
+  balances: AlchemyTokenBalance[];
+  protocolBalances: AlchemyTokenBalance[];
   isLoading: boolean;
 }
 
@@ -103,19 +103,19 @@ const BalanceList: React.FC<BalanceListProps> = ({
         <HStack spacing={4} height="100%">
           {balances.map((balance) => {
             const protocolBalance = protocolBalances.find(
-              p => p.contract_address.toLowerCase() === balance.contract_address.toLowerCase()
+              p => p.contractAddress.toLowerCase() === balance.contractAddress.toLowerCase()
             );
 
             return (
               <Box
-                key={balance.contract_address}
-                onClick={() => handleTokenSelect(balance.contract_address)}
+                key={balance.contractAddress}
+                onClick={() => handleTokenSelect(balance.contractAddress)}
                 cursor="pointer"
                 transition="all 0.2s"
                 borderRadius="md"
-                bg={selectedToken === balance.contract_address ? `${baseColor}10` : 'transparent'}
+                bg={selectedToken === balance.contractAddress ? `${baseColor}10` : 'transparent'}
                 border="1px solid"
-                borderColor={selectedToken === balance.contract_address ? baseColor : 'transparent'}
+                borderColor={selectedToken === balance.contractAddress ? baseColor : 'transparent'}
                 _hover={{
                   bg: hoverColor,
                   transform: 'translateY(-1px)',
@@ -128,7 +128,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
                 <TokenBalance
                   balanceItem={balance}
                   protocolBalance={protocolBalance}
-                  isSelected={selectedToken === balance.contract_address}
+                  isSelected={selectedToken === balance.contractAddress}
                   contrastingColor={contrastingColor}
                   reverseColor={reverseColor}
                 />

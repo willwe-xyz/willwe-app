@@ -372,6 +372,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           overflowY="auto"
           px={6}
           py={4}
+          pb={20}
           sx={{
             '&::-webkit-scrollbar': {
               width: '8px',
@@ -436,12 +437,14 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
               </VStack>
             </Box>
           ) : (
-            <NodeHierarchyView
-              nodes={nodes}
-              selectedTokenColor={selectedTokenColor}
-              onNodeSelect={onNodeSelect}
-              nodeValues={nodeValues}
-            />
+            <Box pb={16}>
+              <NodeHierarchyView
+                nodes={nodes}
+                selectedTokenColor={selectedTokenColor}
+                onNodeSelect={onNodeSelect}
+                nodeValues={nodeValues}
+              />
+            </Box>
           )}
         </Box>
       </Flex>

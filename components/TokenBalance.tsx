@@ -3,12 +3,12 @@
 import React, { useMemo } from 'react';
 import { Box, Text, VStack, HStack, Tooltip } from '@chakra-ui/react';
 import { Activity, Wallet } from 'lucide-react';
-import { BalanceItem } from '@covalenthq/client-sdk';
+import { AlchemyTokenBalance } from '../hooks/useAlchemyBalances';
 import { formatBalance } from '../utils/formatters';
 
 interface TokenBalanceProps {
-  balanceItem: BalanceItem;
-  protocolBalance?: BalanceItem | null;
+  balanceItem: AlchemyTokenBalance;
+  protocolBalance?: AlchemyTokenBalance | null;
   isSelected: boolean;
   contrastingColor: string;
   reverseColor: string;
@@ -25,14 +25,14 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
 }) => {
   const formattedAmounts = useMemo(() => {
     return {
-      user: formatBalance(balanceItem?.balance || '0'),
-      protocol: formatBalance(protocolBalance?.balance || '0')
+      user: balanceItem.formattedBalance || '0.00',
+      protocol: protocolBalance?.formattedBalance || '0.00'
     };
-  }, [balanceItem?.balance, protocolBalance?.balance]);
+  }, [balanceItem.formattedBalance, protocolBalance?.formattedBalance]);
 
   const percentages = useMemo(() => {
-    const userBalance = BigInt(balanceItem?.balance || '0');
-    const protocolBal = BigInt(protocolBalance?.balance || '0');
+    const userBalance = BigInt(balanceItem.tokenBalance || '0');
+    const protocolBal = BigInt(protocolBalance?.tokenBalance || '0');
     const total = userBalance + protocolBal;
 
     if (total === BigInt(0)) return { user: 0, protocol: 0 };
@@ -42,7 +42,26 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
       user: userPercentage,
       protocol: 100 - userPercentage
     };
-  }, [balanceItem?.balance, protocolBalance?.balance]);
+  }, [balanceItem.tokenBalance, protocolBalance?.tokenBalance]);
+
+  const renderBalance = (balance: string) => {
+    const parts = balance.split('.');
+    const wholePart = parts[0] || '0';
+    const decimalPart = parts[1] || '00';
+
+    return (
+      <>
+        {wholePart}
+        <Text 
+          as="span" 
+          fontSize={isCompact ? "3xs" : "xs"} 
+          color="gray.500"
+        >
+          .{decimalPart}
+        </Text>
+      </>
+    );
+  };
 
   return (
     <Box position="relative">
@@ -53,14 +72,14 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
           fontSize={isCompact ? "xs" : "sm"}
           lineHeight={isCompact ? "1.2" : "normal"}
         >
-          {balanceItem.contract_ticker_symbol || 'Unknown Token'}
+          {balanceItem.symbol || 'Unknown Token'}
         </Text>
         <Text 
           fontSize={isCompact ? "2xs" : "xs"} 
           color="gray.500"
           lineHeight={isCompact ? "1" : "normal"}
         >
-          {balanceItem.contract_name || 'Unknown Name'}
+          {balanceItem.name || 'Unknown Name'}
         </Text>
       </VStack>
 
@@ -74,14 +93,7 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
               fontWeight="medium"
               lineHeight={isCompact ? "1" : "normal"}
             >
-              {formattedAmounts.user.split('.')[0]}
-              <Text 
-                as="span" 
-                fontSize={isCompact ? "3xs" : "xs"} 
-                color="gray.500"
-              >
-                .{formattedAmounts.user.split('.')[1]}
-              </Text>
+              {renderBalance(formattedAmounts.user)}
             </Text>
           </HStack>
         </Tooltip>
