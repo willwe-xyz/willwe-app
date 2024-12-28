@@ -5,25 +5,34 @@ import AppLayout from '../../../components/Layout/AppLayout';
 import NodeDetails from '../../../components/NodeDetails';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { useColorManagement } from '../../../hooks/useColorManagement';
+import { usePrivy } from '@privy-io/react-auth';
+import { useNode } from '../../../contexts/NodeContext';
+import { useActivityFeed } from '../../../hooks/useActivityFeed';
+import { MainLayout } from '../../../components/Layout/MainLayout';
 
 const NodePage = () => {
   const router = useRouter();
-  const { colorState } = useColorManagement();
+  const { colorState, cycleColors } = useColorManagement();
   const toast = useToast();
-
+  const { user, ready, authenticated, logout, login } = usePrivy();
+  const { selectedToken, selectToken } = useNode();
+  
   const { chainId, nodeId } = router.query;
 
-  useEffect(() => {
-    if (router.isReady && (!chainId || !nodeId)) {
-      toast({
-        title: "Error",
-        description: "Invalid node or chain ID",
-        status: "error",
-        duration: 5000,
-      });
-      router.push('/dashboard');
-    }
-  }, [router.isReady, chainId, nodeId, router, toast]);
+  // Prepare header props - matching the dashboard implementation
+  const headerProps = {
+    userAddress: user?.wallet?.address,
+    chainId: chainId as string,
+    logout,
+    login,
+    isTransacting: false,
+    contrastingColor: colorState.contrastingColor,
+    reverseColor: colorState.reverseColor,
+    cycleColors,
+    onNodeSelect: (nodeId: string) => {
+      router.push(`/nodes/${chainId}/${nodeId}`);
+    },
+  };
 
   const { data: nodeData, isLoading, error } = useNodeData(
     chainId as string,
@@ -32,16 +41,16 @@ const NodePage = () => {
 
   if (!router.isReady || !chainId || !nodeId) {
     return (
-      <AppLayout>
+      <MainLayout headerProps={headerProps}>
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
           <Spinner size="xl" color={colorState.contrastingColor} />
         </Box>
-      </AppLayout>
+      </MainLayout>
     );
   }
 
   return (
-    <AppLayout>
+    <MainLayout headerProps={headerProps}>
       <Box flex={1} overflow="auto" bg="gray.50" p={6}>
         <NodeDetails
           chainId={chainId as string}
@@ -49,7 +58,7 @@ const NodePage = () => {
           selectedTokenColor={colorState.contrastingColor}
         />
       </Box>
-    </AppLayout>
+    </MainLayout>
   );
 };
 

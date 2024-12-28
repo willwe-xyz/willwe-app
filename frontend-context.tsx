@@ -596,25 +596,34 @@ import AppLayout from '../../../components/Layout/AppLayout';
 import NodeDetails from '../../../components/NodeDetails';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { useColorManagement } from '../../../hooks/useColorManagement';
+import { usePrivy } from '@privy-io/react-auth';
+import { useNode } from '../../../contexts/NodeContext';
+import { useActivityFeed } from '../../../hooks/useActivityFeed';
+import { MainLayout } from '../../../components/Layout/MainLayout';
 
 const NodePage = () => {
   const router = useRouter();
-  const { colorState } = useColorManagement();
+  const { colorState, cycleColors } = useColorManagement();
   const toast = useToast();
-
+  const { user, ready, authenticated, logout, login } = usePrivy();
+  const { selectedToken, selectToken } = useNode();
+  
   const { chainId, nodeId } = router.query;
 
-  useEffect(() => {
-    if (router.isReady && (!chainId || !nodeId)) {
-      toast({
-        title: "Error",
-        description: "Invalid node or chain ID",
-        status: "error",
-        duration: 5000,
-      });
-      router.push('/dashboard');
-    }
-  }, [router.isReady, chainId, nodeId, router, toast]);
+  // Prepare header props - matching the dashboard implementation
+  const headerProps = {
+    userAddress: user?.wallet?.address,
+    chainId: chainId as string,
+    logout,
+    login,
+    isTransacting: false,
+    contrastingColor: colorState.contrastingColor,
+    reverseColor: colorState.reverseColor,
+    cycleColors,
+    onNodeSelect: (nodeId: string) => {
+      router.push(`/nodes/${chainId}/${nodeId}`);
+    },
+  };
 
   const { data: nodeData, isLoading, error } = useNodeData(
     chainId as string,
@@ -623,16 +632,16 @@ const NodePage = () => {
 
   if (!router.isReady || !chainId || !nodeId) {
     return (
-      <AppLayout>
+      <MainLayout headerProps={headerProps}>
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
           <Spinner size="xl" color={colorState.contrastingColor} />
         </Box>
-      </AppLayout>
+      </MainLayout>
     );
   }
 
   return (
-    <AppLayout>
+    <MainLayout headerProps={headerProps}>
       <Box flex={1} overflow="auto" bg="gray.50" p={6}>
         <NodeDetails
           chainId={chainId as string}
@@ -640,7 +649,7 @@ const NodePage = () => {
           selectedTokenColor={colorState.contrastingColor}
         />
       </Box>
-    </AppLayout>
+    </MainLayout>
   );
 };
 
@@ -6406,7 +6415,7 @@ import React, { ReactNode, useCallback } from 'react';
 import { Box } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
-import { useCovalentBalances } from '../../hooks/useCovalentBalances';
+import { useBalances } from '../../hooks/useBalances';
 import Header from './Header';
 import BalanceList from '../BalanceList';
 import { useNode } from '../../contexts/NodeContext';
@@ -6432,14 +6441,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
   const { selectedToken, selectToken } = useNode();
   const router = useRouter();
   
-  // Fetch balances for top bar
+  // Fetch balances for top bar using combined hook
   const { 
     balances, 
-    protocolBalances, 
+    protocolBalances,
     isLoading: balancesLoading 
-  } = useCovalentBalances(
-    user?.wallet?.address || '',
-    headerProps?.chainId || ''
+  } = useBalances(
+    user?.wallet?.address,
+    headerProps?.chainId
   );
 
   // Handle token selection with navigation
@@ -6466,8 +6475,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
             contrastingColor={headerProps?.contrastingColor || ''}
             reverseColor={headerProps?.reverseColor || ''}
             hoverColor={`${headerProps?.contrastingColor}20` || ''}
-            userAddress={user?.wallet?.address}
-            chainId={headerProps?.chainId || ''}
             balances={balances || []}
             protocolBalances={protocolBalances || []}
             isLoading={balancesLoading}
@@ -8208,19 +8215,19 @@ const BalanceList: React.FC<BalanceListProps> = ({
         <HStack spacing={4} height="100%">
           {balances.map((balance) => {
             const protocolBalance = protocolBalances.find(
-              p => p.contract_address.toLowerCase() === balance.contract_address.toLowerCase()
+              p => p.contractAddress.toLowerCase() === balance.contractAddress.toLowerCase()
             );
 
             return (
               <Box
-                key={balance.contract_address}
-                onClick={() => handleTokenSelect(balance.contract_address)}
+                key={balance.contractAddress}
+                onClick={() => handleTokenSelect(balance.contractAddress)}
                 cursor="pointer"
                 transition="all 0.2s"
                 borderRadius="md"
-                bg={selectedToken === balance.contract_address ? `${baseColor}10` : 'transparent'}
+                bg={selectedToken === balance.contractAddress ? `${baseColor}10` : 'transparent'}
                 border="1px solid"
-                borderColor={selectedToken === balance.contract_address ? baseColor : 'transparent'}
+                borderColor={selectedToken === balance.contractAddress ? baseColor : 'transparent'}
                 _hover={{
                   bg: hoverColor,
                   transform: 'translateY(-1px)',
@@ -8233,7 +8240,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
                 <TokenBalance
                   balanceItem={balance}
                   protocolBalance={protocolBalance}
-                  isSelected={selectedToken === balance.contract_address}
+                  isSelected={selectedToken === balance.contractAddress}
                   contrastingColor={contrastingColor}
                   reverseColor={reverseColor}
                 />
@@ -14180,7 +14187,7 @@ export function mergeBalances(
   
   protocolBalances.forEach(protocolBalance => {
     const existingIndex = mergedBalances.findIndex(
-      balance => balance.contract_address === protocolBalance.contract_address
+      balance => balance.contractAddress === protocolBalance.contractAddress
     );
     
     if (existingIndex === -1) {
@@ -14189,16 +14196,16 @@ export function mergeBalances(
   });
   
   return mergedBalances.sort((a: AlchemyTokenBalance, b: AlchemyTokenBalance) => {
-    // Convert bigint balance strings to BigInt for proper comparison
-    const aUserBalance  = BigInt(a.balance || '0');
-    const bUserBalance = BigInt(b.balance || '0');
+    // Convert balance strings to BigInt for proper comparison
+    const aUserBalance = BigInt(a.tokenBalance || '0');
+    const bUserBalance = BigInt(b.tokenBalance || '0');
     
     const aProtocolBalance = BigInt(
-      protocolBalances.find(p => p.contract_address === a.contract_address)?.balance || '0'
+      protocolBalances.find(p => p.contractAddress === a.contractAddress)?.tokenBalance || '0'
     );
     
     const bProtocolBalance = BigInt(
-      protocolBalances.find(p => p.contract_address === b.contract_address)?.balance || '0'
+      protocolBalances.find(p => p.contractAddress === b.contractAddress)?.tokenBalance || '0'
     );
     
     // Calculate total balances
@@ -15543,63 +15550,6 @@ import { usePrivy } from "@privy-io/react-auth";
 export const useAuth = () => {
   const { ready, authenticated, user, logout } = usePrivy();
   return { ready, authenticated, user, logout };
-};
-
-
-
-// File: ./hooks/useCovalentBalances.ts
-import { useState, useEffect } from 'react';
-import { BalanceItem, ChainID, CovalentClient } from "@covalenthq/client-sdk";
-import { getCovalentApiKey } from '../config/apiKeys';
-
-const fetchBalances = async (address: string, chainId: string): Promise<{balances: BalanceItem[], protocolBalances: BalanceItem[]}> => {
-  if (!address || !chainId) return { balances: [], protocolBalances: [] };
-
-  const apiKey = getCovalentApiKey();
-  const covalentClient = new CovalentClient(apiKey);
-  const cleanChainId = chainId.replace('eip155:', '') as unknown as ChainID;
-
-  // Get regular balances
-  const balanceResponse = await covalentClient.BalanceService.getTokenBalancesForWalletAddress(cleanChainId, address);
-  const balances = balanceResponse.data?.items || [];
-
-  // Get protocol balances
-  const protocolResponse = await covalentClient.BalanceService.getTokenBalancesForWalletAddress(cleanChainId, address, {
-    nft: false,
-    noSpam: true,
-    quoteCurrency: 'USD'
-  });
-  const protocolBalances = protocolResponse.data?.items || [];
-
-  return { balances, protocolBalances };
-};
-
-export const useCovalentBalances = (address: string, chainId: string) => {
-  const [balances, setBalances] = useState<BalanceItem[]>([]);
-  const [protocolBalances, setProtocolBalances] = useState<BalanceItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const loadBalances = async () => {
-    setIsLoading(true);
-    try {
-      const { balances, protocolBalances } = await fetchBalances(address, chainId);
-      console.log(balances,protocolBalances);
-      setBalances(balances);
-      setProtocolBalances(protocolBalances);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadBalances();
-  }, [address, chainId]);
-
-  return { balances, protocolBalances, isLoading, error, refetch: loadBalances };
 };
 
 

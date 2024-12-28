@@ -4,7 +4,7 @@ import React, { ReactNode, useCallback } from 'react';
 import { Box } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
-import { useAlchemyBalances } from '../../hooks/useAlchemyBalances';
+import { useBalances } from '../../hooks/useBalances';
 import Header from './Header';
 import BalanceList from '../BalanceList';
 import { useNode } from '../../contexts/NodeContext';
@@ -30,12 +30,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
   const { selectedToken, selectToken } = useNode();
   const router = useRouter();
   
-  // Fetch balances for top bar
+  // Fetch balances for top bar using combined hook
   const { 
     balances, 
-    protocolBalances, 
+    protocolBalances,
     isLoading: balancesLoading 
-  } = useAlchemyBalances(
+  } = useBalances(
     user?.wallet?.address,
     headerProps?.chainId
   );
@@ -64,8 +64,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
             contrastingColor={headerProps?.contrastingColor || ''}
             reverseColor={headerProps?.reverseColor || ''}
             hoverColor={`${headerProps?.contrastingColor}20` || ''}
-            userAddress={user?.wallet?.address}
-            chainId={headerProps?.chainId || ''}
             balances={balances || []}
             protocolBalances={protocolBalances || []}
             isLoading={balancesLoading}
