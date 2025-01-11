@@ -131,7 +131,7 @@ export default function DashboardPage() {
             selectedTokenColor={colorState.contrastingColor}
             chainId={chainId}
             selectedToken={tokenAddress}
-            onNodeSelect={handleNodeSelect}
+            onNodeSelect={headerProps.onNodeSelect}
           />
         )}
       </Box>

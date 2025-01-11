@@ -5,12 +5,12 @@ import { getAlchemyNetwork } from '../config/deployments';
 // New type to replace the Covalent BalanceItem
 export interface AlchemyTokenBalance {
   contractAddress: string;
-  tokenBalance: string;
+  tokenBalance: string | null;
   // Metadata fields
   name: string;
   symbol: string;
-  decimals: number;
-  logo?: string;
+  decimals: number | null;
+  logo?: string | null;
   // Formatted balance in human readable form
   formattedBalance: string;
 }
@@ -68,7 +68,7 @@ export const useAlchemyBalances = (
           );
 
           // Calculate human readable balance
-          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals);
+          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
           const formattedBalance = balance.toFixed(2);
 
           return {

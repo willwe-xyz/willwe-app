@@ -439,12 +439,13 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             </Box>
           ) : (
             <Box pb={16}>
-              <SankeyChart
-                nodes={nodes}
-                selectedTokenColor={selectedTokenColor}
-                onNodeSelect={onNodeSelect}
-                nodeValues={nodeValues}
-              />
+    <SankeyChart
+      nodes={nodes}
+      selectedTokenColor={selectedTokenColor}
+      onNodeSelect={onNodeSelect}
+      nodeValues={nodeValues}
+      chainId={chainId}
+    />
             </Box>
           )}
         </Box>

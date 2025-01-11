@@ -137,27 +137,5 @@ export function useNodeData(
   };
 }
 
-// Helper functions for working with node data
-export const isNodeMember = (nodeData: NodeState | null, address: string): boolean => {
-  if (!nodeData?.membersOfNode || !address) return false;
-  return nodeData.membersOfNode
-    .map(addr => addr.toLowerCase())
-    .includes(address.toLowerCase());
-};
-
-export const getNodeValue = (nodeData: NodeState | null): string => {
-  if (!nodeData?.basicInfo?.[4]) return '0';
-  return nodeData.basicInfo[4];
-};
-
-export const getNodeInflation = (nodeData: NodeState | null): string => {
-  if (!nodeData?.basicInfo?.[1]) return '0';
-  return nodeData.basicInfo[1];
-};
-
-export const getNodeMembraneId = (nodeData: NodeState | null): string => {
-  if (!nodeData?.basicInfo?.[5]) return '0';
-  return nodeData.basicInfo[5];
-};
 
 export default useNodeData;

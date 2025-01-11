@@ -19,7 +19,27 @@ export interface UserSignal {
   lastRedistSignal: string[];            // Array of timestamps
 }
 
-// Matches the smart contract's NodeState struct exactly
+export interface MembraneMetadata {
+  name: string;
+  id: string;
+  description?: string;
+  characteristics: MembraneCharacteristic[];
+  membershipConditions: {
+    tokenAddress: string;
+    requiredBalance: string;
+  }[];
+}
+
+
+// struct NodeState {
+//   string[10] basicInfo;        // [nodeId, inflation, reserve, budget, rootValuationBudget, rootValuationReserve, membraneId, eligibilityPerSec, lastRedistributionTime, balanceOfUser [0 default]
+//   string membraneMeta;        // Membrane Metadata CID
+//   address[] membersOfNode;    // Array of member addresses
+//   string[] childrenNodes;     // Array of children node IDs
+//   string[] rootPath;          // Path from root to current node
+//   UserSignal[] signals;       // Array of signals
+// } new struct version. 10 01
+
 export interface NodeState {
   basicInfo: [
     nodeId: string,           // basicInfo[0]

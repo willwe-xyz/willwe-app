@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { NodeState } from '../../types/chainData';
+import { Data } from 'plotly.js';
 
 interface PlotlyChartProps {
   data: NodeState | NodeState[];
@@ -15,16 +16,16 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, onNodeClick }) => {
       if (!chartRef.current) return;
 
       const nodes = Array.isArray(data) ? data : [data];
-      
-      const plotData = [{
-        type: 'sunburst',
+      const plotData: Data[] = [{
+        type: 'sunburst' as const,
         ids: nodes.map(n => n.basicInfo[0]),
         labels: nodes.map(n => n.basicInfo[0]),
         parents: nodes.map(n => n.rootPath[n.rootPath.length - 2] || ''),
         values: nodes.map(n => parseInt(n.basicInfo[4]) || 1),
         branchvalues: 'total',
-        insidetextorientation: 'radial'
+        textposition: 'inside'
       }];
+      
 
       const layout = {
         margin: { l: 0, r: 0, b: 0, t: 0 },
@@ -34,7 +35,8 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, onNodeClick }) => {
 
       Plotly.newPlot(chartRef.current, plotData, layout);
 
-      chartRef.current.on('plotly_click', (event: any) => {
+      chartRef.current.removeEventListener('plotly_click', () => {});
+      chartRef.current.addEventListener('plotly_click', (event: any) => {
         const point = event.points[0];
         onNodeClick(point.id);
       });

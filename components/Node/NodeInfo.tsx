@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ethers } from 'ethers';
 import { 
   Box, 
@@ -16,7 +16,7 @@ import { Copy, ChevronRight } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
-import DualTreemap from './DualTreemap';
+import SunburstChart from './SunburstChart';
 import { nodeIdToAddress } from '../../utils/formatters';
 import router from 'next/router';
 
@@ -27,6 +27,33 @@ interface NodeInfoProps {
   chainId: string;
   onNodeSelect?: (nodeId: string) => void;
 }
+
+interface NodeMetrics {
+  inflation: string;        // basicInfo[1] - daily inflation rate
+  budget: string;          // basicInfo[3] - current budget balance
+  inflow: string;          // eligibilityPerSec - daily inflow from parent
+  value: string;           // basicInfo[4] - total value in root token
+  memberCount: number;     // membersOfNode.length
+}
+
+const calculateMetrics = (node: NodeState): NodeMetrics => {
+  return {
+    // Convert inflation to daily rate
+    inflation: node.basicInfo[1],
+    
+    // Direct budget balance
+    budget: node.basicInfo[3],
+    
+    // Convert per-second to daily rate
+    inflow: (Number(node.basicInfo[7]) * 86400).toString(),
+    
+    // Total value
+    value: node.basicInfo[4],
+    
+    // Member count
+    memberCount: node.membersOfNode.length
+  };
+};
 
 const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
@@ -105,11 +132,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   };
 
   // Calculate metrics
-  const metrics = {
-    inflation: formatCurrency(node.basicInfo[1]),
-    budget: node.basicInfo[3],
-    inflow: formatCurrency(node.basicInfo[7])
-  };
+  const metrics = useMemo(() => calculateMetrics(node), [node]);
 
   // Handle node ID copy
   const handleCopyNodeId = () => {
@@ -179,7 +202,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
 
             <HStack justify="space-between">
               <Text fontSize="sm" color={mutedColor}>Members</Text>
-              <Text fontWeight="medium">{node.membersOfNode.length}</Text>
+              <Text fontWeight="medium">{metrics.memberCount}</Text>
             </HStack>
 
             <HStack justify="space-between">
@@ -191,13 +214,13 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
 
         {/* Right Section - Surface Map */}
         <Box flex="1" h="100%" minH="300px">
-          <DualTreemap 
+          <SunburstChart 
             nodeData={node}
             chainId={chainId}
           />
         </Box>
       </HStack>
-
+                
       {/* Path/Breadcrumbs
       {node.rootPath.length > 0 && (
         <HStack 

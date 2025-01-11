@@ -648,53 +648,128 @@ export const NodeOperations = ({
 
   return (
     <>
-      <ButtonGroup size="sm" spacing={2} flexWrap="wrap">
-        <Menu>
-          <MenuButton
-            as={Button}
-            rightIcon={<ChevronDown size={16} />}
-            colorScheme="purple"
-            variant="outline"
-          >
-            Actions
-          </MenuButton>
-          <MenuList>
-            <MenuItem icon={<GitBranch size={16} />} onClick={() => setActiveModal('spawn')}>
-              Spawn Node
-            </MenuItem>
-            <MenuItem icon={<Shield size={16} />} onClick={() => setActiveModal('membrane')}>
-              Spawn with Membrane
-            </MenuItem>
-            <MenuItem 
-              icon={<UserPlus size={16} />} 
+      <Box 
+        display="flex" 
+        justifyContent="flex-end" 
+        mb={4} 
+        px={6}
+        borderBottom="1px solid"
+        borderColor="gray.200"
+        py={4}
+        bg="gray.50"
+      >
+        <ButtonGroup 
+          size="sm" 
+          spacing={3} 
+          display="flex" 
+          flexWrap="wrap" 
+          gap={2}
+          sx={{
+            '& button': {
+              minWidth: '120px',
+              height: '36px',
+              justifyContent: 'center',
+              borderWidth: '1.5px',
+              borderRadius: 'md',
+              fontWeight: 'medium',
+              transition: 'all 0.2s',
+              _hover: {
+                transform: 'translateY(-1px)',
+                shadow: 'sm'
+              }
+            }
+          }}
+        >
+          <Tooltip label="Spawn new node" placement="top">
+            <Button
+              leftIcon={<GitBranch size={16} />}
+              onClick={() => setActiveModal('spawn')}
+              colorScheme="purple"
+              variant="outline"
+            >
+              Spawn
+            </Button>
+          </Tooltip>
+          
+          <Tooltip label="Spawn with membrane">
+            <Button
+              leftIcon={<Shield size={16} />}
+              onClick={() => setActiveModal('membrane')}
+              colorScheme="purple"
+              variant="outline"
+              size="sm"
+            >
+              Membrane
+            </Button>
+          </Tooltip>
+
+          <Tooltip label={isMember ? "Already a member" : "Mint membership"}>
+            <Button
+              leftIcon={<UserPlus size={16} />}
               onClick={handleMintMembership}
               isDisabled={isMember}
+              colorScheme="purple"
+              variant="outline"
+              size="sm"
             >
-              Mint Membership
-            </MenuItem>
-            <MenuItem icon={<RefreshCw size={16} />} onClick={handleRedistribute}>
+              Join
+            </Button>
+          </Tooltip>
+
+          <Tooltip label="Redistribute value">
+            <Button
+              leftIcon={<RefreshCw size={16} />}
+              onClick={handleRedistribute}
+              colorScheme="purple"
+              variant="outline"
+              size="sm"
+            >
               Redistribute
-            </MenuItem>
-            <MenuItem icon={<Plus size={16} />} onClick={() => setActiveModal('mint')}>
-              Mint Path
-            </MenuItem>
-            <MenuItem 
-              icon={<Trash size={16} />} 
+            </Button>
+          </Tooltip>
+
+          <Tooltip label="Mint path tokens">
+            <Button
+              leftIcon={<Plus size={16} />}
+              onClick={() => setActiveModal('mint')}
+              colorScheme="purple"
+              variant="outline"
+              size="sm"
+            >
+              Mint
+            </Button>
+          </Tooltip>
+
+          <Tooltip label="Burn path tokens">
+            <Button
+              leftIcon={<Trash size={16} />}
               onClick={() => {
                 setActiveModal('burn');
                 checkNodeBalance();
               }}
+              colorScheme="purple"
+              variant="outline"
+              size="sm"
             >
-              Burn Path
-            </MenuItem>
-          </MenuList>
-        </Menu>
-      </ButtonGroup>
+              Burn
+            </Button>
+          </Tooltip>
+        </ButtonGroup>
+      </Box>
 
       {/* Spawn Node Modal */}
-      <Modal isOpen={activeModal === 'spawn'} onClose={() => setActiveModal(null)}>
-        <ModalOverlay />
-        <ModalContent>
+      <Modal 
+        isOpen={activeModal === 'spawn'} 
+        onClose={() => setActiveModal(null)}
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent 
+          mx={4}
+          bg="white" 
+          shadow="xl"
+          borderRadius="xl"
+        >
           <ModalHeader>Spawn New Node</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
@@ -722,9 +797,15 @@ export const NodeOperations = ({
         isOpen={activeModal === 'membrane'} 
         onClose={() => setActiveModal(null)}
         size="lg"
+        motionPreset="slideInBottom"
       >
-        <ModalOverlay />
-        <ModalContent maxW="600px">
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent 
+          mx={4}
+          bg="white" 
+          shadow="xl"
+          borderRadius="xl"
+        >
           <ModalHeader>
             <Text>Spawn Node with Membrane</Text>
             <ModalCloseButton />
@@ -841,9 +922,18 @@ export const NodeOperations = ({
       </Modal>
 
       {/* Mint Path Modal */}
-      <Modal isOpen={activeModal === 'mint'} onClose={() => setActiveModal(null)}>
-        <ModalOverlay />
-        <ModalContent>
+      <Modal 
+        isOpen={activeModal === 'mint'} 
+        onClose={() => setActiveModal(null)}
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent 
+          mx={4}
+          bg="white" 
+          shadow="xl"
+          borderRadius="xl"
+        >
           <ModalHeader>Mint Tokens</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
@@ -898,9 +988,18 @@ export const NodeOperations = ({
       </Modal>
 
       {/* Burn Path Modal */}
-      <Modal isOpen={activeModal === 'burn'} onClose={() => setActiveModal(null)}>
-        <ModalOverlay />
-        <ModalContent>
+      <Modal 
+        isOpen={activeModal === 'burn'} 
+        onClose={() => setActiveModal(null)}
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent 
+          mx={4}
+          bg="white" 
+          shadow="xl"
+          borderRadius="xl"
+        >
           <ModalHeader>Burn Tokens</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>

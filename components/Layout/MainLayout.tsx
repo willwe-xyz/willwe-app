@@ -66,8 +66,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
             hoverColor={`${headerProps?.contrastingColor}20` || ''}
             balances={balances || []}
             protocolBalances={protocolBalances || []}
-            isLoading={balancesLoading}
-          />
+            isLoading={balancesLoading} userAddress={headerProps?.userAddress || ''} chainId={headerProps?.chainId || '' 
+            }          />
         </Box>
       )}
       
