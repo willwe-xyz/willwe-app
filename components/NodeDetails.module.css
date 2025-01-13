@@ -1,0 +1,52 @@
+/* Container styles */
+.container {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Custom scrollbar styles */
+.tabs :global(*::-webkit-scrollbar) {
+  width: 6px;
+  height: 6px;
+}
+
+.tabs :global(*::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+.tabs :global(*::-webkit-scrollbar-thumb) {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* Dark mode scrollbar */
+@media (prefers-color-scheme: dark) {
+  .tabs :global(*::-webkit-scrollbar-thumb) {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Tab panel animations */
+.tabs :global(.chakra-tabs__tab-panel) {
+  transition: opacity 0.2s ease-in-out;
+}
+
+.tabs :global(.chakra-tabs__tab-panel[hidden]) {
+  opacity: 0;
+}
+
+.tabs :global(.chakra-tabs__tab-panel:not([hidden])) {
+  opacity: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .container {
+    margin: 0;
+    border-radius: 0;
+  }
+  
+  .tabs :global(.chakra-tabs__tablist) {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}

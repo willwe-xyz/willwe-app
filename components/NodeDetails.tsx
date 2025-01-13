@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import './NodeDetails.module.css';
 import {
   Box,
   VStack,
@@ -55,20 +56,23 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   onNodeSelect,
   selectedTokenColor,
 }) => {
-  // Hooks
+  // 1. Context hooks
   const { user } = usePrivy();
   const { isOpen, onOpen, onClose } = useDisclosure();
-
-  // Clean chain ID
+  
+  // 2. State hooks
   const cleanChainId = chainId?.replace('eip155:', '') || '';
-
-  // Style hooks
+  const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, nodeId);
+  
+  // 3. Color mode hooks  
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const permissionsBg = useColorModeValue('gray.50', 'gray.900');
 
-  // Fetch node data
-  const { data: nodeData, error, isLoading, refetch } = useNodeData(cleanChainId, nodeId);
+  // 4. Callbacks
+  const refetch = useCallback(() => {
+    fetchNodeData();
+  }, [fetchNodeData]);
 
   // Loading state
   if (isLoading) {
@@ -101,7 +105,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
-  const tokenSymbol = nodeData?.basicInfo[1];
+  const tokenSymbol = Array.isArray(nodeData?.basicInfo) && nodeData.basicInfo.length > 1 ? nodeData.basicInfo[1] : '';
 
 
   return (
@@ -144,24 +148,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       {/* Main Content */}
       <Box flex="1" overflow="auto">
         <Tabs 
-          variant="enclosed" 
-          colorScheme="purple"
-          isLazy
+          className="tabs"
           sx={{
-            '.chakra-tabs__tab': {
-              fontWeight: 'medium',
-              px: 6,
-              py: 3,
-              _selected: {
-                bg: useColorModeValue('white', 'gray.800'),
-                borderColor: 'inherit',
-                borderBottom: 'none',
-                color: 'purple.500'
-              },
-              _hover: {
-                bg: useColorModeValue('gray.100', 'gray.700')
-              }
-            },
             '.chakra-tabs__tab-panel': {
               p: 0
             }
@@ -189,7 +177,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                       parentNodeData={nodeData}
                       onSuccess={refetch}
                     />
-                    {nodeData.signals.length > 0 && (
+                    {Array.isArray(nodeData.signals) && nodeData.signals.length > 0 && (
                       <SignalHistory 
                         signals={nodeData.signals} 
                         selectedTokenColor={selectedTokenColor}
@@ -222,7 +210,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       </Box>
 
       {/* Permissions Footer with improved styling */}
-      {user?.wallet?.address && (
+      { user?.wallet?.address && (
         <Box 
           p={6} 
           bg={permissionsBg}
@@ -243,7 +231,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           </HStack>
         </Box>
       )}
-      
     </Box>
   );
 };
