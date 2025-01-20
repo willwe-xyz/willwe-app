@@ -34,7 +34,8 @@ import {
   Badge,
   HStack,
   Link,
-  ToastId
+  ToastId,
+  IconButton
 } from '@chakra-ui/react';
 import {
   GitBranch,
@@ -44,6 +45,7 @@ import {
   Plus,
   Trash,
   ChevronDown,
+  Trash2
 } from 'lucide-react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
@@ -54,8 +56,6 @@ import { RequirementsTable } from '../TokenOperations/RequirementsTable';
 import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
 import { Link as ChakraLink } from '@chakra-ui/react';
 import { ExternalLinkIcon } from '@chakra-ui/icons';
-
-
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -75,6 +75,18 @@ interface MembraneCharacteristic {
 // Add this type definition near the top of the file
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
 
+// Add these interfaces near the top
+interface TokenRequirement {
+  tokenAddress: string;
+  requiredBalance: string;
+}
+
+interface SpawnFormData {
+  name: string;
+  characteristics: { title: string; link: string }[];
+  tokenRequirements: TokenRequirement[];
+}
+
 export const NodeOperations = ({
   nodeId,
   chainId,
@@ -89,6 +101,11 @@ export const NodeOperations = ({
   const [allowance, setAllowance] = useState('0');
   const [burnAmount, setBurnAmount] = useState('');
   const [userBalance, setUserBalance] = useState('0');
+  const [formData, setFormData] = useState<SpawnFormData>({
+    name: '',
+    characteristics: [],
+    tokenRequirements: []
+  });
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
@@ -646,6 +663,123 @@ export const NodeOperations = ({
     }
   }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, toast, onSuccess]);
 
+  const addCharacteristic = () => {
+    setFormData((prevData) => ({
+      ...prevData,
+      characteristics: [...prevData.characteristics, { title: '', link: '' }]
+    }));
+  };
+
+  const updateCharacteristic = (index: number, field: string, value: string) => {
+    setFormData((prevData) => {
+      const updatedCharacteristics = [...prevData.characteristics];
+      updatedCharacteristics[index] = {
+        ...updatedCharacteristics[index],
+        [field]: value
+      };
+      return { ...prevData, characteristics: updatedCharacteristics };
+    });
+  };
+
+  const removeCharacteristic = (index: number) => {
+    setFormData((prevData) => {
+      const updatedCharacteristics = [...prevData.characteristics];
+      updatedCharacteristics.splice(index, 1);
+      return { ...prevData, characteristics: updatedCharacteristics };
+    });
+  };
+
+  const addTokenRequirement = () => {
+    setFormData((prevData) => ({
+      ...prevData,
+      tokenRequirements: [...prevData.tokenRequirements, { tokenAddress: '', requiredBalance: '' }]
+    }));
+  };
+
+  const updateTokenRequirement = (index: number, field: string, value: string) => {
+    setFormData((prevData) => {
+      const updatedTokenRequirements = [...prevData.tokenRequirements];
+      updatedTokenRequirements[index] = {
+        ...updatedTokenRequirements[index],
+        [field]: value
+      };
+      return { ...prevData, tokenRequirements: updatedTokenRequirements };
+    });
+  };
+
+  const removeTokenRequirement = (index: number) => {
+    setFormData((prevData) => {
+      const updatedTokenRequirements = [...prevData.tokenRequirements];
+      updatedTokenRequirements.splice(index, 1);
+      return { ...prevData, tokenRequirements: updatedTokenRequirements };
+    });
+  };
+
+  const handleSpawn = async () => {
+    setIsProcessing(true);
+    try {
+      // Prepare metadata for IPFS
+      const metadata = {
+        name: formData.name,
+        characteristics: formData.characteristics
+      };
+
+      // Upload to IPFS
+      const ipfsResponse = await fetch('/api/upload-to-ipfs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: metadata }),
+      });
+      
+      if (!ipfsResponse.ok) throw new Error('Failed to upload metadata');
+      const { cid } = await ipfsResponse.json();
+
+      // Format token requirements
+      const tokens = formData.tokenRequirements.map(req => req.tokenAddress);
+      const balances = formData.tokenRequirements.map(req => 
+        ethers.parseUnits(req.requiredBalance, 18)
+      );
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            deployments.WillWe[chainId.replace('eip155:', '')],
+            ABIs.WillWe,
+            signer
+          );
+
+          return contract.spawnBranchWithMembrane(
+            nodeId,
+            tokens,
+            balances,
+            cid,
+            { gasLimit: 600000 }
+          );
+        },
+        {
+          successMessage: 'Node spawned successfully',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to spawn node:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Transaction failed',
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <>
       <Box 
@@ -680,26 +814,14 @@ export const NodeOperations = ({
             }
           }}
         >
-          <Tooltip label="Spawn new node" placement="top">
+          <Tooltip label="Spawn new node with optional membrane">
             <Button
               leftIcon={<GitBranch size={16} />}
               onClick={() => setActiveModal('spawn')}
               colorScheme="purple"
               variant="outline"
             >
-              Spawn
-            </Button>
-          </Tooltip>
-          
-          <Tooltip label="Spawn with membrane">
-            <Button
-              leftIcon={<Shield size={16} />}
-              onClick={() => setActiveModal('membrane')}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Membrane
+              Spawn Node
             </Button>
           </Tooltip>
 
@@ -761,160 +883,111 @@ export const NodeOperations = ({
       <Modal 
         isOpen={activeModal === 'spawn'} 
         onClose={() => setActiveModal(null)}
-        motionPreset="slideInBottom"
+        size="xl"
       >
-        <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent 
-          mx={4}
-          bg="white" 
-          shadow="xl"
-          borderRadius="xl"
-        >
+        <ModalOverlay />
+        <ModalContent>
           <ModalHeader>Spawn New Node</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
-            <VStack spacing={4}>
-              <Alert status="info">
-                <AlertIcon />
-                <Text>This will create a new sub-node under the current node.</Text>
-              </Alert>
-              
-              <Button
-                colorScheme="purple"
-                onClick={handleSpawnNode}
-                isLoading={isProcessing}
-                width="100%"
-              >
-                Spawn Node
-              </Button>
-            </VStack>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
-
-      {/* Membrane Modal */}
-      <Modal 
-        isOpen={activeModal === 'membrane'} 
-        onClose={() => setActiveModal(null)}
-        size="lg"
-        motionPreset="slideInBottom"
-      >
-        <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent 
-          mx={4}
-          bg="white" 
-          shadow="xl"
-          borderRadius="xl"
-        >
-          <ModalHeader>
-            <Text>Spawn Node with Membrane</Text>
-            <ModalCloseButton />
-          </ModalHeader>
-          
-          <ModalBody pb={6}>
             <VStack spacing={4} align="stretch">
               <FormControl isRequired>
-                <FormLabel>Membrane ID</FormLabel>
+                <FormLabel>Node Name</FormLabel>
                 <Input
-                  value={membraneId}
-                  onChange={(e) => {
-                    setMembraneId(e.target.value);
-                    if (e.target.value) {
-                      validateMembrane(e.target.value);
-                    } else {
-                      setMembraneMetadata(null);
-                      setRequirements([]);
-                      setMembraneError(null);
-                    }
-                  }}
-                  placeholder="Enter membrane ID"
-                  size="sm"
-                  fontFamily="mono"
-                  fontSize="sm"
+                  value={formData.name}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    name: e.target.value
+                  })}
+                  placeholder="Enter node name"
                 />
               </FormControl>
 
-              {(isValidatingMembrane || isLoadingTokens) && (
-                <Box py={2}>
-                  <Progress size="xs" isIndeterminate colorScheme="purple" />
-                  <Text mt={2} fontSize="sm" color="gray.600" textAlign="center">
-                    {isValidatingMembrane ? 'Validating membrane...' : 'Loading token details...'}
-                  </Text>
-                </Box>
-              )}
+              {/* Characteristics Section */}
+              <Box>
+                <HStack justify="space-between" mb={2}>
+                  <FormLabel mb={0}>Characteristics</FormLabel>
+                  <Button
+                    size="sm"
+                    leftIcon={<Plus size={14} />}
+                    onClick={() => addCharacteristic()}
+                  >
+                    Add
+                  </Button>
+                </HStack>
+                <VStack spacing={2}>
+                  {formData.characteristics.map((char, idx) => (
+                    <HStack key={idx}>
+                      <Input
+                        placeholder="Title"
+                        value={char.title}
+                        onChange={(e) => updateCharacteristic(idx, 'title', e.target.value)}
+                        size="sm"
+                      />
+                      <Input
+                        placeholder="Link"
+                        value={char.link}
+                        onChange={(e) => updateCharacteristic(idx, 'link', e.target.value)}
+                        size="sm"
+                      />
+                      <IconButton
+                        aria-label="Remove characteristic"
+                        icon={<Trash2 size={14} />}
+                        onClick={() => removeCharacteristic(idx)}
+                        size="sm"
+                      />
+                    </HStack>
+                  ))}
+                </VStack>
+              </Box>
 
-              {membraneError && (
-                <Alert status="error" size="sm">
-                  <AlertIcon />
-                  <Text fontSize="sm">{membraneError}</Text>
-                </Alert>
-              )}
-
-              {membraneMetadata && !membraneError && (
-                <Box>
-                  <Card variant="outline" bg="purple.50">
-                    <CardBody p={4}>
-                      <VStack align="stretch" spacing={3}>
-                        <HStack justify="space-between">
-                          <Text fontSize="md" fontWeight="bold">{membraneMetadata.name}</Text>
-                          <Badge colorScheme="purple" fontSize="xs">ID: {membraneId.slice(0, 8)}...</Badge>
-                        </HStack>
-                        
-                        {membraneMetadata.characteristics?.map((char, idx) => (
-                          <Box
-                            key={idx}
-                            p={2}
-                            bg="white"
-                            borderRadius="md"
-                            borderWidth="1px"
-                            borderColor="purple.100"
-                          >
-                            <HStack justify="space-between">
-                              <Text fontSize="sm">{char.title}</Text>
-                              {char.link && (
-                                <ChakraLink 
-                                  href={char.link} 
-                                  isExternal 
-                                  color="purple.500"
-                                  fontSize="xs"
-                                >
-                                  <HStack spacing={1}>
-                                    <Text>Open</Text>
-                                    <ExternalLinkIcon width={5} height={5} />
-                                  </HStack>
-                                </ChakraLink>
-                              )}
-                            </HStack>
-                            {char.title && (
-                              <Text fontSize="xs" color="gray.600" mt={1}>
-                                {char.title}
-                              </Text>
-                            )}
-                          </Box>
-                        ))}
-                      </VStack>
-                    </CardBody>
-                  </Card>
-
-                  <Box mt={4}>
-                    <Text fontSize="sm" fontWeight="medium" mb={2}>Token Requirements:</Text>
-                    <RequirementsTable
-                      requirements={requirements}
-                      chainId={chainId}
-                    />
-                  </Box>
-                </Box>
-              )}
+              {/* Token Requirements Section */}
+              <Box>
+                <HStack justify="space-between" mb={2}>
+                  <FormLabel mb={0}>Token Requirements</FormLabel>
+                  <Button
+                    size="sm"
+                    leftIcon={<Plus size={14} />}
+                    onClick={() => addTokenRequirement()}
+                  >
+                    Add
+                  </Button>
+                </HStack>
+                <VStack spacing={2}>
+                  {formData.tokenRequirements.map((req, idx) => (
+                    <HStack key={idx}>
+                      <Input
+                        placeholder="Token Address"
+                        value={req.tokenAddress}
+                        onChange={(e) => updateTokenRequirement(idx, 'tokenAddress', e.target.value)}
+                        size="sm"
+                      />
+                      <Input
+                        placeholder="Required Balance"
+                        value={req.requiredBalance}
+                        onChange={(e) => updateTokenRequirement(idx, 'requiredBalance', e.target.value)}
+                        size="sm"
+                        type="number"
+                      />
+                      <IconButton
+                        aria-label="Remove requirement"
+                        icon={<Trash2 size={14} />}
+                        onClick={() => removeTokenRequirement(idx)}
+                        size="sm"
+                      />
+                    </HStack>
+                  ))}
+                </VStack>
+              </Box>
 
               <Button
                 colorScheme="purple"
-                onClick={handleSpawnWithMembrane}
+                onClick={handleSpawn}
                 isLoading={isProcessing}
                 width="100%"
                 mt={4}
-                isDisabled={!membraneId || !!membraneError || isValidatingMembrane || isLoadingTokens}
               >
-                Spawn Node with Membrane
+                Spawn Node
               </Button>
             </VStack>
           </ModalBody>
