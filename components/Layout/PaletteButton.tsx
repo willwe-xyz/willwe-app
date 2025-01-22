@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { IconButton, IconButtonProps, useToken } from '@chakra-ui/react';
-import { Palette } from 'lucide-react';
+import { useToken } from '@chakra-ui/react';
+import Image from 'next/image';
+import Link from 'next/link';
+import logoSrc from '../../public/logos/logo.png';
 
-interface PaletteButtonProps extends Omit<IconButtonProps, 'aria-label'> {
+interface PaletteButtonProps {
   cycleColors: () => void;
   contrastingColor: string;
   reverseColor: string;
+  className?: string;
 }
 
 export const PaletteButton: React.FC<PaletteButtonProps> = ({
@@ -17,7 +20,6 @@ export const PaletteButton: React.FC<PaletteButtonProps> = ({
   const [isHovering, setIsHovering] = useState(false);
   const [baseColor] = useToken('colors', [contrastingColor]);
 
-  // Set up auto-cycling on hover
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     if (isHovering) {
@@ -29,30 +31,34 @@ export const PaletteButton: React.FC<PaletteButtonProps> = ({
   }, [isHovering, cycleColors]);
 
   return (
-    <IconButton
-      aria-label="Cycle Colors"
-      icon={<Palette size={18} />}
+    <Link
+      href="/"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '9999px',
+        color: reverseColor,
+        backgroundColor: baseColor,
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
       onClick={cycleColors}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      size="md"
-      isRound
-      color={reverseColor}
-      bg={baseColor}
-      _hover={{ 
-        bg: reverseColor, 
-        color: baseColor,
-        transform: 'translateY(-1px)',
-      }}
-      _active={{
-        bg: reverseColor,
-        color: baseColor,
-        transform: 'translateY(0px)',
-      }}
-      transition="all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
-      boxShadow="sm"
       {...props}
-    />
+    >
+      <Image 
+        src={logoSrc} 
+        alt="Logo" 
+        width={66} 
+        height={66}
+        style={{ 
+          transform: isHovering ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s ease-in-out',
+          filter: 'brightness(0) saturate(100%)',
+        }}
+      />
+    </Link>
   );
 };
 

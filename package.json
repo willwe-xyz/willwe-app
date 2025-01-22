@@ -10,7 +10,8 @@
     "start": "next start",
     "format": "npx prettier --write \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\"",
     "lint": "next lint && npx prettier --check \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\" && npx tsc --noEmit",
-    "context": "./create-context.sh"
+    "context": "./create-context.sh",
+    "find:unused": "next-unused"
   },
   "dependencies": {
     "@airstack/airstack-react": "^0.6.3",
@@ -49,6 +50,7 @@
     "json-bignumber": "^1.1.1",
     "lucide-react": "^0.399.0",
     "next": "latest",
+    "next-unused": "^0.0.6",
     "plotly.js-dist-min": "^2.35.3",
     "react": "^18.3.1",
     "react-force-graph": "^1.44.4",
