@@ -31,33 +31,24 @@ export interface MembraneMetadata {
 }
 
 
-// struct NodeState {
-//   string[10] basicInfo;        // [nodeId, inflation, reserve, budget, rootValuationBudget, rootValuationReserve, membraneId, eligibilityPerSec, lastRedistributionTime, balanceOfUser [0 default]
-//   string membraneMeta;        // Membrane Metadata CID
-//   address[] membersOfNode;    // Array of member addresses
-//   string[] childrenNodes;     // Array of children node IDs
-//   string[] rootPath;          // Path from root to current node
-//   UserSignal[] signals;       // Array of signals
-// } new struct version. 10 01
-
 export interface NodeState {
   basicInfo: [
-    nodeId: string,           // basicInfo[0]
-    inflation: string,        // basicInfo[1]
-    balanceAnchor: string,   // basicInfo[2] - balance in parent reserve
-    balanceBudget: string,   // basicInfo[3] - budget
-    value: string,           // basicInfo[4] - valuation denominated in root token
-    membraneId: string,      // basicInfo[5] - membrane id
-    balanceOfUser: string,   // basicInfo[6] - balance of current user in this node
-    eligibilityPerSec: string, // basicInfo[7] - redistribution eligibility from parent per sec
-    lastRedistribution: string // basicInfo[8] - last redistribution timestamp
+    nodeId: string,              // basicInfo[0]
+    inflation: string,           // basicInfo[1]
+    reserve: string,             // basicInfo[2] - reserve balance
+    budget: string,              // basicInfo[3] - budget balance
+    rootValuationBudget: string, // basicInfo[4] - budget valuation in root token
+    rootValuationReserve: string,// basicInfo[5] - reserve valuation in root token
+    membraneId: string,          // basicInfo[6] - membrane identifier
+    eligibilityPerSec: string,   // basicInfo[7] - redistribution rate
+    lastRedistributionTime: string, // basicInfo[8] - last redistribution timestamp
+    balanceOfUser: string        // basicInfo[9] - user's balance in this node
   ];
-  membraneMeta: string;      // IPFS hash or metadata string
-  membersOfNode: string[];   // Array of ethereum addresses
-  childrenNodes: string[];   // Array of node IDs
-  rootPath: string[];        // Array of node IDs from root to this node
-  signals: UserSignal[];     // Array of UserSignal structs
-  ancestors: string[];       // Array of ancestor node IDs
+  membraneMeta: string;          // Membrane Metadata CID
+  membersOfNode: string[];       // Array of member addresses
+  childrenNodes: string[];       // Array of children node IDs
+  rootPath: string[];           // Path from root to current node
+  signals: UserSignal[];        // Array of signals
 }
 
 // For membrane-related data
@@ -155,12 +146,11 @@ export enum SQState {
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 9 &&
+    data.basicInfo.length === 10 &&
     typeof data.membraneMeta === 'string' &&
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
     Array.isArray(data.rootPath) &&
-    Array.isArray(data.ancestors) &&
     Array.isArray(data.signals) &&
     data.signals.every((signal: any) =>
       Array.isArray(signal.MembraneInflation) &&

@@ -28,21 +28,39 @@ interface NodeInfoProps {
   onNodeSelect?: (nodeId: string) => void;
 }
 
+// struct NodeState {
+//   string[10] basicInfo; // [nodeId, inflation, reserve, budget, rootValuationBudget, rootValuationReserve, membraneId, eligibilityPerSec, lastRedistributionTime, balanceOfUser [0 default]
+//   string membraneMeta; // Membrane Metadata CID
+//   address[] membersOfNode; // Array of member addresses
+//   string[] childrenNodes; // Array of children node IDs
+//   string[] rootPath; // Path from root to current node
+//   UserSignal[] signals; // Array of signals
+// }
+
 interface NodeMetrics {
   inflation: string;        // basicInfo[1] - daily inflation rate
-  budget: string;          // basicInfo[3] - current budget balance
+  budget: string;          // basicInfo[4] - current budget balance in root token
+  totalValue: string;      // basicInfo[5] - value of Node in hierarchy
+  availableShares: string; // basicInfo[3] - total supply of node shares (smaller or equal to totalSupply(sharesId). difference is in children nodes)
   inflow: string;          // eligibilityPerSec - daily inflow from parent
   value: string;           // basicInfo[4] - total value in root token
   memberCount: number;     // membersOfNode.length
+  membersList: string[];   // membersOfNode
+  userOwnedShares: string; // basicInfo[9] - user's balance in this node
 }
 
 const calculateMetrics = (node: NodeState): NodeMetrics => {
   return {
     // Convert inflation to daily rate
-    inflation: node.basicInfo[1],
-    
-    // Direct budget balance
-    budget: node.basicInfo[3],
+    inflation: ethers.formatEther((BigInt(node.basicInfo[1]) * BigInt(86400)).toString()),
+    //   string[10] basicInfo; // [nodeId, inflation, reserve, budget, rootValuationBudget, rootValuationReserve, membraneId, eligibilityPerSec, lastRedistributionTime, balanceOfUser [0 default]
+
+    // Total budget in root valuation
+    budget: node.basicInfo[4],
+
+    totalValue: node.basicInfo[5],
+
+    availableShares: node.basicInfo[3],
     
     // Convert per-second to daily rate
     inflow: (Number(node.basicInfo[7]) * 86400).toString(),
@@ -51,7 +69,13 @@ const calculateMetrics = (node: NodeState): NodeMetrics => {
     value: node.basicInfo[4],
     
     // Member count
-    memberCount: node.membersOfNode.length
+    memberCount: node.membersOfNode.length,
+
+    // Members list
+    membersList: node.membersOfNode,
+
+    // User's owned shares
+    userOwnedShares: node.basicInfo[9]
   };
 };
 
@@ -192,7 +216,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
 
             <HStack justify="space-between">
               <Text fontSize="sm" color={mutedColor}>Budget</Text>
-              <Text fontWeight="medium">{formatCurrency(ethers.formatEther(metrics.budget))} {tokenSymbol}</Text>
+              <Text fontWeight="medium">{formatCurrency(ethers.formatEther(metrics.budget))} ${tokenSymbol}</Text>
             </HStack>
 
             <HStack justify="space-between">
@@ -203,6 +227,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             <HStack justify="space-between">
               <Text fontSize="sm" color={mutedColor}>Members</Text>
               <Text fontWeight="medium">{metrics.memberCount}</Text>
+            </HStack>
+
+            <HStack justify="space-between">
+              <Text fontSize="sm" color={mutedColor}>Active Shares</Text>
+              <Text fontWeight="medium">{metrics.availableShares}</Text>
             </HStack>
 
             <HStack justify="space-between">

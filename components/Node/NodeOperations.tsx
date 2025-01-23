@@ -35,7 +35,8 @@ import {
   HStack,
   Link,
   ToastId,
-  IconButton
+  IconButton,
+  FormHelperText
 } from '@chakra-ui/react';
 import {
   GitBranch,
@@ -45,7 +46,8 @@ import {
   Plus,
   Trash,
   ChevronDown,
-  Trash2
+  Trash2,
+  Info
 } from 'lucide-react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
@@ -85,6 +87,7 @@ interface SpawnFormData {
   name: string;
   characteristics: { title: string; link: string }[];
   tokenRequirements: TokenRequirement[];
+  inflation: number;
 }
 
 export const NodeOperations = ({
@@ -104,7 +107,8 @@ export const NodeOperations = ({
   const [formData, setFormData] = useState<SpawnFormData>({
     name: '',
     characteristics: [],
-    tokenRequirements: []
+    tokenRequirements: [],
+    inflation: 0
   });
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
@@ -891,16 +895,53 @@ export const NodeOperations = ({
           <ModalCloseButton />
           <ModalBody pb={6}>
             <VStack spacing={4} align="stretch">
-              <FormControl isRequired>
+                <FormControl isRequired>
                 <FormLabel>Node Name</FormLabel>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({
-                    ...formData,
-                    name: e.target.value
+                  ...formData,
+                  name: e.target.value
                   })}
-                  placeholder="Enter node name"
+                  placeholder="Enter node name (minimum 3 characters)"
+                  isInvalid={formData.name.length > 0 && formData.name.length < 3}
                 />
+                {formData.name.length > 0 && formData.name.length < 3 && (
+                  <Text color="red.500" fontSize="sm" mt={1}>
+                  Name must be at least 3 characters long
+                  </Text>
+                )}
+                </FormControl>
+
+              {/* Add Inflation Rate Field */}
+              <FormControl>
+                <FormLabel>
+                  <HStack spacing={1}>
+                    <Text>Inflation Rate</Text>
+                    <Tooltip label="Initial inflation rate in gwei/sec (optional). Rate at which shares devalue over time. Or, rate at which news shares are generated relative to reserve value.
+                          Each mint happens at a 1 to 1 ratio. Burns are share dependent, thereby allways growing and bigger than reserve (parent) tokens.">
+                      <Box as="span" cursor="help">
+                        <Info size={14}>
+                        <Text fontSize="xs" color="gray.500">
+
+                          </Text>
+                        </Info>
+                      </Box>
+                    </Tooltip>
+                  </HStack>
+                </FormLabel>
+                <Input
+                  value={formData.inflation}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    inflation: parseFloat(e.target.value) || 0
+                  })}
+                  placeholder="Enter inflation rate (gwei/sec)"
+                  type="number"
+                  min="0"
+                  max="1000000"
+                />
+                <FormHelperText>Maximum rate: 1,000,000 gwei/sec</FormHelperText>
               </FormControl>
 
               {/* Characteristics Section */}
