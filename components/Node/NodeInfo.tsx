@@ -28,53 +28,28 @@ interface NodeInfoProps {
   onNodeSelect?: (nodeId: string) => void;
 }
 
-// struct NodeState {
-//   string[10] basicInfo; // [nodeId, inflation, reserve, budget, rootValuationBudget, rootValuationReserve, membraneId, eligibilityPerSec, lastRedistributionTime, balanceOfUser [0 default]
-//   string membraneMeta; // Membrane Metadata CID
-//   address[] membersOfNode; // Array of member addresses
-//   string[] childrenNodes; // Array of children node IDs
-//   string[] rootPath; // Path from root to current node
-//   UserSignal[] signals; // Array of signals
-// }
-
 interface NodeMetrics {
-  inflation: string;        // basicInfo[1] - daily inflation rate
-  budget: string;          // basicInfo[4] - current budget balance in root token
-  totalValue: string;      // basicInfo[5] - value of Node in hierarchy
-  availableShares: string; // basicInfo[3] - total supply of node shares (smaller or equal to totalSupply(sharesId). difference is in children nodes)
-  inflow: string;          // eligibilityPerSec - daily inflow from parent
-  value: string;           // basicInfo[4] - total value in root token
-  memberCount: number;     // membersOfNode.length
-  membersList: string[];   // membersOfNode
-  userOwnedShares: string; // basicInfo[9] - user's balance in this node
+  inflation: string;
+  budget: string;
+  totalValue: string;
+  availableShares: string;
+  inflow: string;
+  value: string;
+  memberCount: number;
+  membersList: string[];
+  userOwnedShares: string;
 }
 
 const calculateMetrics = (node: NodeState): NodeMetrics => {
   return {
-    // Convert inflation to daily rate
     inflation: ethers.formatEther((BigInt(node.basicInfo[1]) * BigInt(86400)).toString()),
-    //   string[10] basicInfo; // [nodeId, inflation, reserve, budget, rootValuationBudget, rootValuationReserve, membraneId, eligibilityPerSec, lastRedistributionTime, balanceOfUser [0 default]
-
-    // Total budget in root valuation
     budget: node.basicInfo[4],
-
     totalValue: node.basicInfo[5],
-
     availableShares: node.basicInfo[3],
-    
-    // Convert per-second to daily rate
     inflow: (Number(node.basicInfo[7]) * 86400).toString(),
-    
-    // Total value
     value: node.basicInfo[4],
-    
-    // Member count
     memberCount: node.membersOfNode.length,
-
-    // Members list
     membersList: node.membersOfNode,
-
-    // User's owned shares
     userOwnedShares: node.basicInfo[9]
   };
 };
@@ -85,7 +60,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const [tokenSymbol, setTokenSymbol] = useState<string>('');
   const toast = useToast();
   
-  // Theme colors
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const bgColor = useColorModeValue('white', 'gray.800');
   const mutedColor = useColorModeValue('gray.600', 'gray.400');
@@ -96,21 +70,16 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   });
   const tokenAddress = nodeIdToAddress(node.rootPath[0]);
 
-
   const tokenContract = new ethers.Contract(
     tokenAddress, 
     ABIs.IERC20,
     provider
   );
 
-  // Fetch token symbol
   useEffect(() => {
     const fetchTokenSymbol = async () => {
       if (!node?.rootPath?.[0] || !chainId) return;
-      
       try {
-     
-        
         const symbol = await tokenContract.symbol();
         setTokenSymbol(symbol);
       } catch (error) {
@@ -122,7 +91,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     fetchTokenSymbol();
   }, [node?.rootPath, chainId]);
 
-  // Load membrane metadata
   useEffect(() => {
     const fetchMembraneTitle = async () => {
       if (!node.membraneMeta) {
@@ -146,7 +114,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     fetchMembraneTitle();
   }, [node.membraneMeta]);
 
-  // Format values
   const formatCurrency = (value: string): string => {
     const number = parseFloat(value);
     return new Intl.NumberFormat('en-US', {
@@ -155,10 +122,8 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     }).format(number);
   };
 
-  // Calculate metrics
   const metrics = useMemo(() => calculateMetrics(node), [node]);
 
-  // Handle node ID copy
   const handleCopyNodeId = () => {
     navigator.clipboard.writeText(node.basicInfo[0]);
     toast({
@@ -168,9 +133,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     });
   };
 
-
-  
-
   return (
     <Box 
       p={6} 
@@ -179,111 +141,95 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
       border="1px" 
       borderColor={borderColor}
     >
-      <HStack align="start" spacing={6}>
-        {/* Left Section */}
-        <VStack align="stretch" flex="1">
-          {/* Title Section */}
-          <VStack align="stretch" spacing={2} mb={6}>
-            <HStack justify="space-between" maxW="100%">
-              {isLoadingTitle ? (
-                <Skeleton height="24px" width="200px" />
-              ) : (
-                <Text fontSize="lg" fontWeight="bold" isTruncated>
-                  {membraneTitle || `Node ${node.basicInfo[0].slice(-6)}`}
-                </Text>
-              )}
-            </HStack>
-            <HStack spacing={2}>
-              <Text fontSize="sm" color={mutedColor} isTruncated>
-                {node.basicInfo[0].slice(0, 6)}...{node.basicInfo[0].slice(-4)}
-              </Text>
-              <IconButton
-                aria-label="Copy node ID"
-                icon={<Copy size={14} />}
-                size="xs"
-                variant="ghost"
-                onClick={handleCopyNodeId}
-              />
-            </HStack>
-          </VStack>
-
-          {/* Updated Metrics Grid */}
-          <VStack align="stretch" spacing={4}>
+      <Box p={4}>
+        <HStack spacing={4} align="start" w="full" minH="300px">
+          <VStack
+            flex="1"
+            align="stretch"
+            spacing={3}
+            borderRadius="md"
+            borderWidth="1px"
+            borderColor={borderColor}
+            p={4}
+          >
             <HStack justify="space-between">
               <Text fontSize="sm" color={mutedColor}>Inflation</Text>
-              <Text fontWeight="medium">{formatCurrency(metrics.inflation)} {tokenSymbol}/day</Text>
+              <Text fontWeight="medium">0.09 PSC/day</Text>
             </HStack>
-
             <HStack justify="space-between">
               <Text fontSize="sm" color={mutedColor}>Budget</Text>
-              <Text fontWeight="medium">{formatCurrency(ethers.formatEther(metrics.budget))} ${tokenSymbol}</Text>
+              <Text fontWeight="medium">0.03 $PSC</Text>
             </HStack>
-
             <HStack justify="space-between">
               <Text fontSize="sm" color={mutedColor}>Inflow</Text>
-              <Text fontWeight="medium">{formatCurrency(metrics.inflow)} {tokenSymbol}/day</Text>
+              <Text fontWeight="medium">0.00 PSC/day</Text>
             </HStack>
-
-            <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Members</Text>
-              <Text fontWeight="medium">{metrics.memberCount}</Text>
-            </HStack>
-
             <HStack justify="space-between">
               <Text fontSize="sm" color={mutedColor}>Active Shares</Text>
               <Text fontWeight="medium">{metrics.availableShares}</Text>
             </HStack>
-
-            <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Sub-Nodes</Text>
-              <Text fontWeight="medium">{node.childrenNodes.length}</Text>
-            </HStack>
           </VStack>
-        </VStack>
 
-        {/* Right Section - Surface Map */}
-        <Box flex="1" h="100%" minH="300px">
-          <SunburstChart 
-            nodeData={node}
-            chainId={chainId}
-          />
-        </Box>
-      </HStack>
-                
-      {/* Path/Breadcrumbs
-      {node.rootPath.length > 0 && (
-        <HStack 
-          mt={6} 
-          spacing={2} 
-          overflow="auto" 
-          py={2}
-          sx={{
-            '&::-webkit-scrollbar': { height: '6px' },
-            '&::-webkit-scrollbar-thumb': { backgroundColor: 'gray.200', borderRadius: 'full' }
-          }}
-        >
-          {node.rootPath.map((pathNodeId, index) => (
-            <React.Fragment key={pathNodeId}>
-              {index > 0 && <ChevronRight size={14} color="gray.500" />}
-              <Tooltip
-                label={`View node details`}
-                placement="top"
-              >
-                <Badge
-                  px={2}
-                  py={1}
-                  cursor="pointer"
-                  onClick={() => onNodeSelect?.(pathNodeId)}
-                  _hover={{ bg: 'purple.50' }}
+          <VStack flex="1" align="stretch" spacing={4}>
+            {metrics.membersList.length > 0 && (
+              <VStack align="stretch">
+                <Text fontSize="sm" color={mutedColor}>Members ({metrics.membersList.length})</Text>
+                <Box 
+                  maxH="125px" 
+                  overflowY="auto" 
+                  borderRadius="md"
+                  borderWidth="1px"
+                  borderColor={borderColor}
+                  p={2}
                 >
-                  {pathNodeId.slice(-6)}
-                </Badge>
-              </Tooltip>
-            </React.Fragment>
-          ))}
+                  {metrics.membersList.map((member, index) => (
+                    <Text key={index} fontSize="xs" isTruncated py={1}>
+                      {member}
+                    </Text>
+                  ))}
+                </Box>
+              </VStack>
+            )}
+
+            {node.childrenNodes.length > 0 && (
+              <VStack align="stretch">
+                <Text fontSize="sm" color={mutedColor}>Sub-Nodes ({node.childrenNodes.length})</Text>
+                <Box 
+                  maxH="125px" 
+                  overflowY="auto"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  borderColor={borderColor}
+                  p={2}
+                >
+                  {node.childrenNodes.map((childId, index) => (
+                    <Text 
+                      key={index}
+                      fontSize="xs"
+                      isTruncated
+                      py={1}
+                      cursor="pointer"
+                      onClick={() => onNodeSelect?.(childId)}
+                      _hover={{ color: 'blue.500' }}
+                    >
+                      {childId}
+                    </Text>
+                  ))}
+                </Box>
+              </VStack>
+            )}
+          </VStack>
+
+          <Box flex="1">
+            <SunburstChart 
+              nodeData={node}
+              chainId={chainId}
+            />
+          </Box>
         </HStack>
-      )} */}
+      </Box>
     </Box>
   );
 };
+
 export default NodeInfo;
