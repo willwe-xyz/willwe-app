@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { useState, useCallback, useEffect } from 'react';
+import React, { memo, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   Box,
   Slider,
@@ -33,6 +33,7 @@ interface SignalSliderProps {
   selectedTokenColor: string;
   chainId: string;
   nodeName?: string;
+  totalAllocation: number;
 }
 
 // Separate impact display component
@@ -61,11 +62,15 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
   selectedTokenColor,
   chainId,
   nodeName,
+  totalAllocation,
 }) => {
   const { user } = usePrivy();
   const contract = useWillWeContract(chainId);
   const [localValue, setLocalValue] = useState(externalValue);
   const [eligibilityImpact, setEligibilityImpact] = useState<string | null>(null);
+  const [initialThumbValue, setInitialThumbValue] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [tempTotalAllocation, setTempTotalAllocation] = useState<number>(totalAllocation);
 
   // Convert basis points to percentage for display only - this should never change while sliding
   const lastPreferencePercentage = (parseInt(lastSignal) / 100).toFixed(2);
@@ -119,7 +124,11 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
   // Handle local changes without propagating to parent immediately
   const handleChange = useCallback((v: number) => {
     setLocalValue(v);
-  }, []);
+    const diff = v - initialThumbValue;
+    const newTempTotal = totalAllocation + diff;
+    setTempTotalAllocation(newTempTotal);
+    onChange(v);
+  }, [onChange, initialThumbValue, totalAllocation]);
 
   // Only notify parent when sliding ends
   const handleChangeEnd = useCallback((v: number) => {
@@ -128,6 +137,29 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
     onChangeEnd(v);
     calculateEligibilityImpact(v);
   }, [onChange, onChangeEnd, calculateEligibilityImpact]);
+
+  const handleDragStart = () => {
+    setInitialThumbValue(localValue);
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  const calculateRemainingAllocation = () => {
+    if (!isDragging) {
+      // When not dragging, show remaining space from total allocation
+      return (100 - totalAllocation).toFixed(1);
+    }
+    
+    // During drag, calculate how much more can be assigned or needs to be reduced
+    const currentDiff = localValue - initialThumbValue;
+    const projectedTotal = totalAllocation + currentDiff;
+    const remaining = 100 - projectedTotal;
+    
+    return remaining.toFixed(1);
+  };
 
   return (
     <VStack align="stretch" spacing={2} width="100%" mb={4}>
@@ -141,6 +173,10 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
         value={localValue}
         onChange={handleChange}
         onChangeEnd={handleChangeEnd}
+        onMouseDown={handleDragStart}
+        onMouseUp={handleDragEnd}
+        onTouchStart={handleDragStart}
+        onTouchEnd={handleDragEnd}
         min={0}
         max={100}
         step={0.1}
@@ -153,7 +189,17 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
           <SliderFilledTrack bg={selectedTokenColor} />
         </SliderTrack>
         <Tooltip
-          label={`${localValue.toFixed(1)}%`}
+          label={
+            <VStack spacing={0} align="center">
+              <Text>{localValue.toFixed(1)}%</Text>
+              <Text
+                fontSize="xs"
+                color={calculateRemainingAllocation() < 0 ? "red.500" : "white"}
+              >
+                {calculateRemainingAllocation()}%
+              </Text>
+            </VStack>
+          }
           placement="top"
           bg={selectedTokenColor}
         >

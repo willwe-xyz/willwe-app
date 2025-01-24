@@ -310,7 +310,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         >
           <StatsCard
             title="Total Value"
-            value={formatBalance(totalSupplyValue)}
+            value={Number(formatBalance(totalSupplyValue)).toFixed(3)}
             icon={<Wallet size={14} />}
             color="purple"
             tooltip="Total supply of the token"
@@ -342,7 +342,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           />
           <StatsCard
             title="Average Expense"
-            value={averageExpense.toFixed(6)}
+            value={formatBalance(averageExpense.toString())}
             icon={<Wallet size={14} />}
             color="red"
             tooltip="Average expense per node in ETH/day"

@@ -514,16 +514,17 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 nodeId={nodeId}
                 parentId={child.nodeId}
                 childId={child.nodeId}
-                value={sliderValues[child.nodeId] }
+                value={sliderValues[child.nodeId]}
                 lastSignal={(child.currentSignal).toString()}
                 balance={child.eligibilityPerSecond}
                 eligibilityPerSecond={child.eligibilityPerSecond}
-                totalInflationPerSecond="0" // Add this from parent node data if available
+                totalInflationPerSecond="0"
                 onChange={(v) => handleSliderChange(child.nodeId, v)}
                 onChangeEnd={(v) => handleSliderChange(child.nodeId, v)}
                 isDisabled={isSubmitting}
                 selectedTokenColor="purple.500"
                 chainId={chainId}
+                totalAllocation={totalAllocation} // Add this line
               />
             </VStack>
           </Box>
