@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ethers, ContractRunner } from 'ethers';
 import {
   ButtonGroup,
@@ -49,35 +49,15 @@ import {
   Trash2,
   Info
 } from 'lucide-react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
-import { deployments, ABIs } from '../../config/contracts';
+import { deployments } from '../../config/deployments';
+import { ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
-import { RequirementsTable } from '../TokenOperations/RequirementsTable';
-import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
-import { Link as ChakraLink } from '@chakra-ui/react';
-import { ExternalLinkIcon } from '@chakra-ui/icons';
 
-const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
-
-export type NodeOperationsProps = {
-  nodeId: string;
-  chainId: string;
-  selectedTokenColor?: string;
-  onSuccess?: () => void;
-};
-
-interface MembraneCharacteristic {
-  title: string;
-  description?: string;
-  link?: string;
-}
-
-// Add this type definition near the top of the file
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
 
-// Add these interfaces near the top
 interface TokenRequirement {
   tokenAddress: string;
   requiredBalance: string;
@@ -90,14 +70,40 @@ interface SpawnFormData {
   inflation: number;
 }
 
+interface MembraneMetadata {
+  name: string;
+  description?: string;
+  characteristics: string[];
+}
+
+interface MembraneRequirement {
+  tokenAddress: string;
+  symbol: string;
+  requiredBalance: string;
+  formattedBalance: string;
+}
+
+export type NodeOperationsProps = {
+  nodeId: string;
+  chainId: string;
+  selectedTokenColor?: string;
+  userAddress?: string;
+  onSuccess?: () => void;
+  initialTab?: 'spawn' | 'membrane' | 'mint' | 'burn' | null;
+  showToolbar?: boolean;
+};
+
 export const NodeOperations = ({
   nodeId,
   chainId,
   selectedTokenColor,
-  onSuccess
+  userAddress,
+  onSuccess,
+  initialTab = null,
+  showToolbar = false // Set default value to false
 }: NodeOperationsProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [activeModal, setActiveModal] = useState<ModalType>(initialTab);
   const [membraneId, setMembraneId] = useState('');
   const [mintAmount, setMintAmount] = useState('');
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -110,13 +116,26 @@ export const NodeOperations = ({
     tokenRequirements: [],
     inflation: 0
   });
+  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
+  const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [isValidatingMembrane, setIsValidatingMembrane] = useState(false);
+  const [membraneError, setMembraneError] = useState<string | null>(null);
+
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
   
-  // Fetch node data to check membership
-  const { data: nodeData } = useNodeData(chainId, nodeId);
+  const { data: nodeData } = useNodeData(chainId,userAddress, nodeId);
   const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address || '');
+
+  // Effect to handle initialTab prop changes
+  useEffect(() => {
+    setActiveModal(initialTab);
+  }, [initialTab]);
+
+  // Add these handlers after the state declarations but before the validateMembrane function:
+
 
   const checkAllowance = useCallback(async () => {
     try {
@@ -124,21 +143,21 @@ export const NodeOperations = ({
         console.warn('Token address or user address not available');
         return;
       }
-
-      const tokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+  
+      const rootTokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
       const cleanChainId = chainId.replace('eip155:', '');
       const willWeAddress = deployments.WillWe[cleanChainId];
-
+  
       if (!willWeAddress) {
         console.warn('WillWe contract address not available');
         return;
       }
-
+  
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-
+  
       const tokenContract = new ethers.Contract(
-        tokenAddress,
+        rootTokenAddress,
         [
           'function allowance(address,address) view returns (uint256)',
           'function approve(address,uint256) returns (bool)'
@@ -146,7 +165,7 @@ export const NodeOperations = ({
         //@ts-ignore
         signer
       );
-
+  
       const currentAllowance = await tokenContract.allowance(
         user.wallet.address,
         willWeAddress
@@ -165,19 +184,28 @@ export const NodeOperations = ({
       });
     }
   }, [chainId, nodeData?.rootPath, user?.wallet?.address, mintAmount, getEthersProvider, toast]);
-
+  
   const handleApprove = useCallback(async () => {
-    if (!nodeData?.rootPath?.[0] || isProcessing) {
+    if (!nodeData?.rootPath?.[0] || isProcessing || !mintAmount) {
       return;
     }
-
+  
     try {
-      const tokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+      const cleanChainId = chainId.replace('eip155:', '');
+      const willWeAddress = deployments.WillWe[cleanChainId];
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
       
+      const rootTokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+      
+      console.log('Approval parameters:', {
+        tokenAddress: rootTokenAddress,
+        spender: willWeAddress,
+        amount: ethers.parseUnits(mintAmount, 18).toString()
+      });
+  
       const tokenContract = new ethers.Contract(
-        tokenAddress,
+        rootTokenAddress,
         [
           'function approve(address,uint256) returns (bool)',
           'function allowance(address,address) view returns (uint256)'
@@ -185,27 +213,62 @@ export const NodeOperations = ({
         //@ts-ignore
         signer
       );
-
+  
       await executeTransaction(
         chainId,
         async () => {
           const tx = await tokenContract.approve(
-            deployments.WillWe[chainId.replace('eip155:', '')],
-            ethers.MaxUint256
+            willWeAddress,
+            ethers.parseUnits(mintAmount, 18)
           );
           return tx;
         },
         {
-          successMessage: 'Approval granted successfully',
+          successMessage: 'Token approval granted successfully',
+          errorMessage: 'Failed to approve token spending',
           onSuccess: async () => {
             await checkAllowance();
+            setNeedsApproval(false);
           }
         }
       );
     } catch (error) {
       console.error('Approval error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to approve tokens',
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      });
     }
-  }, [chainId, nodeData?.rootPath, getEthersProvider, checkAllowance, isProcessing]);
+  }, [
+    chainId,
+    nodeData?.rootPath,
+    mintAmount,
+    getEthersProvider,
+    checkAllowance,
+    isProcessing,
+    executeTransaction,
+    toast
+  ]);
+  
+  useEffect(() => {
+    if (mintAmount) {
+      checkAllowance();
+    }
+  }, [mintAmount, checkAllowance]);
+  
+  useEffect(() => {
+    // Reset states when modal closes
+    if (!activeModal) {
+      setMintAmount('');
+      setBurnAmount('');
+      setNeedsApproval(false);
+      setAllowance('0');
+    }
+  }, [activeModal]);
+
 
   const checkNodeBalance = useCallback(async () => {
     try {
@@ -213,18 +276,17 @@ export const NodeOperations = ({
         console.warn('Token address or user address not available');
         return;
       }
-
+  
       const cleanChainId = chainId.replace('eip155:', '');
       const contractAddress = deployments.WillWe[cleanChainId];
       
       if (!contractAddress) {
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
-
+  
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
       
-      // Use WillWe contract address instead of token address
       const tokenContract = new ethers.Contract(
         contractAddress,
         [
@@ -233,19 +295,12 @@ export const NodeOperations = ({
         //@ts-ignore
         signer
       );
-
-      console.log('Checking ERC1155 balance:', {
-        userAddress: user.wallet.address,
-        nodeId,
-        contractAddress
-      });
-
+  
       const balance = await tokenContract.balanceOf(
         user.wallet.address,
         BigInt(nodeId)
       );
       
-      console.log('Node token balance received:', balance.toString());
       setUserBalance(balance.toString());
     } catch (error) {
       console.error('Error checking node balance:', error);
@@ -257,218 +312,6 @@ export const NodeOperations = ({
       });
     }
   }, [chainId, nodeData?.rootPath, user?.wallet?.address, nodeId, getEthersProvider, toast]);
-
-  const handleSpawnNode = useCallback(async () => {
-    if (isProcessing) return;
-    
-    let confirmToastId: ToastId | undefined;
-    let pendingToastId: ToastId | undefined;
-    
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-
-      confirmToastId = toast({
-        title: 'Confirm Transaction',
-        description: 'Please sign the transaction in your wallet',
-        status: 'info',
-        duration: null
-      });
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          if (confirmToastId) toast.close(confirmToastId);
-          
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            signer as unknown as ContractRunner
-          );
-          
-          pendingToastId = toast({
-            title: 'Transaction Pending',
-            description: 'Your transaction is being processed',
-            status: 'loading',
-            duration: null
-          });
-
-          const tx = await contract.spawnBranch(nodeId, {
-            gasLimit: BigInt(400000)
-          });
-          return tx;
-        },
-        {
-          successMessage: 'Node spawned successfully',
-          onSuccess: () => {
-            if (pendingToastId) toast.close(pendingToastId);
-            setActiveModal(null);
-            onSuccess?.();
-          }
-        }
-      );
-    } catch (error) {
-      if (confirmToastId) toast.close(confirmToastId);
-      if (pendingToastId) toast.close(pendingToastId);
-      
-      console.error('Failed to spawn node:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Transaction failed',
-        status: 'error',
-        duration: 5000
-      });
-    }
-  }, [chainId, nodeId, isProcessing, executeTransaction, getEthersProvider, toast, onSuccess, setActiveModal]);
-
-  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
-  const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
-  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
-  const [isValidatingMembrane, setIsValidatingMembrane] = useState(false);
-  const [membraneError, setMembraneError] = useState<string | null>(null);
-
-  const validateMembrane = useCallback(async (membraneId: string) => {
-    setIsValidatingMembrane(true);
-    setMembraneError(null);
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const provider = await getEthersProvider();
-      
-      if (!provider) {
-        throw new Error('Provider not available');
-      }
-  
-      const contract = new ethers.Contract(
-        deployments.Membrane[cleanChainId],
-        ABIs.Membrane,
-        //@ts-ignore
-        provider.getSigner()
-      );
-  
-      const membrane = await contract.getMembraneById(membraneId);
-      if (!membrane) throw new Error('Membrane not found');
-  
-      const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
-      if (!response.ok) throw new Error('Failed to fetch membrane metadata');
-      
-      const metadata = await response.json();
-      setMembraneMetadata(metadata);
-  
-      setIsLoadingTokens(true);
-      const requirements = await Promise.all(
-        membrane.tokens.map(async (tokenAddress: string, index: number) => {
-          const tokenContract = new ethers.Contract(
-            tokenAddress,
-            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
-            //@ts-ignore  
-            provider.getSigner()
-          );
-  
-          const [symbol, decimals] = await Promise.all([
-            tokenContract.symbol(),
-            tokenContract.decimals()
-          ]);
-  
-          return {
-            tokenAddress,
-            symbol,
-            requiredBalance: membrane.balances[index].toString(),
-            formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
-          };
-        })
-      );
-  
-      setRequirements(requirements);
-    } catch (error) {
-      console.error('Error validating membrane:', error);
-      setMembraneError('Invalid membrane ID');
-      setMembraneMetadata(null);
-      setRequirements([]);
-    } finally {
-      setIsValidatingMembrane(false);
-      setIsLoadingTokens(false);
-    }
-  }, [
-    chainId,
-    getEthersProvider,
-    setIsValidatingMembrane,
-    setMembraneError,
-    setMembraneMetadata,
-    setRequirements,
-    setIsLoadingTokens,
-    IPFS_GATEWAY
-  ]);
-
-
-  const handleSpawnWithMembrane = useCallback(async () => {
-    if (!membraneId) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a membrane ID',
-        status: 'error',
-        duration: 3000
-      });
-      return;
-    }
-  
-    setIsProcessing(true);
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-  
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            //@ts-ignore
-            signer
-          );
-          return contract.spawnBranchWithMembrane(nodeId, membraneId, { gasLimit: 600000 });
-        },
-        {
-          successMessage: 'Node spawned with membrane successfully',
-          onSuccess: () => {
-            setActiveModal(null);
-            onSuccess?.();
-          }
-        }
-      );
-    } catch (error) {
-      console.error('Failed to spawn node with membrane:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Transaction failed',
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [
-    chainId,
-    nodeId,
-    membraneId,
-    executeTransaction,
-    getEthersProvider,
-    toast,
-    onSuccess,
-    setActiveModal,
-    setIsProcessing
-  ]);  
 
   const handleMintMembership = useCallback(async () => {
     setIsProcessing(true);
@@ -505,13 +348,9 @@ export const NodeOperations = ({
     }
   }, [chainId, nodeId, executeTransaction, toast, onSuccess]);
 
-  
   const handleRedistribute = useCallback(async () => {
     if (isProcessing) return;
     setIsProcessing(true);
-    
-    let confirmToastId: ToastId | undefined;
-    let pendingToastId: ToastId | undefined;
     
     try {
       const cleanChainId = chainId.replace('eip155:', '');
@@ -520,19 +359,10 @@ export const NodeOperations = ({
       if (!contractAddress) {
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
-
-      confirmToastId = toast({
-        title: 'Confirm Transaction',
-        description: 'Please sign the transaction in your wallet',
-        status: 'info',
-        duration: null
-      });
-
+  
       await executeTransaction(
         chainId,
         async () => {
-          if (confirmToastId) toast.close(confirmToastId);
-          
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
           const contract = new ethers.Contract(
@@ -541,28 +371,17 @@ export const NodeOperations = ({
             //@ts-ignore
             signer
           );
-
-          pendingToastId = toast({
-            title: 'Transaction Pending',
-            description: 'Your transaction is being processed',
-            status: 'loading',
-            duration: null
-          });
-
+  
           return contract.redistributePath(nodeId, { gasLimit: 500000 });
         },
         {
           successMessage: 'Value redistributed successfully',
           onSuccess: () => {
-            if (pendingToastId) toast.close(pendingToastId);
             onSuccess?.();
           }
         }
       );
     } catch (error) {
-      if (confirmToastId) toast.close(confirmToastId);
-      if (pendingToastId) toast.close(pendingToastId);
-      
       console.error('Failed to redistribute:', error);
       toast({
         title: 'Error',
@@ -667,6 +486,78 @@ export const NodeOperations = ({
     }
   }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, toast, onSuccess]);
 
+  const handleSpawn = async () => {
+    setIsProcessing(true);
+    try {
+      // Prepare metadata for IPFS
+      const metadata = {
+        name: formData.name,
+        characteristics: formData.characteristics
+      };
+
+      // Upload to IPFS
+      const ipfsResponse = await fetch('/api/upload-to-ipfs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: metadata }),
+      });
+      
+      if (!ipfsResponse.ok) throw new Error('Failed to upload metadata');
+      const { cid } = await ipfsResponse.json();
+
+      // Format token requirements
+      const tokens = formData.tokenRequirements.map(req => req.tokenAddress);
+      const balances = formData.tokenRequirements.map(req => 
+        ethers.parseUnits(req.requiredBalance, 18)
+      );
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            deployments.WillWe[chainId.replace('eip155:', '')],
+            ABIs.WillWe,
+            // @ts-ignore
+            signer
+          );
+
+          // Convert inflation rate to gwei and then to bigint
+          const inflationRate = formData.inflation === 0 ? 
+            BigInt(0) : 
+            BigInt(Math.floor(formData.inflation * 1e9));
+
+          return contract.spawnBranchWithMembrane(
+            nodeId,
+            tokens,
+            balances,
+            cid,
+            inflationRate,
+            { gasLimit: BigInt(600000) }
+          );
+        },
+        {
+          successMessage: 'Node spawned successfully',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to spawn node:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Transaction failed',
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const addCharacteristic = () => {
     setFormData((prevData) => ({
       ...prevData,
@@ -719,169 +610,106 @@ export const NodeOperations = ({
     });
   };
 
-  const handleSpawn = async () => {
-    setIsProcessing(true);
-    try {
-      // Prepare metadata for IPFS
-      const metadata = {
-        name: formData.name,
-        characteristics: formData.characteristics
-      };
-
-      // Upload to IPFS
-      const ipfsResponse = await fetch('/api/upload-to-ipfs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: metadata }),
-      });
-      
-      if (!ipfsResponse.ok) throw new Error('Failed to upload metadata');
-      const { cid } = await ipfsResponse.json();
-
-      // Format token requirements
-      const tokens = formData.tokenRequirements.map(req => req.tokenAddress);
-      const balances = formData.tokenRequirements.map(req => 
-        ethers.parseUnits(req.requiredBalance, 18)
-      );
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            deployments.WillWe[chainId.replace('eip155:', '')],
-            ABIs.WillWe,
-            signer
-          );
-
-          return contract.spawnBranchWithMembrane(
-            nodeId,
-            tokens,
-            balances,
-            cid,
-            { gasLimit: 600000 }
-          );
-        },
-        {
-          successMessage: 'Node spawned successfully',
-          onSuccess: () => {
-            setActiveModal(null);
-            onSuccess?.();
-          }
-        }
-      );
-    } catch (error) {
-      console.error('Failed to spawn node:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Transaction failed',
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   return (
     <>
-      <Box 
-        display="flex" 
-        justifyContent="flex-end" 
-        mb={4} 
-        px={6}
-        borderBottom="1px solid"
-        borderColor="gray.200"
-        py={4}
-        bg="gray.50"
-      >
-        <ButtonGroup 
-          size="sm" 
-          spacing={3} 
+      {showToolbar && (
+        <Box 
           display="flex" 
-          flexWrap="wrap" 
-          gap={2}
-          sx={{
-            '& button': {
-              minWidth: '120px',
-              height: '36px',
-              justifyContent: 'center',
-              borderWidth: '1.5px',
-              borderRadius: 'md',
-              fontWeight: 'medium',
-              transition: 'all 0.2s',
-              _hover: {
-                transform: 'translateY(-1px)',
-                shadow: 'sm'
-              }
-            }
-          }}
+          justifyContent="flex-end" 
+          mb={4} 
+          px={6}
+          borderBottom="1px solid"
+          borderColor="gray.200"
+          py={4}
+          bg="gray.50"
         >
-          <Tooltip label="Spawn new node with optional membrane">
-            <Button
-              leftIcon={<GitBranch size={16} />}
-              onClick={() => setActiveModal('spawn')}
-              colorScheme="purple"
-              variant="outline"
-            >
-              Spawn Node
-            </Button>
-          </Tooltip>
+          <ButtonGroup 
+            size="sm" 
+            spacing={3} 
+            display="flex" 
+            flexWrap="wrap" 
+            gap={2}
+            sx={{
+              '& button': {
+                minWidth: '120px',
+                height: '36px',
+                justifyContent: 'center',
+                borderWidth: '1.5px',
+                borderRadius: 'md',
+                fontWeight: 'medium',
+                transition: 'all 0.2s',
+                _hover: {
+                  transform: 'translateY(-1px)',
+                  shadow: 'sm'
+                }
+              }
+            }}
+          >
+            <Tooltip label="Spawn new node with optional membrane">
+              <Button
+                leftIcon={<GitBranch size={16} />}
+                onClick={() => setActiveModal('spawn')}
+                colorScheme="purple"
+                variant="outline"
+              >
+                Spawn Node
+              </Button>
+            </Tooltip>
 
-          <Tooltip label={isMember ? "Already a member" : "Mint membership"}>
-            <Button
-              leftIcon={<UserPlus size={16} />}
-              onClick={handleMintMembership}
-              isDisabled={isMember}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Join
-            </Button>
-          </Tooltip>
+            <Tooltip label={isMember ? "Already a member" : "Mint membership"}>
+              <Button
+                leftIcon={<UserPlus size={16} />}
+                onClick={handleMintMembership}
+                isDisabled={isMember}
+                colorScheme="purple"
+                variant="outline"
+                size="sm"
+              >
+                Join
+              </Button>
+            </Tooltip>
 
-          <Tooltip label="Redistribute value">
-            <Button
-              leftIcon={<RefreshCw size={16} />}
-              onClick={handleRedistribute}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Redistribute
-            </Button>
-          </Tooltip>
+            <Tooltip label="Redistribute value">
+              <Button
+                leftIcon={<RefreshCw size={16} />}
+                onClick={handleRedistribute}
+                colorScheme="purple"
+                variant="outline"
+                size="sm"
+              >
+                Redistribute
+              </Button>
+            </Tooltip>
 
-          <Tooltip label="Mint path tokens">
-            <Button
-              leftIcon={<Plus size={16} />}
-              onClick={() => setActiveModal('mint')}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Mint
-            </Button>
-          </Tooltip>
+            <Tooltip label="Mint path tokens">
+              <Button
+                leftIcon={<Plus size={16} />}
+                onClick={() => setActiveModal('mint')}
+                colorScheme="purple"
+                variant="outline"
+                size="sm"
+              >
+                Mint
+              </Button>
+            </Tooltip>
 
-          <Tooltip label="Burn path tokens">
-            <Button
-              leftIcon={<Trash size={16} />}
-              onClick={() => {
-                setActiveModal('burn');
-                checkNodeBalance();
-              }}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Burn
-            </Button>
-          </Tooltip>
-        </ButtonGroup>
-      </Box>
+            <Tooltip label="Burn path tokens">
+              <Button
+                leftIcon={<Trash size={16} />}
+                onClick={() => {
+                  setActiveModal('burn');
+                  checkNodeBalance();
+                }}
+                colorScheme="purple"
+                variant="outline"
+                size="sm"
+              >
+                Burn
+              </Button>
+            </Tooltip>
+          </ButtonGroup>
+        </Box>
+      )}
 
       {/* Spawn Node Modal */}
       <Modal 
@@ -895,63 +723,56 @@ export const NodeOperations = ({
           <ModalCloseButton />
           <ModalBody pb={6}>
             <VStack spacing={4} align="stretch">
-                <FormControl isRequired>
+              <FormControl isRequired>
                 <FormLabel>Node Name</FormLabel>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({
-                  ...formData,
-                  name: e.target.value
+                    ...formData,
+                    name: e.target.value
                   })}
                   placeholder="Enter node name (minimum 3 characters)"
                   isInvalid={formData.name.length > 0 && formData.name.length < 3}
                 />
                 {formData.name.length > 0 && formData.name.length < 3 && (
                   <Text color="red.500" fontSize="sm" mt={1}>
-                  Name must be at least 3 characters long
+                    Name must be at least 3 characters long
                   </Text>
                 )}
-                </FormControl>
+              </FormControl>
 
-              {/* Add Inflation Rate Field */}
               <FormControl>
                 <FormLabel>
                   <HStack spacing={1}>
                     <Text>Inflation Rate</Text>
-                    <Tooltip label="Initial inflation rate in gwei/sec (optional). Rate at which shares devalue over time. Or, rate at which news shares are generated relative to reserve value.
-                          Each mint happens at a 1 to 1 ratio. Burns are share dependent, thereby allways growing and bigger than reserve (parent) tokens.">
+                    <Tooltip label="Initial inflation rate in gwei/sec (optional). Rate at which shares devalue over time. Or, rate at which news shares are generated relative to reserve value. Each mint happens at a 1 to 1 ratio. Burns are share dependent, thereby allways growing and bigger than reserve (parent) tokens.">
                       <Box as="span" cursor="help">
-                        <Info size={14}>
-                        <Text fontSize="xs" color="gray.500">
-
-                          </Text>
-                        </Info>
+                        <Info size={14} />
                       </Box>
                     </Tooltip>
                   </HStack>
                 </FormLabel>
                 <Input
-                  value={formData.inflation}
+                  value={formData.inflation === 0 ? '' : formData.inflation}
                   onChange={(e) => setFormData({
                     ...formData,
-                    inflation: parseFloat(e.target.value) || 0
+                    inflation: e.target.value === '' ? 0 : parseFloat(e.target.value)
                   })}
                   placeholder="Enter inflation rate (gwei/sec)"
                   type="number"
                   min="0"
-                  max="1000000"
+                  max="1000000000"
                 />
                 <FormHelperText>Maximum rate: 1,000,000 gwei/sec</FormHelperText>
               </FormControl>
 
-              {/* Characteristics Section */}
               <Box>
                 <HStack justify="space-between" mb={2}>
                   <FormLabel mb={0}>Characteristics</FormLabel>
                   <Button
                     size="sm"
                     leftIcon={<Plus size={14} />}
-                    onClick={() => addCharacteristic()}
+                    onClick={addCharacteristic}
                   >
                     Add
                   </Button>
@@ -982,14 +803,13 @@ export const NodeOperations = ({
                 </VStack>
               </Box>
 
-              {/* Token Requirements Section */}
               <Box>
                 <HStack justify="space-between" mb={2}>
                   <FormLabel mb={0}>Token Requirements</FormLabel>
                   <Button
                     size="sm"
                     leftIcon={<Plus size={14} />}
-                    onClick={() => addTokenRequirement()}
+                    onClick={addTokenRequirement}
                   >
                     Add
                   </Button>

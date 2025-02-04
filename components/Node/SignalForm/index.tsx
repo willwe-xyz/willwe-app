@@ -524,7 +524,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 isDisabled={isSubmitting}
                 selectedTokenColor="purple.500"
                 chainId={chainId}
-                totalAllocation={totalAllocation} // Add this line
+                totalAllocation={totalAllocation}
               />
             </VStack>
           </Box>

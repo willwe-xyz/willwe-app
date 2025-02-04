@@ -33,9 +33,10 @@ const addressToUint256 = (address: string): string => {
 };
 
 export function useNodeData(
-  chainId: string | undefined, 
+  chainId: string | undefined,
+  userAddress: string | undefined, 
   nodeIdOrAddress: string | undefined,
-  isRootNode: boolean = false // Add flag to indicate if this is a root node
+  isRootNode: boolean = false
 ): UseNodeDataResult {
   const [data, setData] = useState<NodeState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,10 +80,10 @@ export function useNodeData(
         isRootNode,
         contractAddress
       });
-
+      console.log(formattedId, userAddress);
       // Get node data using the formatted ID
-      const nodeData = await contract.getNodeData(formattedId);
-
+      const nodeData = await contract.getNodeData(formattedId, userAddress || "0x0000000000000000000000000000000000000000");
+      console.log(nodeData);
       // Validate the received data
       if (!nodeData?.basicInfo) {
         throw new Error('Invalid node data received');

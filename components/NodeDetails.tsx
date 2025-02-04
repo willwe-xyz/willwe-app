@@ -26,55 +26,44 @@ import { SignalHistory } from './Node/SignalHistory';
 import { Movements } from './Node/Movements';
 import { ActivitySection } from './Node/Activity';
 import { Chat } from './Node/Chat';
+// import { MyEndpoint } from './Node/MyEndpoint';
+
 import { 
   Signal, 
   Activity,
   MessageCircle,
   ArrowUpDown,
   Plus,
-  PlusCircle,
-  Share2,
   ArrowRight,
-  Shuffle,
   GitBranch,
-  Shield,
-  UserPlus,
-  Trash,
-  RefreshCw,
+  Monitor,
 } from 'lucide-react';
 
 interface NodeDetailsProps {
   chainId: string;
   nodeId: string;
-  onNodeSelect?: (nodeId: string) => void;
   selectedTokenColor: string;
 }
 
 const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
-  onNodeSelect,
   selectedTokenColor,
 }) => {
-  // 1. Context hooks
   const { user } = usePrivy();
   const { isOpen, onOpen, onClose } = useDisclosure();
   
-  // 2. State hooks
   const cleanChainId = chainId?.replace('eip155:', '') || '';
-  const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, nodeId);
+  const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, user?.wallet?.address, nodeId);
   
-  // 3. Color mode hooks  
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const permissionsBg = useColorModeValue('gray.50', 'gray.900');
 
-  // 4. Callbacks
   const refetch = useCallback(() => {
     fetchNodeData();
   }, [fetchNodeData]);
 
-  // Loading state
   if (isLoading) {
     return (
       <VStack spacing={4} align="stretch" p={6}>
@@ -85,7 +74,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
-  // Error state
   if (error) {
     return (
       <Alert status="error">
@@ -95,7 +83,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
-  // No data state
   if (!nodeData?.basicInfo) {
     return (
       <Alert status="warning">
@@ -104,9 +91,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       </Alert>
     );
   }
-
-  const tokenSymbol = Array.isArray(nodeData?.basicInfo) && nodeData.basicInfo.length > 1 ? nodeData.basicInfo[1] : '';
-
 
   return (
     <Box
@@ -120,7 +104,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       flexDirection="column"
       shadow="md"
     >
-      {/* Node Info Section with improved styling */}
       <Box 
         borderBottom="1px solid" 
         borderColor={borderColor}
@@ -133,19 +116,18 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         <NodeInfo 
           node={nodeData} 
           chainId={chainId}
-          onNodeSelect={onNodeSelect}
         />
       </Box>
 
-      {/* Operations Toolbar */}
       <NodeOperations
-        nodeId={nodeId}
-        chainId={chainId}
-        selectedTokenColor={selectedTokenColor}
-        onSuccess={refetch}
-      />
+  nodeId={nodeId}
+  chainId={chainId}
+  selectedTokenColor={selectedTokenColor}
+  userAddress={user?.wallet?.address}
+  onSuccess={refetch}
+  showToolbar={true}
+/>
 
-      {/* Main Content */}
       <Box flex="1" overflow="auto">
         <Tabs 
           className="tabs"
@@ -164,6 +146,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             <Tab><HStack spacing={2}><ArrowRight size={14} /><Text>Movements</Text></HStack></Tab>
             <Tab><HStack spacing={2}><Activity size={14} /><Text>Activity</Text></HStack></Tab>
             <Tab><HStack spacing={2}><MessageCircle size={14} /><Text>Chat</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><Monitor size={14} /><Text>My Endpoint</Text></HStack></Tab>
           </TabList>
 
           <TabPanels>
@@ -205,12 +188,17 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 <Chat />
               </Box>
             </TabPanel>
+
+            <TabPanel p={6}>
+              <Box maxW="900px" mx="auto">
+                {/* <MyEndpoint nodeId={nodeId} chainId={chainId} /> */}
+              </Box>
+            </TabPanel>
           </TabPanels>
         </Tabs>
       </Box>
 
-      {/* Permissions Footer with improved styling */}
-      { user?.wallet?.address && (
+      {user?.wallet?.address && (
         <Box 
           p={6} 
           bg={permissionsBg}

@@ -41,6 +41,7 @@ import { NodeFilters } from './Node/NodeFilters';
 import { NodeActions } from './Node/NodeActions';
 import { TokenNameDisplay } from './Token/TokenNameDisplay';
 import { useWillWeContract } from '../hooks/useWillWeContract';
+import { NodeOperations } from './Node/NodeOperations';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -63,6 +64,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   error,
   onRefresh
 }) => {
+  const [showSpawnModal, setShowSpawnModal] = useState(false);
   const toast = useToast();
   const { getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
@@ -72,7 +74,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   const willweContract = useWillWeContract(chainId);
   const [totalSupplyValue, setTotalSupplyValue] = useState<bigint>(BigInt(0));
 
-  // Fetch total supply
   useEffect(() => {
     const fetchTotalSupply = async () => {
       if (!selectedToken || !willweContract) return;
@@ -81,12 +82,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         const supply = await willweContract.totalSupply(tokenId);
         setTotalSupplyValue(supply);
       } catch (error) {
-        console.error('Error fetching total supply:', {
-          error,
-          contractAddress: willweContract.target,
-          tokenId: selectedToken,
-          abi: ABIs.WillWe
-        });
+        console.error('Error fetching total supply:', error);
       }
     };
 
@@ -95,7 +91,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     }
   }, [selectedToken, willweContract]);
 
-  // Calculate stats and organize nodes
   const {
     baseNodes,
     derivedNodes,
@@ -115,25 +110,20 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       averageExpense: 0
     };
 
-    // Organize nodes into base and derived
     const base = nodes.filter(node => node.rootPath.length === 1);
     const derived = nodes.filter(node => node.rootPath.length > 1);
 
-    // Calculate unique members (addresses)
     const uniqueAddresses = new Set<string>();
     nodes.forEach(node => {
       if (node.membersOfNode) {
-        const members = node.membersOfNode;
-        members.forEach((member: string) => uniqueAddresses.add(member));
+        node.membersOfNode.forEach((member: string) => uniqueAddresses.add(member));
       }
     });
 
-    // Calculate max depth
     const depth = nodes.reduce((max, node) => {
       return node.rootPath ? Math.max(max, node.rootPath.length) : max;
     }, 0);
 
-    // Calculate average expense per day (convert from gwei/sec to ether/day)
     const totalExpensePerSec = nodes.reduce((sum, node) => {
       const expensePerSec = node.basicInfo?.[1] ? BigInt(node.basicInfo[1]) : BigInt(0);
       return sum + expensePerSec;
@@ -144,10 +134,8 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       Number(totalExpensePerSec) / nodesWithExpense : 
       0;
     
-    // Convert gwei/sec to ether/day
     const avgExpensePerDay = (avgExpensePerSecGwei * 86400) / 1e9;
 
-    // Calculate node value percentages based on total supply
     const values: Record<string, number> = {};
     if (totalSupplyValue > BigInt(0)) {
       nodes.forEach(node => {
@@ -171,61 +159,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       averageExpense: avgExpensePerDay
     };
   }, [nodes, selectedToken, totalSupplyValue]);
-
-  // Handle spawning a new root node
-  const handleSpawnNode = useCallback(async () => {
-    if (!selectedToken) {
-      toast({
-        title: "Error",
-        description: "Please select a token first",
-        status: "error",
-        duration: 3000
-      });
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const cleanChainId = chainId.replace('eip155:', '');
-          const contract = new ethers.Contract(
-            deployments.WillWe[cleanChainId],
-            ABIs.WillWe,
-            signer as unknown as ethers.ContractRunner
-          );
-
-          return contract.spawnBranch(selectedToken, { gasLimit: 500000 });
-        },
-        {
-          successMessage: 'New node created successfully',
-          errorMessage: 'Failed to create node',
-          onSuccess: async () => {
-            if (onRefresh) {
-              await onRefresh();
-            }
-          }
-        }
-      );
-    } catch (error: any) {
-      console.error('Error spawning node:', error);
-      toast({
-        title: "Failed to Create Node",
-        description: error.message,
-        status: "error",
-        duration: 5000,
-        icon: <AlertTriangle size={16} />
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [chainId, selectedToken, getEthersProvider, executeTransaction, toast, onRefresh]);
-
-
 
   if (isLoading) {
     return (
@@ -273,21 +206,19 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     );
   }
 
-
   return (
     <Flex 
       direction="column" 
-      h="calc(100vh - 80px)" // Adjust this value based on your navbar/header height
+      h="calc(100vh - 80px)"
       bg="white" 
       rounded="xl" 
       shadow="sm"
-      overflow="hidden" // Prevents content from spilling out
+      overflow="hidden"
     >
-      {/* Fixed Header Section */}
       <Box p={4} borderBottom="1px" borderColor="gray.100">
         <HStack justify="space-between" mb={4}>
           <NodeActions
-            onSpawnNode={handleSpawnNode}
+            onSpawnNode={() => setShowSpawnModal(true)}
             isProcessing={isProcessing}
             selectedToken={selectedToken}
             userAddress={userAddress}
@@ -301,7 +232,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           )}
         </HStack>
 
-        {/* Adjusted Stats Cards */}
         <Grid 
           templateColumns="repeat(5, 1fr)"
           gap={3}
@@ -351,13 +281,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         </Grid>
       </Box>
 
-      {/* Scrollable Content Section */}
-      <Flex 
-        direction="column" 
-        flex="1"
-        overflow="hidden"
-      >
-        {/* Filters - Fixed below header */}
+      <Flex direction="column" flex="1" overflow="hidden">
         <Box px={6} py={4} borderBottom="1px" borderColor="gray.100">
           <NodeFilters
             nodes={nodes}
@@ -367,52 +291,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           />
         </Box>
 
-        {/* Scrollable Node Content */}
-        <Box 
-          flex="1"
-          overflowY="auto"
-          px={6}
-          py={4}
-          pb={20}
-          sx={{
-            '&::-webkit-scrollbar': {
-              width: '8px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(0, 0, 0, 0.05)',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'rgba(0, 0, 0, 0.1)',
-              borderRadius: '8px',
-              '&:hover': {
-                backgroundColor: 'rgba(0, 0, 0, 0.15)',
-              },
-            },
-            // Add these styles to create a more distinct hierarchy
-            '.node-level-0': {
-              borderLeft: '0px solid',
-              ml: '0',
-            },
-            '.node-level-1': {
-              borderLeft: '2px solid',
-              borderColor: 'gray.200',
-              ml: '2',
-              pl: '4',
-            },
-            '.node-level-2': {
-              borderLeft: '2px solid',
-              borderColor: 'gray.300',
-              ml: '4',
-              pl: '4',
-            },
-            '.node-level-3': {
-              borderLeft: '2px solid',
-              borderColor: 'gray.400',
-              ml: '6',
-              pl: '4',
-            },
-            // Add more levels if needed
-          }}
-        >
+        <Box flex="1" overflowY="auto" px={6} py={4} pb={20}>
           {nodes.length === 0 ? (
             <Box 
               p={8} 
@@ -424,32 +303,45 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             >
               <VStack spacing={4}>
                 <Text color="gray.600">
-                  No nodes found. Create a new root node to get started.
+                  No nodes found. Create a new node to get started.
                 </Text>
                 <Button
                   leftIcon={<Plus size={16} />}
-                  onClick={handleSpawnNode}
+                  onClick={() => setShowSpawnModal(true)}
                   colorScheme="purple"
                   isLoading={isProcessing}
                   isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
                 >
-                  Create Root Node
+                  Create Node
                 </Button>
               </VStack>
             </Box>
           ) : (
             <Box pb={16}>
-    <SankeyChart
-      nodes={nodes}
-      selectedTokenColor={selectedTokenColor}
-      onNodeSelect={onNodeSelect}
-      nodeValues={nodeValues}
-      chainId={chainId}
-    />
+              <SankeyChart
+                nodes={nodes}
+                selectedTokenColor={selectedTokenColor}
+                onNodeSelect={onNodeSelect}
+                nodeValues={nodeValues}
+                chainId={chainId}
+              />
             </Box>
           )}
         </Box>
       </Flex>
+
+      <NodeOperations
+  nodeId={selectedToken}
+  chainId={chainId}
+  selectedTokenColor={selectedTokenColor}
+  userAddress={userAddress}
+  onSuccess={() => {
+    setShowSpawnModal(false);
+    if (onRefresh) onRefresh();
+  }}
+  initialTab={showSpawnModal ? 'spawn' : null}
+  showToolbar={false}
+/>
     </Flex>
   );
 };

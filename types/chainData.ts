@@ -1,18 +1,18 @@
-// File: ./types/chainData.ts
 
-// Reflects the smart contract's basic info array structure
+
 export interface NodeBasicInfo {
-  nodeId: string;              // basicInfo[0]
-  inflation: string;           // basicInfo[1]
-  balanceAnchor: string;      // basicInfo[2] - balance in parent reserve
-  balanceBudget: string;      // basicInfo[3] - budget
-  value: string;              // basicInfo[4] - valuation denominated in root token
-  membraneId: string;         // basicInfo[5] - membrane id
-  balanceOfUser: string;      // basicInfo[6] - balance of current user in this node
-  eligibilityPerSec: string;  // basicInfo[7] - redistribution eligibility from parent per sec
-  lastRedistribution: string; // basicInfo[8] - last redistribution timestamp
+  nodeId: string;                    // basicInfo[0]
+  inflation: string;                 // basicInfo[1]
+  balanceAnchor: string;            // basicInfo[2] - reserve balance
+  balanceBudget: string;            // basicInfo[3] - budget balance
+  rootValuationBudget: string;      // basicInfo[4]
+  rootValuationReserve: string;     // basicInfo[5]
+  membraneId: string;               // basicInfo[6]
+  eligibilityPerSec: string;        // basicInfo[7]
+  lastRedistribution: string;       // basicInfo[8]
+  balanceOfUser: string;            // basicInfo[9] - defaults to "0"
+  endpointOfUserForNode: string;    // basicInfo[10] - defaults to address(0)
 }
-
 // Matches the smart contract's UserSignal struct
 export interface UserSignal {
   MembraneInflation: [string, string][]; // Array of [membraneId, inflationRate] pairs
@@ -33,23 +33,25 @@ export interface MembraneMetadata {
 
 export interface NodeState {
   basicInfo: [
-    nodeId: string,              // basicInfo[0]
-    inflation: string,           // basicInfo[1]
-    reserve: string,             // basicInfo[2] - reserve balance
-    budget: string,              // basicInfo[3] - budget balance
-    rootValuationBudget: string, // basicInfo[4] - budget valuation in root token
-    rootValuationReserve: string,// basicInfo[5] - reserve valuation in root token
-    membraneId: string,          // basicInfo[6] - membrane identifier
-    eligibilityPerSec: string,   // basicInfo[7] - redistribution rate
-    lastRedistributionTime: string, // basicInfo[8] - last redistribution timestamp
-    balanceOfUser: string        // basicInfo[9] - user's balance in this node
+    nodeId: string,
+    inflation: string,
+    reserve: string, 
+    budget: string,
+    rootValuationBudget: string,
+    rootValuationReserve: string,
+    membraneId: string,
+    eligibilityPerSec: string,
+    lastRedistributionTime: string,
+    balanceOfUser: string,
+    endpointOfUserForNode: string
   ];
   membraneMeta: string;          // Membrane Metadata CID
   membersOfNode: string[];       // Array of member addresses
   childrenNodes: string[];       // Array of children node IDs
-  rootPath: string[];           // Path from root to current node
-  signals: UserSignal[];        // Array of signals
+  rootPath: string[];            // Path from root to current node
+  signals: UserSignal[];         // Array of signals
 }
+
 
 // For membrane-related data
 export interface MembraneRequirement {
@@ -146,16 +148,12 @@ export enum SQState {
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 10 &&
+    data.basicInfo.length === 11 &&
     typeof data.membraneMeta === 'string' &&
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
     Array.isArray(data.rootPath) &&
-    Array.isArray(data.signals) &&
-    data.signals.every((signal: any) =>
-      Array.isArray(signal.MembraneInflation) &&
-      Array.isArray(signal.lastRedistSignal)
-    )
+    Array.isArray(data.signals)
   );
 };
 
@@ -172,24 +170,18 @@ export const isValidUserSignal = (data: any): data is UserSignal => {
   );
 };
 
-export const transformNodeData = (nodeData: NodeState): TransformedNodeData => {
+export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
   return {
-    basicInfo: {
-      nodeId: nodeData.basicInfo[0],
-      inflation: nodeData.basicInfo[1],
-      balanceAnchor: nodeData.basicInfo[2],
-      balanceBudget: nodeData.basicInfo[3],
-      value: nodeData.basicInfo[4],
-      membraneId: nodeData.basicInfo[5],
-      balanceOfUser: nodeData.basicInfo[6],
-      eligibilityPerSec: nodeData.basicInfo[7],
-      lastRedistribution: nodeData.basicInfo[8]
-    },
-    membraneMeta: nodeData.membraneMeta,
-    membersOfNode: nodeData.membersOfNode,
-    childrenNodes: nodeData.childrenNodes,
-    rootPath: nodeData.rootPath,
-    signals: nodeData.signals,
-    ancestors: nodeData.ancestors
+    nodeId: nodeData.basicInfo[0],
+    inflation: nodeData.basicInfo[1],
+    balanceAnchor: nodeData.basicInfo[2],
+    balanceBudget: nodeData.basicInfo[3],
+    rootValuationBudget: nodeData.basicInfo[4],
+    rootValuationReserve: nodeData.basicInfo[5],
+    membraneId: nodeData.basicInfo[6],
+    eligibilityPerSec: nodeData.basicInfo[7],
+    lastRedistribution: nodeData.basicInfo[8],
+    balanceOfUser: nodeData.basicInfo[9],
+    endpointOfUserForNode: nodeData.basicInfo[10]
   };
 };

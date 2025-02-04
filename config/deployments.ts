@@ -15,38 +15,40 @@ type ABIKP = { [key: string]: InterfaceAbi };
 // WillWe:  0x88AB91578876A7fC13F9F4A9332083Ddfb062049
 // ###############################
 
-// OP sepolia
+// Control [0,1] :  0x10604299C4BBe78b5B4bA12E2380fA92e271999E 0x0000000000000000000000000000000000000000
+// Will Price in ETH: 1000000000
+ 
 // ###############################
-//   ###############################
-//   Foundation Agent Safe at:  0x0000000000000000000000000000000000000000
-//   Will:  0x99e612d393a89798dDDE4903040659a3ae9E5932
-//   Membrane:  0x3e0bb52B6440CEcAF9ecF8b0951D51F9A0B82F48
-//   Execution:  0x4b2487E6C275eE0bAF3F290EE0880530fb91708f
-//   WillWe:  0x91Ac0Fa9A36101362814d20C00873CF0d4680a5C
-//   ###############################
-
+ 
+// ###############################
+// Kibern Director at:  0x0000000000000000000000000000000000000000
+// Will:  0x2F7480ad177EC083D3e8d3d702132dF745ec42F0
+// Membrane:  0x0417bda289A34e4AE5858126e6Fa18fe8Cd38247
+// Execution:  0xC1E7bc0A3585cFbF5406bf0660d9257010903223
+// WillWe:  0x3b197082A8e89A0fbebfEE144C1319Fb93A88103
+// ###############################
 
 export const deployments: Deployments = {
-  "WillWe": {
-    "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-    "11155420": "0x211c7ee458ea8312dbbd1551ed648d5b9aab901e",
-    "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
-  },
-  "Membrane": {
-    "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-    "11155420": "0xbf9f01ef56d26f0681f34108ade9cdc9c280f2e0",
-    "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
-  },
-  "Execution": {
-    "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-    "11155420": "0x2eec2e0b1bb798c2488106584bb88ca04611cbb9",
-    "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
-  },
-  "RVI": {
-    "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-    "11155420": "0xb7dd7d9613cc3a24770db3e58379cd0df1c76e0d",
-    "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
-  }
+    "RVI": {
+        "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
+        "11155420": "0x2F7480ad177EC083D3e8d3d702132dF745ec42F0",
+        "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
+    },
+    "Membrane": {
+        "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
+        "11155420": "0x0417bda289A34e4AE5858126e6Fa18fe8Cd38247",
+        "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
+    },
+    "Execution": {
+        "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
+        "11155420": "0xC1E7bc0A3585cFbF5406bf0660d9257010903223",
+        "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
+    },
+    "WillWe": {
+        "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
+        "11155420": "0x3b197082A8e89A0fbebfEE144C1319Fb93A88103",
+        "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
+    }
 };
 
 /**
@@ -411,8 +413,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[10]",
-                            "internalType": "string[10]"
+                            "type": "string[11]",
+                            "internalType": "string[11]"
                         },
                         {
                             "name": "membraneMeta",
@@ -545,69 +547,6 @@ export const ABIs: ABIKP = {
                     "name": "nodeId",
                     "type": "uint256",
                     "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "NodeData",
-                    "type": "tuple",
-                    "internalType": "struct NodeState",
-                    "components": [
-                        {
-                            "name": "basicInfo",
-                            "type": "string[10]",
-                            "internalType": "string[10]"
-                        },
-                        {
-                            "name": "membraneMeta",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "membersOfNode",
-                            "type": "address[]",
-                            "internalType": "address[]"
-                        },
-                        {
-                            "name": "childrenNodes",
-                            "type": "string[]",
-                            "internalType": "string[]"
-                        },
-                        {
-                            "name": "rootPath",
-                            "type": "string[]",
-                            "internalType": "string[]"
-                        },
-                        {
-                            "name": "signals",
-                            "type": "tuple[]",
-                            "internalType": "struct UserSignal[]",
-                            "components": [
-                                {
-                                    "name": "MembraneInflation",
-                                    "type": "string[2][]",
-                                    "internalType": "string[2][]"
-                                },
-                                {
-                                    "name": "lastRedistSignal",
-                                    "type": "string[]",
-                                    "internalType": "string[]"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getNodeDataWithUserSignals",
-            "inputs": [
-                {
-                    "name": "nodeId",
-                    "type": "uint256",
-                    "internalType": "uint256"
                 },
                 {
                     "name": "user",
@@ -623,8 +562,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[10]",
-                            "internalType": "string[10]"
+                            "type": "string[11]",
+                            "internalType": "string[11]"
                         },
                         {
                             "name": "membraneMeta",
@@ -686,8 +625,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[10]",
-                            "internalType": "string[10]"
+                            "type": "string[11]",
+                            "internalType": "string[11]"
                         },
                         {
                             "name": "membraneMeta",
@@ -1019,7 +958,7 @@ export const ABIs: ABIKP = {
                     "internalType": "uint256"
                 },
                 {
-                    "name": "endpointOwner_",
+                    "name": "owner_",
                     "type": "address",
                     "internalType": "address"
                 }
@@ -1411,6 +1350,11 @@ export const ABIs: ABIKP = {
                     "name": "meta_",
                     "type": "string",
                     "internalType": "string"
+                },
+                {
+                    "name": "inflationRate_",
+                    "type": "uint256",
+                    "internalType": "uint256"
                 }
             ],
             "outputs": [
@@ -1661,31 +1605,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "BranchSpawned",
-            "inputs": [
-                {
-                    "name": "parentId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "newBranchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "creator",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
             "name": "ConfigSignal",
             "inputs": [
                 {
@@ -1869,31 +1788,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "SignalSent",
-            "inputs": [
-                {
-                    "name": "branchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "sender",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "signals",
-                    "type": "uint256[]",
-                    "indexed": false,
-                    "internalType": "uint256[]"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
             "name": "Signaled",
             "inputs": [
                 {
@@ -1913,56 +1807,6 @@ export const ABIs: ABIKP = {
                     "type": "address",
                     "indexed": false,
                     "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
-            "name": "TokensBurned",
-            "inputs": [
-                {
-                    "name": "branchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "burner",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
-            "name": "TokensMinted",
-            "inputs": [
-                {
-                    "name": "branchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "minter",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
                 }
             ],
             "anonymous": false
@@ -2107,11 +1951,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "CoreGasTransferFailed",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "Disabled",
             "inputs": []
         },
@@ -2142,11 +1981,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "InsufficientRootBalance",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "MembershipOp",
             "inputs": []
         },
@@ -2168,11 +2002,6 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "NoControl",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "NoMembership",
             "inputs": []
         },
         {
@@ -2207,11 +2036,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "PathTooShort",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "ResignalMismatch",
             "inputs": []
         },
@@ -2222,17 +2046,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "RootNodeOrNone",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "SignalOverflow",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "StableRoot",
             "inputs": []
         },
         {
@@ -2253,11 +2067,6 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "Unautorised",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "UniniMembrane",
             "inputs": []
         },
         {
@@ -2371,6 +2180,25 @@ export const ABIs: ABIKP = {
                     "name": "owner",
                     "type": "address",
                     "internalType": "address"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "endpoint",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "createInitWillWeEndpoint",
+            "inputs": [
+                {
+                    "name": "nodeId_",
+                    "type": "uint256",
+                    "internalType": "uint256"
                 }
             ],
             "outputs": [
@@ -3172,7 +3000,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "OnlyFun",
+            "name": "OnlyWillWe",
             "inputs": []
         },
         {
@@ -3595,6 +3423,19 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "lastBlockSupply",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
             "name": "lastPrice",
             "inputs": [],
             "outputs": [
@@ -3930,12 +3771,6 @@ export const ABIs: ABIKP = {
             "name": "PriceUpdated",
             "inputs": [
                 {
-                    "name": "previousPrice",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
-                },
-                {
                     "name": "newPrice",
                     "type": "uint256",
                     "indexed": false,
@@ -3962,6 +3797,81 @@ export const ABIs: ABIKP = {
                 },
                 {
                     "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "WillBurned",
+            "inputs": [
+                {
+                    "name": "from",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "ethReturned",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "WillDeconstructBurned",
+            "inputs": [
+                {
+                    "name": "from",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "willAmount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "ethAmount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "WillMinted",
+            "inputs": [
+                {
+                    "name": "to",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "ethValue",
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
@@ -3998,6 +3908,22 @@ export const ABIs: ABIKP = {
             "type": "error",
             "name": "InsufficientBalance",
             "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "InsufficientValue",
+            "inputs": [
+                {
+                    "name": "required",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "provided",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ]
         },
         {
             "type": "error",
@@ -4282,6 +4208,11 @@ export const ABIs: ABIKP = {
                     "name": "proxyOwner_",
                     "type": "address",
                     "internalType": "address"
+                },
+                {
+                    "name": "consensusType_",
+                    "type": "uint8",
+                    "internalType": "uint8"
                 }
             ],
             "stateMutability": "nonpayable"
@@ -4293,6 +4224,19 @@ export const ABIs: ABIKP = {
         {
             "type": "receive",
             "stateMutability": "payable"
+        },
+        {
+            "type": "function",
+            "name": "allowedAuthType",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "uint8",
+                    "internalType": "uint8"
+                }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -4330,45 +4274,6 @@ export const ABIs: ABIKP = {
                 }
             ],
             "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "onERC1155Received",
-            "inputs": [
-                {
-                    "name": "operator",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "from",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "id",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "value",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "data",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bytes4",
-                    "internalType": "bytes4"
-                }
-            ],
-            "stateMutability": "pure"
         },
         {
             "type": "function",
@@ -4445,6 +4350,11 @@ export const ABIs: ABIKP = {
                             "name": "callData",
                             "type": "bytes",
                             "internalType": "bytes"
+                        },
+                        {
+                            "name": "value",
+                            "type": "uint256",
+                            "internalType": "uint256"
                         }
                     ]
                 }
