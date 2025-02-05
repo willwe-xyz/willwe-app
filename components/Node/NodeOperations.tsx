@@ -59,6 +59,9 @@ import { nodeIdToAddress } from '../../utils/formatters';
 
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
 
+
+
+
 interface TokenRequirement {
   tokenAddress: string;
   requiredBalance: string;
