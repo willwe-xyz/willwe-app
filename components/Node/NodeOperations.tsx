@@ -40,7 +40,7 @@ import {
   Switch
 } from '@chakra-ui/react';
 import {
-  GitBranch,
+  GitBranchPlus,
   Shield,
   UserPlus,
   RefreshCw,
@@ -56,10 +56,9 @@ import { useNodeData } from '../../hooks/useNodeData';
 import { deployments } from '../../config/deployments';
 import { ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
+import  SpawnNodeForm  from './SpawnNodeForm';
 
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
-
-
 
 
 interface TokenRequirement {
@@ -220,6 +219,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       const tokenContract = new ethers.Contract(
         rootTokenAddress,
         ['function approve(address,uint256) returns (bool)'],
+        //@ts-ignore
         signer
       );
   
@@ -272,6 +272,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       const contract = new ethers.Contract(
         contractAddress,
         ['function balanceOf(address account, uint256 id) view returns (uint256)'],
+        //@ts-ignore
         signer
       );
   
@@ -313,6 +314,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            // @ts-ignore
             signer
           );
           
@@ -358,6 +360,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            // @ts-ignore
             signer
           );
           
@@ -403,6 +406,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            // @ts-ignore
             signer
           );
           
@@ -447,6 +451,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            /// @ts-ignore
             signer
           );
           
@@ -483,6 +488,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           const contract = new ethers.Contract(
             deployments.WillWe[chainId.replace('eip155:', '')],
             ABIs.WillWe,
+            /// @ts-ignore
             signer
           );
           return contract.mintMembership(nodeId);
@@ -525,6 +531,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
+            // @ts-ignore
             signer
           );
   
@@ -773,6 +780,17 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
               </Button>
             </Tooltip>
 
+            <Tooltip label="Create new node">
+  <Button
+    leftIcon={<GitBranchPlus size={16} />}
+    onClick={() => setActiveModal('spawn')}
+    colorScheme="purple"
+    variant="outline"
+  >
+    Spawn Node
+  </Button>
+</Tooltip>
+
             <Tooltip label="Redistribute value">
               <Button
                 leftIcon={<RefreshCw size={16} />}
@@ -811,6 +829,26 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           </ButtonGroup>
         </Box>
       )}
+
+<Modal 
+  isOpen={activeModal === 'spawn'} 
+  onClose={() => setActiveModal(null)}
+  motionPreset="slideInBottom"
+>
+  <ModalOverlay backdropFilter="blur(4px)" />
+  <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
+    <ModalHeader>Create New Node</ModalHeader>
+    <ModalCloseButton />
+    <ModalBody pb={6}>
+      <SpawnNodeForm
+        nodeId={nodeId}
+        chainId={chainId}
+        onSuccess={onSuccess}
+        onClose={() => setActiveModal(null)}
+      />
+    </ModalBody>
+  </ModalContent>
+</Modal>
 
       {/* Mint Modal */}
       <Modal 

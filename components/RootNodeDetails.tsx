@@ -305,15 +305,28 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
                 <Text color="gray.600">
                   No nodes found. Create a new node to get started.
                 </Text>
+
                 <Button
-                  leftIcon={<Plus size={16} />}
-                  onClick={() => setShowSpawnModal(true)}
-                  colorScheme="purple"
-                  isLoading={isProcessing}
-                  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
-                >
-                  Create Node
-                </Button>
+  leftIcon={<Plus size={16} />}
+  onClick={() => {
+    if (!selectedToken) {
+      toast({
+        title: "Error",
+        description: "Invalid root token selected",
+        status: "error",
+        duration: 5000,
+      });
+      return;
+    }
+    setShowSpawnModal(true);
+  }}
+  colorScheme="purple"
+  isLoading={isProcessing}
+  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
+>
+  Create Node
+</Button>
+
               </VStack>
             </Box>
           ) : (
