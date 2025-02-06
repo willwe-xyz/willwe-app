@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ethers } from 'ethers';
 import { usePrivy } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { deployments } from '../../config/deployments';
 import { ABIs } from '../../config/contracts';
+import { NodeState } from '../../types/chainData';
 import {
   Box,
   Button,
@@ -11,159 +12,362 @@ import {
   Text,
   useToast,
   Input,
-  Textarea,
   Heading,
   Spinner,
+  FormControl,
+  FormLabel,
+  Alert,
+  AlertIcon,
+  Divider,
+  Code,
+  IconButton,
+  HStack,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
 } from '@chakra-ui/react';
+import { Plus, Trash2, Play, Copy, AlertCircle } from 'lucide-react';
 
-interface MyEndpointProps {
-  nodeId: string;
-  chainId: string;
+interface Call {
+  target: string;
+  callData: string;
+  value: string;
 }
 
-export const MyEndpoint: React.FC<MyEndpointProps> = ({ nodeId, chainId }) => {
-  const [endpoint, setEndpoint] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isMember, setIsMember] = useState(false);
-  const [functionInput, setFunctionInput] = useState('');
-  const [encodedCall, setEncodedCall] = useState('');
+interface MyEndpointProps {
+  nodeData: NodeState;
+  chainId: string;
+  onSuccess?: () => void;
+}
+
+export const MyEndpoint: React.FC<MyEndpointProps> = ({ 
+  nodeData, 
+  chainId,
+  onSuccess 
+}) => {
+
+  console.log('NodeData:', nodeData);
+
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [currentCall, setCurrentCall] = useState<Call>({
+    target: '',
+    callData: '',
+    value: '0'
+  });
+  const [executionResult, setExecutionResult] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  
   const { getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
   const toast = useToast();
 
-  const fetchEndpointData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const provider = await getEthersProvider();
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      
-      const willWeContract = new ethers.Contract(
-        deployments.WillWe[chainId.replace('eip155:', '')],
-        ABIs.WillWe,
-        signer
-      );
+  // Get endpoint address and membership status from nodeData
+  const endpointAddress = nodeData.basicInfo[10];
+  const isMember = nodeData.membersOfNode.some(
+    member => member.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase()
+  );
 
-      const membershipStatus = await willWeContract.isMember(userAddress, nodeId);
-      setIsMember(membershipStatus);
-
-      if (membershipStatus) {
-        const endpointAddress = await willWeContract.endpoints(nodeId, userAddress);
-        if (endpointAddress && endpointAddress !== ethers.constants.AddressZero) {
-          setEndpoint(endpointAddress);
-        }
-      }
-    } catch (error) {
-      console.error('Error:', error);
+  const deployEndpoint = async () => {
+    if (!isMember) {
       toast({
-        title: 'Error fetching endpoint data',
+        title: 'Error',
+        description: 'You must be a member to create an endpoint',
         status: 'error',
         duration: 5000,
       });
-    } finally {
-      setIsLoading(false);
+      return;
     }
-  }, [chainId, nodeId, getEthersProvider, toast]);
 
-  const deployEndpoint = async () => {
+    setIsProcessing(true);
     try {
       await executeTransaction(
         chainId,
         async () => {
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
+          const userAddress = await signer.getAddress();
+          
           const contract = new ethers.Contract(
             deployments.WillWe[chainId.replace('eip155:', '')],
             ABIs.WillWe,
             signer
           );
-          return contract.createEndpoint(nodeId);
+          
+          return contract.createEndpointForOwner(nodeData.basicInfo[0], userAddress);
         },
         {
-          successMessage: 'Endpoint deployed successfully',
-          onSuccess: fetchEndpointData
+          successMessage: 'Endpoint created successfully',
+          onSuccess: () => {
+            onSuccess?.();
+            toast({
+              title: 'Success',
+              description: 'Your endpoint has been created',
+              status: 'success',
+              duration: 5000,
+            });
+          }
         }
       );
     } catch (error) {
-      console.error('Error deploying endpoint:', error);
+      console.error('Error creating endpoint:', error);
       toast({
         title: 'Error',
-        description: 'Failed to deploy endpoint',
+        description: 'Failed to create endpoint',
         status: 'error',
         duration: 5000,
       });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  useEffect(() => {
-    fetchEndpointData();
-  }, [fetchEndpointData]);
+  const addCall = () => {
+    if (!currentCall.target || !currentCall.callData) {
+      toast({
+        title: 'Invalid call',
+        description: 'Target and call data are required',
+        status: 'warning',
+        duration: 3000,
+      });
+      return;
+    }
+    setCalls([...calls, currentCall]);
+    setCurrentCall({ target: '', callData: '', value: '0' });
+  };
 
-  if (isLoading) {
-    return (
-      <Box textAlign="center" py={10}>
-        <Spinner />
-      </Box>
-    );
-  }
+  const removeCall = (index: number) => {
+    setCalls(calls.filter((_, i) => i !== index));
+  };
 
+  const executeAggregatedCalls = async () => {
+    if (!endpointAddress || calls.length === 0) return;
+
+    setIsProcessing(true);
+    try {
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const endpointContract = new ethers.Contract(
+            endpointAddress,
+            ABIs.PowerProxy,
+            signer
+          );
+
+          const formattedCalls = calls.map(call => ({
+            target: call.target,
+            callData: call.callData,
+            value: ethers.parseEther(call.value || '0')
+          }));
+
+          return endpointContract.tryAggregate(true, formattedCalls);
+        },
+        {
+          successMessage: 'Calls executed successfully',
+          onSuccess: (result) => {
+            setExecutionResult(JSON.stringify(result, null, 2));
+            setCalls([]);
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error executing calls:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to execute calls',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // If not a member, show membership required message
   if (!isMember) {
     return (
-      <Box p={6}>
-        <Text>You must be a member of this node to have an endpoint.</Text>
-      </Box>
+      <Alert 
+        status="warning" 
+        variant="subtle"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        textAlign="center"
+        height="200px"
+        borderRadius="lg"
+      >
+        <AlertCircle size={40} />
+        <Text mt={4} fontSize="lg" fontWeight="medium">
+          Membership Required
+        </Text>
+        <Text mt={2}>
+          You need to be a member of this node to create and manage an endpoint.
+        </Text>
+      </Alert>
     );
   }
 
+  // If no endpoint exists, show creation option
+  if (!endpointAddress || endpointAddress === ethers.ZeroAddress) {
+    return (
+      <VStack spacing={6} align="stretch">
+        <Alert status="info" borderRadius="md">
+          <AlertIcon />
+          <VStack align="start" spacing={2}>
+            <Text fontWeight="medium">No Endpoint Found</Text>
+            <Text fontSize="sm">
+              Create an endpoint to execute transactions on behalf of this node.
+            </Text>
+          </VStack>
+        </Alert>
+
+        <Button
+          colorScheme="blue"
+          onClick={deployEndpoint}
+          isLoading={isProcessing}
+          loadingText="Creating..."
+        >
+          Create Endpoint
+        </Button>
+      </VStack>
+    );
+  }
+
+  // Main endpoint management interface
   return (
     <VStack spacing={6} align="stretch">
-      <Heading size="md">My Endpoint</Heading>
-      
-      {endpoint ? (
-        <>
-          <Text>Your endpoint address: {endpoint}</Text>
-          <Box>
-            <Heading size="sm" mb={2}>Mock Function Call</Heading>
+      <Box 
+        p={4} 
+        borderRadius="md" 
+        bg="gray.50" 
+        border="1px" 
+        borderColor="gray.200"
+      >
+        <HStack justify="space-between">
+          <VStack align="start" spacing={1}>
+            <Text fontSize="sm" color="gray.600">Your Endpoint Address</Text>
+            <Code fontSize="sm">{endpointAddress}</Code>
+          </VStack>
+          <IconButton
+            aria-label="Copy endpoint address"
+            icon={<Copy size={16} />}
+            size="sm"
+            onClick={() => {
+              navigator.clipboard.writeText(endpointAddress);
+              toast({
+                title: 'Copied',
+                status: 'success',
+                duration: 2000,
+              });
+            }}
+          />
+        </HStack>
+      </Box>
+
+      <Divider />
+
+      <Box>
+        <Heading size="sm" mb={4}>Execute Multiple Calls</Heading>
+        
+        <VStack spacing={4} mb={6}>
+          <FormControl>
+            <FormLabel>Target Address</FormLabel>
             <Input
-              placeholder="Enter function parameters"
-              value={functionInput}
-              onChange={(e) => setFunctionInput(e.target.value)}
-              mb={2}
+              value={currentCall.target}
+              onChange={(e) => setCurrentCall({...currentCall, target: e.target.value})}
+              placeholder="0x..."
             />
-            <Button onClick={() => {
-              const encodedData = ethers.utils.defaultAbiCoder.encode(
-                ['string'],
-                [functionInput]
-              );
-              setEncodedCall(encodedData);
-            }}>
-              Encode Call
-            </Button>
-            
-            {encodedCall && (
-              <Textarea
-                value={encodedCall}
-                isReadOnly
-                mt={2}
-                placeholder="Encoded call data will appear here"
-              />
-            )}
-          </Box>
-        </>
-      ) : (
-        <Box>
-          <Text mb={4}>You don't have an endpoint yet.</Text>
+          </FormControl>
+
+          <FormControl>
+            <FormLabel>Call Data</FormLabel>
+            <Input
+              value={currentCall.callData}
+              onChange={(e) => setCurrentCall({...currentCall, callData: e.target.value})}
+              placeholder="0x..."
+            />
+          </FormControl>
+
+          <FormControl>
+            <FormLabel>Value (ETH)</FormLabel>
+            <Input
+              type="number"
+              value={currentCall.value}
+              onChange={(e) => setCurrentCall({...currentCall, value: e.target.value})}
+              placeholder="0"
+            />
+          </FormControl>
+
           <Button
+            leftIcon={<Plus size={16} />}
+            onClick={addCall}
             colorScheme="blue"
-            onClick={deployEndpoint}
+            size="sm"
           >
-            Plant an Endpoint
+            Add Call
           </Button>
-        </Box>
-      )}
+        </VStack>
+
+        {calls.length > 0 && (
+          <Box overflowX="auto">
+            <Table size="sm" mb={4}>
+              <Thead>
+                <Tr>
+                  <Th>Target</Th>
+                  <Th>Call Data</Th>
+                  <Th>Value</Th>
+                  <Th></Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {calls.map((call, index) => (
+                  <Tr key={index}>
+                    <Td><Code fontSize="xs">{call.target.slice(0, 10)}...</Code></Td>
+                    <Td><Code fontSize="xs">{call.callData.slice(0, 10)}...</Code></Td>
+                    <Td>{call.value} ETH</Td>
+                    <Td>
+                      <IconButton
+                        aria-label="Remove call"
+                        icon={<Trash2 size={14} />}
+                        size="xs"
+                        colorScheme="red"
+                        variant="ghost"
+                        onClick={() => removeCall(index)}
+                      />
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+
+            <Button
+              leftIcon={<Play size={16} />}
+              onClick={executeAggregatedCalls}
+              colorScheme="green"
+              isLoading={isProcessing}
+              loadingText="Executing..."
+              isDisabled={calls.length === 0}
+            >
+              Execute All Calls
+            </Button>
+          </Box>
+        )}
+
+        {executionResult && (
+          <Box mt={4}>
+            <Heading size="sm" mb={2}>Execution Result</Heading>
+            <Code display="block" whiteSpace="pre" p={4} borderRadius="md" bg="gray.50">
+              {executionResult}
+            </Code>
+          </Box>
+        )}
+      </Box>
     </VStack>
   );
 };
 
 export default MyEndpoint;
-

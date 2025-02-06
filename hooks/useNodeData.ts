@@ -1,12 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { 
-  NodeState, 
-  TransformedNodeData, 
-  isValidNodeState, 
-  transformNodeData 
-} from '../types/chainData';
 import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+import { NodeState } from '../types/chainData';
 
 interface UseNodeDataResult {
   data: NodeState | null;
@@ -14,23 +9,6 @@ interface UseNodeDataResult {
   error: Error | null;
   refetch: () => Promise<void>;
 }
-
-// Convert address to uint256 ID format
-const addressToUint256 = (address: string): string => {
-  try {
-    // Ensure address is properly formatted
-    const formattedAddress = address.toLowerCase().startsWith('0x') 
-      ? address.toLowerCase()
-      : `0x${address.toLowerCase()}`;
-
-    // Remove '0x' prefix and convert to decimal string
-    const withoutPrefix = formattedAddress.slice(2);
-    return BigInt(`0x${withoutPrefix}`).toString();
-  } catch (error) {
-    console.error('Error converting address to uint256:', error);
-    throw error;
-  }
-};
 
 export function useNodeData(
   chainId: string | undefined,
@@ -49,6 +27,9 @@ export function useNodeData(
       return;
     }
 
+    // If we don't have a userAddress, use zero address instead of returning early
+    const addressToUse = userAddress || ethers.ZeroAddress;
+
     try {
       setIsLoading(true);
       setError(null);
@@ -63,33 +44,29 @@ export function useNodeData(
       const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       const contract = new ethers.Contract(contractAddress, ABIs.WillWe, provider);
 
-      // Convert input to appropriate format based on whether it's a root node
       let formattedId: string;
       if (isRootNode) {
-        // For root nodes, we need to convert the token address to uint256
-        formattedId = addressToUint256(nodeIdOrAddress);
+        formattedId = ethers.toBigInt(nodeIdOrAddress).toString();
       } else {
-        // For regular nodes, use the nodeId directly
-        formattedId = BigInt(nodeIdOrAddress).toString();
+        formattedId = nodeIdOrAddress;
       }
 
       console.log('Fetching node data:', {
         chainId: cleanChainId,
         nodeIdOrAddress,
         formattedId,
+        userAddress: addressToUse,
         isRootNode,
         contractAddress
       });
-      console.log(formattedId, userAddress);
-      // Get node data using the formatted ID
-      const nodeData = await contract.getNodeData(formattedId, userAddress || "0x0000000000000000000000000000000000000000");
-      console.log(nodeData);
-      // Validate the received data
+
+      const nodeData = await contract.getNodeData(formattedId, addressToUse);
+
       if (!nodeData?.basicInfo) {
         throw new Error('Invalid node data received');
       }
 
-      // Transform data to ensure all BigInt values are converted to strings
+      // Transform data
       const transformedData: NodeState = {
         basicInfo: nodeData.basicInfo.map((item: any) => item.toString()),
         membraneMeta: nodeData.membraneMeta || '',
@@ -109,8 +86,6 @@ export function useNodeData(
       setData(transformedData);
       setError(null);
 
-      console.log('Node data fetched successfully:', transformedData);
-
     } catch (err) {
       console.error('Error fetching node data:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch node data'));
@@ -118,17 +93,19 @@ export function useNodeData(
     } finally {
       setIsLoading(false);
     }
-  }, [chainId, nodeIdOrAddress, isRootNode]);
+  }, [chainId, nodeIdOrAddress, userAddress, isRootNode]);
 
+  // Fetch on mount and when dependencies change
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // Refetch when userAddress becomes available
   useEffect(() => {
-    setData(null);
-    setError(null);
-    setIsLoading(true);
-  }, [chainId, nodeIdOrAddress, isRootNode]);
+    if (userAddress) {
+      fetchData();
+    }
+  }, [userAddress, fetchData]);
 
   return {
     data,
@@ -137,6 +114,5 @@ export function useNodeData(
     refetch: fetchData
   };
 }
-
 
 export default useNodeData;

@@ -24,9 +24,9 @@ import SignalForm from './Node/SignalForm/index';
 import NodeInfo from './Node/NodeInfo';
 import { SignalHistory } from './Node/SignalHistory';
 import { Movements } from './Node/Movements';
-import { ActivitySection } from './Node/Activity';
+import { ActivitySection } from './Node/ActivitySection';
 import { Chat } from './Node/Chat';
-// import { MyEndpoint } from './Node/MyEndpoint';
+import { MyEndpoint } from './Node/MyEndpoint';
 
 import { 
   Signal, 
@@ -160,12 +160,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                       parentNodeData={nodeData}
                       onSuccess={refetch}
                     />
-                    {Array.isArray(nodeData.signals) && nodeData.signals.length > 0 && (
-                      <SignalHistory 
-                        signals={nodeData.signals} 
-                        selectedTokenColor={selectedTokenColor}
-                      />
-                    )}
+                   
                   </>
                 )}
               </VStack>
@@ -179,7 +174,10 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
             <TabPanel p={6}>
               <Box maxW="900px" mx="auto">
-                <ActivitySection />
+              <ActivitySection 
+                signals={nodeData.signals} 
+                selectedTokenColor={selectedTokenColor}
+              />
               </Box>
             </TabPanel>
 
@@ -191,7 +189,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
             <TabPanel p={6}>
               <Box maxW="900px" mx="auto">
-                {/* <MyEndpoint nodeId={nodeId} chainId={chainId} /> */}
+                <MyEndpoint nodeData={nodeData}  chainId={chainId} onSuccess={refetch} />
               </Box>
             </TabPanel>
           </TabPanels>
