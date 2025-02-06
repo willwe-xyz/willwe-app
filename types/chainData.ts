@@ -1,22 +1,20 @@
-
-
 export interface NodeBasicInfo {
-  nodeId: string;                    // basicInfo[0]
-  inflation: string;                 // basicInfo[1]
-  balanceAnchor: string;            // basicInfo[2] - reserve balance
-  balanceBudget: string;            // basicInfo[3] - budget balance
-  rootValuationBudget: string;      // basicInfo[4]
-  rootValuationReserve: string;     // basicInfo[5]
-  membraneId: string;               // basicInfo[6]
-  eligibilityPerSec: string;        // basicInfo[7]
-  lastRedistribution: string;       // basicInfo[8]
-  balanceOfUser: string;            // basicInfo[9] - defaults to "0"
-  endpointOfUserForNode: string;    // basicInfo[10] - defaults to address(0)
+  nodeId: string;                    
+  inflation: string;                 
+  balanceAnchor: string;            
+  balanceBudget: string;            
+  rootValuationBudget: string;      
+  rootValuationReserve: string;     
+  membraneId: string;               
+  eligibilityPerSec: string;        
+  lastRedistribution: string;       
+  balanceOfUser: string;            
+  endpointOfUserForNode: string;    
 }
-// Matches the smart contract's UserSignal struct
+
 export interface UserSignal {
-  MembraneInflation: [string, string][]; // Array of [membraneId, inflationRate] pairs
-  lastRedistSignal: string[];            // Array of timestamps
+  MembraneInflation: [string, string][];
+  lastRedistSignal: string[];           
 }
 
 export interface MembraneMetadata {
@@ -29,7 +27,6 @@ export interface MembraneMetadata {
     requiredBalance: string;
   }[];
 }
-
 
 export interface NodeState {
   basicInfo: [
@@ -45,15 +42,13 @@ export interface NodeState {
     balanceOfUser: string,
     endpointOfUserForNode: string
   ];
-  membraneMeta: string;          // Membrane Metadata CID
-  membersOfNode: string[];       // Array of member addresses
-  childrenNodes: string[];       // Array of children node IDs
-  rootPath: string[];            // Path from root to current node
-  signals: UserSignal[];         // Array of signals
+  membraneMeta: string;          
+  membersOfNode: string[];       
+  childrenNodes: string[];       
+  rootPath: string[];            
+  signals: UserSignal[];         
 }
 
-
-// For membrane-related data
 export interface MembraneRequirement {
   tokenAddress: string;
   symbol: string;
@@ -66,16 +61,6 @@ export interface MembraneCharacteristic {
   link?: string;
 }
 
-export interface MembraneMetadata {
-  name: string;
-  characteristics: MembraneCharacteristic[];
-  membershipConditions: {
-    tokenAddress: string;
-    requiredBalance: string;
-  }[];
-}
-
-// For the processed node data used in the UI
 export interface TransformedNodeData {
   basicInfo: NodeBasicInfo;
   membraneMeta: string;
@@ -86,7 +71,6 @@ export interface TransformedNodeData {
   ancestors: string[];
 }
 
-// For computed statistics
 export interface NodeStats {
   totalValue: string;
   dailyGrowth: string;
@@ -95,14 +79,12 @@ export interface NodeStats {
   pathDepth: number;
 }
 
-// For membrane state from contract
 export interface MembraneState {
   tokens: string[];
   balances: string[];
   meta: string;
 }
 
-// For query responses
 export interface NodeQueryResponse {
   data: NodeState;
   isLoading: boolean;
@@ -110,7 +92,6 @@ export interface NodeQueryResponse {
   refetch: () => Promise<void>;
 }
 
-// For operation parameters
 export interface NodeOperationParams {
   nodeId: string;
   chainId: string;
@@ -120,7 +101,6 @@ export interface NodeOperationParams {
   };
 }
 
-// For signal data
 export interface SignalData {
   membrane: string;
   inflation: string;
@@ -128,15 +108,14 @@ export interface SignalData {
   value: string;
 }
 
-// Movement types (if needed for governance)
+// Movement and governance types
 export enum MovementType {
   Revert = 0,
   AgentMajority = 1,
   EnergeticMajority = 2
 }
 
-// Queue states (if needed for governance)
-export enum SQState {
+export enum SignatureQueueState {
   None = 0,
   Initialized = 1,
   Valid = 2,
@@ -144,7 +123,30 @@ export enum SQState {
   Stale = 4
 }
 
+export interface Movement {
+  category: MovementType;
+  initiatior: string;
+  exeAccount: string;
+  viaNode: string;
+  expiresAt: string;
+  descriptionHash: string;
+  executedPayload: string;
+}
+
+export interface SignatureQueue {
+  state: SignatureQueueState;
+  Action: Movement;
+  Signers: string[];
+  Sigs: string[];
+}
+
+export interface MovementData extends SignatureQueue {
+  hash: string;
+}
+
+///////////////////////////////////////////
 // Type guard functions
+///////////////////////////////////////////
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&

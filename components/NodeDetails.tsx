@@ -142,11 +142,11 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             borderBottomColor={borderColor}
             bg={useColorModeValue('gray.50', 'gray.900')}
           >
-            <Tab><HStack spacing={2}><ArrowUpDown size={14} /><Text>Signals</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><ArrowRight size={14} /><Text>Movements</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><ArrowUpDown size={14} /><Text>Signal</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><ArrowRight size={14} /><Text>Moves</Text></HStack></Tab>
             <Tab><HStack spacing={2}><Activity size={14} /><Text>Activity</Text></HStack></Tab>
             <Tab><HStack spacing={2}><MessageCircle size={14} /><Text>Chat</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><Monitor size={14} /><Text>My Endpoint</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><Monitor size={14} /><Text>Endpoint</Text></HStack></Tab>
           </TabList>
 
           <TabPanels>
@@ -168,7 +168,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
             <TabPanel p={6}>
               <Box maxW="900px" mx="auto">
-                <Movements />
+                <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} />
               </Box>
             </TabPanel>
 
