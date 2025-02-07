@@ -39,8 +39,9 @@ import {
   MovementType, 
   SignatureQueue, 
   SignatureQueueState, 
-  MovementData 
+  LatentMovement 
 } from '../../types/chainData';
+import { sign } from 'crypto';
 
 interface FormState {
   type: MovementType;
@@ -49,8 +50,78 @@ interface FormState {
   payload: string;
 }
 
-export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string }) => {
-  const [movements, setMovements] = useState<MovementData[]>([]);
+interface MovementProps {
+  nodeId: string;
+  chainId: string;
+}
+
+const processMovementData = (rawMovement: any): LatentMovement => {
+  try {
+    return {
+      movement: {
+        category: Number(rawMovement.movement.category),
+        initiatior: rawMovement.movement.initiatior.toString(),
+        exeAccount: rawMovement.movement.exeAccount.toString(),
+        viaNode: rawMovement.movement.viaNode.toString(),
+        expiresAt: rawMovement.movement.expiresAt.toString(),
+        descriptionHash: rawMovement.movement.descriptionHash.toString(),
+        executedPayload: rawMovement.movement.executedPayload.toString()
+      },
+      signatureQueue: {
+        state: Number(rawMovement.signatureQueue.state),
+        hash: rawMovement.signatureQueue.hash?.toString() || '',
+        Action: rawMovement.signatureQueue.Action,
+        Signers: Array.isArray(rawMovement.signatureQueue.Signers) 
+          ? rawMovement.signatureQueue.Signers.map((s: any) => s.toString())
+          : [],
+        Sigs: Array.isArray(rawMovement.signatureQueue.Sigs)
+          ? rawMovement.signatureQueue.Sigs.map((s: any) => s.toString())
+          : []
+      }
+    };
+  } catch (error) {
+    console.error('Error processing movement data:', error);
+    throw error;
+  }
+};
+
+const getMovementStateDisplay = (state: SignatureQueueState) => {
+  switch (state) {
+    case SignatureQueueState.Valid:
+      return {
+        label: 'Valid',
+        color: 'green',
+        icon: <CheckCircle size={14} />
+      };
+    case SignatureQueueState.Initialized:
+      return {
+        label: 'Pending Signatures',
+        color: 'yellow',
+        icon: <Clock size={14} />
+      };
+    case SignatureQueueState.Executed:
+      return {
+        label: 'Executed',
+        color: 'blue',
+        icon: <CheckCircle size={14} />
+      };
+    case SignatureQueueState.Stale:
+      return {
+        label: 'Expired',
+        color: 'red',
+        icon: <XCircle size={14} />
+      };
+    default:
+      return {
+        label: 'Unknown',
+        color: 'gray',
+        icon: <AlertTriangle size={14} />
+      };
+  }
+};
+
+export const Movements: React.FC<MovementProps> = ({ nodeId, chainId }) => {
+  const [movements, setMovements] = useState<LatentMovement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { getEthersProvider } = usePrivy();
@@ -65,20 +136,27 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
   });
 
   const fetchMovements = async () => {
+    if (!nodeId || !chainId) return;
+    
     try {
-      const provider = await getEthersProvider();
+      const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL_OPTIMISM_SEPOLIA);
       const executionContract = new ethers.Contract(
         deployments.Execution[chainId.replace('eip155:', '')],
         ABIs.Execution,
         provider
       );
 
-      const latentMovements = await executionContract.getLatentMovements(nodeId);
-      setMovements(latentMovements.filter(m => m.state !== SignatureQueueState.Stale));
+      const rawMovements = await executionContract.getLatentMovements(nodeId);
+      const processedMovements = rawMovements
+        .map(processMovementData)
+        .filter(m => m.signatureQueue.state !== SignatureQueueState.Stale);
+
+      setMovements(processedMovements);
     } catch (error) {
       console.error('Error fetching movements:', error);
       toast({
         title: 'Error fetching movements',
+        description: error instanceof Error ? error.message : 'Unknown error',
         status: 'error',
         duration: 5000
       });
@@ -88,9 +166,7 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
   };
 
   useEffect(() => {
-    if (nodeId && chainId) {
-      fetchMovements();
-    }
+    fetchMovements();
   }, [nodeId, chainId]);
 
   const handleCreateMovement = async () => {
@@ -136,12 +212,15 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
     }
   };
 
-  const handleSignMovement = async (movement: MovementData) => {
+  const handleSignMovement = async (movement: LatentMovement) => {
     try {
       const cleanChainId = chainId.replace('eip155:', '');
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-      const signature = await signer.signMessage(ethers.getBytes(movement.hash));
+      const hash = movement.signatureQueue.hash;
+      if (!hash) throw new Error('Movement hash not found');
+      
+      const signature = await signer.signMessage(ethers.getBytes(hash));
       const address = await signer.getAddress();
 
       await executeTransaction(
@@ -154,7 +233,7 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
           );
 
           return contract.submitSignatures(
-            movement.hash,
+            hash,
             [address],
             [signature]
           );
@@ -168,14 +247,18 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
       console.error('Error signing movement:', error);
       toast({
         title: 'Error signing movement',
+        description: error instanceof Error ? error.message : 'Unknown error',
         status: 'error'
       });
     }
   };
 
-  const handleExecuteMovement = async (movement: MovementData) => {
+  const handleExecuteMovement = async (movement: LatentMovement) => {
     try {
       const cleanChainId = chainId.replace('eip155:', '');
+      const hash = movement.signatureQueue.hash;
+      if (!hash) throw new Error('Movement hash not found');
+
       await executeTransaction(
         chainId,
         async () => {
@@ -187,7 +270,7 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
             signer
           );
 
-          return contract.executeQueue(movement.hash);
+          return contract.executeQueue(hash);
         },
         {
           successMessage: 'Movement executed successfully',
@@ -198,43 +281,9 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
       console.error('Error executing movement:', error);
       toast({
         title: 'Error executing movement',
+        description: error instanceof Error ? error.message : 'Unknown error',
         status: 'error'
       });
-    }
-  };
-
-  const getMovementStateDisplay = (state: SignatureQueueState) => {
-    switch (state) {
-      case SignatureQueueState.Valid:
-        return {
-          label: 'Valid',
-          color: 'green',
-          icon: <CheckCircle size={14} />
-        };
-      case SignatureQueueState.Initialized:
-        return {
-          label: 'Pending Signatures',
-          color: 'yellow',
-          icon: <Clock size={14} />
-        };
-      case SignatureQueueState.Executed:
-        return {
-          label: 'Executed',
-          color: 'blue',
-          icon: <CheckCircle size={14} />
-        };
-      case SignatureQueueState.Stale:
-        return {
-          label: 'Expired',
-          color: 'red',
-          icon: <XCircle size={14} />
-        };
-      default:
-        return {
-          label: 'Unknown',
-          color: 'gray',
-          icon: <AlertTriangle size={14} />
-        };
     }
   };
 
@@ -272,65 +321,62 @@ export const Movements = ({ nodeId, chainId }: { nodeId: string; chainId: string
             </Tr>
           </Thead>
           <Tbody>
-            {movements.map((movement) => {
-              const stateDisplay = getMovementStateDisplay(movement.state);
-              return (
-                <Tr key={movement.hash}>
-                  <Td>
-                    <Badge>
-                      {movement.Action.category === MovementType.AgentMajority 
-                        ? 'Agent Majority' 
-                        : 'Value Majority'}
+            {movements.map((movement) => (
+              <Tr key={movement.signatureQueue.hash}>
+                <Td>
+                  <Badge>
+                    {movement.movement.category === MovementType.AgentMajority 
+                      ? 'Agent Majority' 
+                      : 'Value Majority'}
+                  </Badge>
+                </Td>
+                <Td>
+                  <Tooltip label={movement.movement.descriptionHash}>
+                    <Text isTruncated maxW="200px">
+                      {movement.movement.descriptionHash}
+                    </Text>
+                  </Tooltip>
+                </Td>
+                <Td>
+                  <HStack>
+                    <Clock size={14} />
+                    <Text>
+                      {new Date(Number(movement.movement.expiresAt) * 1000).toLocaleDateString()}
+                    </Text>
+                  </HStack>
+                </Td>
+                <Td>
+                  <HStack>
+                    {getMovementStateDisplay(movement.signatureQueue.state).icon}
+                    <Badge colorScheme={getMovementStateDisplay(movement.signatureQueue.state).color}>
+                      {getMovementStateDisplay(movement.signatureQueue.state).label}
                     </Badge>
-                  </Td>
-                  <Td>
-                    <Tooltip label={movement.Action.descriptionHash}>
-                      <Text isTruncated maxW="200px">
-                        {movement.Action.descriptionHash}
-                      </Text>
-                    </Tooltip>
-                  </Td>
-                  <Td>
-                    <HStack>
-                      <Clock size={14} />
-                      <Text>
-                        {new Date(Number(movement.Action.expiresAt) * 1000).toLocaleDateString()}
-                      </Text>
-                    </HStack>
-                  </Td>
-                  <Td>
-                    <HStack>
-                      {stateDisplay.icon}
-                      <Badge colorScheme={stateDisplay.color}>
-                        {stateDisplay.label}
-                      </Badge>
-                    </HStack>
-                  </Td>
-                  <Td>
-                    {movement.Signers?.length || 0} / Required
-                  </Td>
-                  <Td>
-                    <HStack>
-                      <Button
-                        size="sm"
-                        onClick={() => handleSignMovement(movement)}
-                        isDisabled={movement.state !== SignatureQueueState.Initialized}
-                      >
-                        Sign
-                      </Button>
-                      <Button
-                        size="sm"
-                        colorScheme="green"
-                        onClick={() => handleExecuteMovement(movement)}
-                        isDisabled={movement.state !== SignatureQueueState.Valid}
-                      >
-                        Execute
-                      </Button>
-                    </HStack>
-                  </Td>
-                </Tr>
-              );
-            })}
+                  </HStack>
+                </Td>
+                <Td>
+                  {movement.signatureQueue.Signers?.length || 0} / Required
+                </Td>
+                <Td>
+                  <HStack>
+                    <Button
+                      size="sm"
+                      onClick={() => handleSignMovement(movement)}
+                      isDisabled={movement.signatureQueue.state !== SignatureQueueState.Initialized}
+                    >
+                      Sign
+                    </Button>
+                    <Button
+                      size="sm"
+                      colorScheme="green"
+                      onClick={() => handleExecuteMovement(movement)}
+                      isDisabled={movement.signatureQueue.state !== SignatureQueueState.Valid}
+                    >
+                      Execute
+                    </Button>
+                  </HStack>
+                </Td>
+              </Tr>
+            ))}
           </Tbody>
         </Table>
       )}

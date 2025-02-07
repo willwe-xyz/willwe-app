@@ -15,38 +15,38 @@ type ABIKP = { [key: string]: InterfaceAbi };
 // WillWe:  0x88AB91578876A7fC13F9F4A9332083Ddfb062049
 // ###############################
 
-// Control [0,1] :  0x10604299C4BBe78b5B4bA12E2380fA92e271999E 0x0000000000000000000000000000000000000000
+// Control [0,1] :  0x0B0674Bd77Bd57e46271701687dDa3FdBAB4f303 0x0000000000000000000000000000000000000000
 // Will Price in ETH: 1000000000
  
 // ###############################
  
 // ###############################
 // Kibern Director at:  0x0000000000000000000000000000000000000000
-// Will:  0x2F7480ad177EC083D3e8d3d702132dF745ec42F0
-// Membrane:  0x0417bda289A34e4AE5858126e6Fa18fe8Cd38247
-// Execution:  0xC1E7bc0A3585cFbF5406bf0660d9257010903223
-// WillWe:  0x3b197082A8e89A0fbebfEE144C1319Fb93A88103
+// Will:  0x614e6739F6FC63c874FD4B367f039eB7080143B7
+// Membrane:  0x501DB714D00D99eEad2b7c30ce074A3120Cbe5E8
+// Execution:  0x6895738051692B413165586ADB417f52f3d757F9
+// WillWe:  0xBfAAcaFE6b4cFD2388cE73665c4307CE0AaC4Af7
 // ###############################
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x2F7480ad177EC083D3e8d3d702132dF745ec42F0",
+        "11155420": "0x614e6739F6FC63c874FD4B367f039eB7080143B7",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0x0417bda289A34e4AE5858126e6Fa18fe8Cd38247",
+        "11155420": "0x501DB714D00D99eEad2b7c30ce074A3120Cbe5E8",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0xC1E7bc0A3585cFbF5406bf0660d9257010903223",
+        "11155420": "0x6895738051692B413165586ADB417f52f3d757F9",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0x3b197082A8e89A0fbebfEE144C1319Fb93A88103",
+        "11155420": "0xBfAAcaFE6b4cFD2388cE73665c4307CE0AaC4Af7",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -2247,6 +2247,138 @@ export const ABIs: ABIKP = {
                 }
             ],
             "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "getLatentMovements",
+            "inputs": [
+                {
+                    "name": "nodeId",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "latentMovements",
+                    "type": "tuple[]",
+                    "internalType": "struct LatentMovement[]",
+                    "components": [
+                        {
+                            "name": "movement",
+                            "type": "tuple",
+                            "internalType": "struct Movement",
+                            "components": [
+                                {
+                                    "name": "category",
+                                    "type": "uint8",
+                                    "internalType": "enum MovementType"
+                                },
+                                {
+                                    "name": "initiatior",
+                                    "type": "address",
+                                    "internalType": "address"
+                                },
+                                {
+                                    "name": "exeAccount",
+                                    "type": "address",
+                                    "internalType": "address"
+                                },
+                                {
+                                    "name": "viaNode",
+                                    "type": "uint256",
+                                    "internalType": "uint256"
+                                },
+                                {
+                                    "name": "expiresAt",
+                                    "type": "uint256",
+                                    "internalType": "uint256"
+                                },
+                                {
+                                    "name": "descriptionHash",
+                                    "type": "bytes32",
+                                    "internalType": "bytes32"
+                                },
+                                {
+                                    "name": "executedPayload",
+                                    "type": "bytes",
+                                    "internalType": "bytes"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "signatureQueue",
+                            "type": "tuple",
+                            "internalType": "struct SignatureQueue",
+                            "components": [
+                                {
+                                    "name": "state",
+                                    "type": "uint8",
+                                    "internalType": "enum SQState"
+                                },
+                                {
+                                    "name": "Action",
+                                    "type": "tuple",
+                                    "internalType": "struct Movement",
+                                    "components": [
+                                        {
+                                            "name": "category",
+                                            "type": "uint8",
+                                            "internalType": "enum MovementType"
+                                        },
+                                        {
+                                            "name": "initiatior",
+                                            "type": "address",
+                                            "internalType": "address"
+                                        },
+                                        {
+                                            "name": "exeAccount",
+                                            "type": "address",
+                                            "internalType": "address"
+                                        },
+                                        {
+                                            "name": "viaNode",
+                                            "type": "uint256",
+                                            "internalType": "uint256"
+                                        },
+                                        {
+                                            "name": "expiresAt",
+                                            "type": "uint256",
+                                            "internalType": "uint256"
+                                        },
+                                        {
+                                            "name": "descriptionHash",
+                                            "type": "bytes32",
+                                            "internalType": "bytes32"
+                                        },
+                                        {
+                                            "name": "executedPayload",
+                                            "type": "bytes",
+                                            "internalType": "bytes"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "Signers",
+                                    "type": "address[]",
+                                    "internalType": "address[]"
+                                },
+                                {
+                                    "name": "Sigs",
+                                    "type": "bytes[]",
+                                    "internalType": "bytes[]"
+                                },
+                                {
+                                    "name": "exeSig",
+                                    "type": "bytes32",
+                                    "internalType": "bytes32"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",

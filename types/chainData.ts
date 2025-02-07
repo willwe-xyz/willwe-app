@@ -140,6 +140,11 @@ export interface SignatureQueue {
   Sigs: string[];
 }
 
+export interface LatentMovement {
+  movement: Movement;
+  signatureQueue: SignatureQueue;
+}
+
 export interface MovementData extends SignatureQueue {
   hash: string;
 }
