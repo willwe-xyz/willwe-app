@@ -69,7 +69,7 @@ const SpawnNodeForm = ({
   const [membershipConditions, setMembershipConditions] = useState<MembershipCondition[]>([]);
   const [newTokenAddress, setNewTokenAddress] = useState('');
   const [newTokenBalance, setNewTokenBalance] = useState('');
-  const [inflationRate, setInflationRate] = useState(1000);
+  const [inflationRate, setInflationRate] = useState(1);
   const [useMembrane, setUseMembrane] = useState(false);
 
   // Transaction state
@@ -404,8 +404,8 @@ const SpawnNodeForm = ({
           <NumberInput
             value={inflationRate}
             onChange={(valueString) => setInflationRate(parseInt(valueString))}
-            min={0}
-            max={1000000}
+            min={1}
+            max={100000000}
           >
             <NumberInputField />
             <NumberInputStepper>
@@ -414,7 +414,7 @@ const SpawnNodeForm = ({
             </NumberInputStepper>
           </NumberInput>
           <FormHelperText>
-            Rate at which new tokens are minted (in gwei per second)
+            Rate at which new node shares are generated
           </FormHelperText>
         </FormControl>
 

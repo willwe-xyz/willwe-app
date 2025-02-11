@@ -7,6 +7,9 @@ export const getRPCUrl = (chainId: string): string => {
   let url;
   const cleanChainId = chainId.includes('eip') ? chainId.toString().replace('eip155:', '') : chainId
   switch (cleanChainId) {
+    case '1': // Mainnet
+      url = process.env.NEXT_PUBLIC_RPC_URL_MAINNET;
+      break;
     case '84532': // Base Sepolia
       url = process.env.NEXT_PUBLIC_RPC_URL_BASE_SEPOLIA;
       break;

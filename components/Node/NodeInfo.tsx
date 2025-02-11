@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ethers } from 'ethers';
-import { 
-  Box, 
-  Text, 
-  HStack, 
-  VStack, 
-  IconButton, 
-  Tooltip, 
-  Badge, 
+import {
+  Box,
+  Text,
+  HStack,
+  VStack,
+  IconButton,
+  Tooltip,
+  Badge,
   Skeleton,
   useToast,
   useColorModeValue
@@ -40,6 +40,12 @@ interface NodeMetrics {
   userOwnedShares: string;
 }
 
+// Add interface for member data
+interface MemberData {
+  address: string;
+  ensName: string | null;
+}
+
 const calculateMetrics = (node: NodeState): NodeMetrics => {
   return {
     inflation: ethers.formatEther((BigInt(node.basicInfo[1]) * BigInt(86400)).toString()),
@@ -59,7 +65,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
   const [tokenSymbol, setTokenSymbol] = useState<string>('');
   const toast = useToast();
-  
+
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const bgColor = useColorModeValue('white', 'gray.800');
   const mutedColor = useColorModeValue('gray.600', 'gray.400');
@@ -71,15 +77,24 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const tokenAddress = nodeIdToAddress(node.rootPath[0]);
 
   const tokenContract = new ethers.Contract(
-    tokenAddress, 
+    tokenAddress,
     ABIs.IERC20,
     provider
   );
 
+  const [memberData, setMemberData] = useState<MemberData[]>([]);
+
   useEffect(() => {
     const fetchTokenSymbol = async () => {
       if (!node?.rootPath?.[0] || !chainId) return;
+
       try {
+        const code = await provider.getCode(tokenAddress);
+        if (code === '0x') {
+          setTokenSymbol('NOT A TOKEN');
+          return;
+        }
+
         const symbol = await tokenContract.symbol();
         setTokenSymbol(symbol);
       } catch (error) {
@@ -89,7 +104,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     };
 
     fetchTokenSymbol();
-  }, [node?.rootPath, chainId]);
+  }, [node?.rootPath, chainId, tokenAddress, provider]);
 
   useEffect(() => {
     const fetchMembraneTitle = async () => {
@@ -133,12 +148,53 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     });
   };
 
+  // Add ENS resolution effect
+  useEffect(() => {
+    const resolveEnsNames = async () => {
+      if (!metrics.membersList.length) return;
+
+      try {
+        // Use Ethereum mainnet for ENS resolution
+        const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
+
+        const resolvedMembers = await Promise.all(
+          metrics.membersList.map(async (address) => {
+            try {
+              const ensName = await mainnetProvider.lookupAddress(address);
+              return {
+                address,
+                ensName
+              };
+            } catch (error) {
+              console.error(`Error resolving ENS for ${address}:`, error);
+              return {
+                address,
+                ensName: null
+              };
+            }
+          })
+        );
+
+        setMemberData(resolvedMembers);
+      } catch (error) {
+        console.error('Error resolving ENS names:', error);
+        // Fallback to addresses only
+        setMemberData(metrics.membersList.map(address => ({
+          address,
+          ensName: null
+        })));
+      }
+    };
+
+    resolveEnsNames();
+  }, [metrics.membersList]);
+
   return (
-    <Box 
-      p={6} 
-      bg={bgColor} 
-      borderRadius="lg" 
-      border="1px" 
+    <Box
+      p={6}
+      bg={bgColor}
+      borderRadius="lg"
+      border="1px"
       borderColor={borderColor}
     >
       <Box p={4}>
@@ -174,17 +230,36 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             {metrics.membersList.length > 0 && (
               <VStack align="stretch">
                 <Text fontSize="sm" color={mutedColor}>Members ({metrics.membersList.length})</Text>
-                <Box 
-                  maxH="125px" 
-                  overflowY="auto" 
+                <Box
+                  maxH="125px"
+                  overflowY="auto"
                   borderRadius="md"
                   borderWidth="1px"
                   borderColor={borderColor}
                   p={2}
                 >
-                  {metrics.membersList.map((member, index) => (
-                    <Text key={index} fontSize="xs" isTruncated py={1}>
-                      {member}
+                  {memberData.map((member, index) => (
+                    <Text 
+                      key={index} 
+                      fontSize="xs" 
+                      isTruncated 
+                      py={1}
+                      display="flex"
+                      alignItems="center"
+                    >
+                      {member.ensName || 
+                        `${member.address.slice(0, 6)}...${member.address.slice(-4)}`
+                      }
+                      {member.ensName && (
+                        <Text 
+                          as="span" 
+                          fontSize="xx-small" 
+                          color="gray.500" 
+                          ml={2}
+                        >
+                          ({`${member.address.slice(0, 6)}...${member.address.slice(-4)}`})
+                        </Text>
+                      )}
                     </Text>
                   ))}
                 </Box>
@@ -194,8 +269,8 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             {node.childrenNodes.length > 0 && (
               <VStack align="stretch">
                 <Text fontSize="sm" color={mutedColor}>Sub-Nodes ({node.childrenNodes.length})</Text>
-                <Box 
-                  maxH="125px" 
+                <Box
+                  maxH="125px"
                   overflowY="auto"
                   borderRadius="md"
                   borderWidth="1px"
@@ -203,15 +278,17 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
                   p={2}
                 >
                   {node.childrenNodes.map((childId, index) => (
-                    <Text 
+                    <Text
                       key={index}
                       fontSize="xs"
                       isTruncated
                       py={1}
                       cursor="pointer"
-                      onClick={() => onNodeSelect?.(childId)}
-                      _hover={{ color: 'blue.500' }}
-                    >
+                      onClick={() => {
+                      onNodeSelect?.(childId);
+                      router.push(`/nodes/${chainId}/${childId}`);
+                      }}
+                      _hover={{ color: 'purple.500', textDecoration: 'none' }}>
                       {childId}
                     </Text>
                   ))}
@@ -221,7 +298,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
           </VStack>
 
           <Box flex="1">
-            <SunburstChart 
+            <SunburstChart
               nodeData={node}
               chainId={chainId}
             />

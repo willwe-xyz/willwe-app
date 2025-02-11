@@ -26,6 +26,7 @@ export interface MembraneMetadata {
     tokenAddress: string;
     requiredBalance: string;
   }[];
+  createdAt: string;
 }
 
 export interface NodeState {
@@ -83,6 +84,7 @@ export interface MembraneState {
   tokens: string[];
   balances: string[];
   meta: string;
+  createdAt: string;
 }
 
 export interface NodeQueryResponse {
