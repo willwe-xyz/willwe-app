@@ -200,7 +200,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
                 <TabPanel p={6}>
                   <Box maxW="900px" mx="auto">
-                    <MyEndpoint nodeData={nodeData}  chainId={chainId} onSuccess={refetch} />
+                    <MyEndpoint nodeData={nodeData} chainId={chainId} onSuccess={refetch} />
                   </Box>
                 </TabPanel>
               </TabPanels>

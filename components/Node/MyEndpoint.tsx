@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { ethers } from 'ethers';
+import React, { useState, useEffect } from 'react';
+import { ethers, Provider } from 'ethers';
 import { usePrivy } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { deployments } from '../../config/deployments';
-import { ABIs } from '../../config/contracts';
+import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
 import {
   Box,
@@ -13,7 +13,6 @@ import {
   useToast,
   Input,
   Heading,
-  Spinner,
   FormControl,
   FormLabel,
   Alert,
@@ -28,13 +27,27 @@ import {
   Tr,
   Th,
   Td,
+  Stat,
+  StatLabel,
+  StatNumber,
+  Tooltip,
+  Select,
+  FormHelperText,
 } from '@chakra-ui/react';
+import { addressToNodeId, formatBalance, nodeIdToAddress } from '../../utils/formatters';
 import { Plus, Trash2, Play, Copy, AlertCircle } from 'lucide-react';
+import { RefreshCw, Wallet } from 'lucide-react';
+import { getEndpointActions, EndpointActionConfig } from '../../config/endpointActions';
 
 interface Call {
   target: string;
   callData: string;
   value: string;
+}
+
+interface CurrentCallState extends Call {
+  actionType?: string;
+  params?: Record<string, any>;
 }
 
 interface MyEndpointProps {
@@ -48,27 +61,82 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
   chainId,
   onSuccess 
 }) => {
-
-  console.log('NodeData:', nodeData);
-
+  const { user } = usePrivy();
   const [calls, setCalls] = useState<Call[]>([]);
-  const [currentCall, setCurrentCall] = useState<Call>({
+  const [currentCall, setCurrentCall] = useState<CurrentCallState>({
     target: '',
     callData: '',
-    value: '0'
+    value: '0',
+    actionType: 'tokenTransfer',
+    params: {}
   });
   const [executionResult, setExecutionResult] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
-  
+  const [isBurning, setIsBurning] = useState(false);
+  const [rootTokenBalance, setRootTokenBalance] = useState<string>('0');
+  const [isRedistributing, setIsRedistributing] = useState(false);
+  const [endpointNodeData, setEndpointNodeData] = useState<NodeState | null>(null);
   const { getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
   const toast = useToast();
 
   // Get endpoint address and membership status from nodeData
-  const endpointAddress = nodeData.basicInfo[10];
+  const endpointAddress = nodeData.basicInfo[10];  // endpoint address is at index 10
+  const endpointId = endpointAddress && endpointAddress !== ethers.ZeroAddress ? 
+    addressToNodeId(endpointAddress) : null;
   const isMember = nodeData.membersOfNode.some(
-    member => member.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase()
+    member => member.toLowerCase() === user?.wallet?.address?.toLowerCase()
   );
+  
+  const readProvider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+  const rootTokenAddress = nodeData.rootPath[0] ? nodeIdToAddress(nodeData.rootPath[0]) : null;
+
+  // Use root valuation reserve at index 5 instead of balance
+  const endpointBalance = Number(ethers.formatEther(nodeData.basicInfo[2])).toFixed(4);  // Use balance anchor (reserve)
+
+  useEffect(() => {
+    const fetchRootTokenBalance = async () => {
+      if (!endpointAddress || !rootTokenAddress) return;
+      
+      try {
+        const tokenContract = new ethers.Contract(
+          rootTokenAddress,
+          ABIs.IERC20,
+          readProvider
+        );
+        
+        const balance = await tokenContract.balanceOf(endpointAddress);
+        setRootTokenBalance(balance.toString());
+      } catch (error) {
+        console.error('Error fetching root token balance:', error);
+      }
+    };
+
+    fetchRootTokenBalance();
+  }, [endpointAddress, rootTokenAddress, readProvider]);
+
+  useEffect(() => {
+    const fetchEndpointData = async () => {
+      if (!endpointAddress || endpointAddress === ethers.ZeroAddress || !endpointId) return;
+      
+      try {
+        const willWeContract = new ethers.Contract(
+          deployments.WillWe[chainId.replace('eip155:', '')],
+          ABIs.WillWe,
+          readProvider
+        );
+
+        // Pass the window.ethereum address or zero address as fallback
+        const userAddress = window.ethereum?.selectedAddress || ethers.ZeroAddress;
+        const data = await willWeContract.getNodeData(endpointId, userAddress);
+        setEndpointNodeData(data);
+      } catch (error) {
+        console.error('Error fetching endpoint data:', error);
+      }
+    };
+
+    fetchEndpointData();
+  }, [endpointAddress, endpointId, chainId, readProvider]);
 
   const deployEndpoint = async () => {
     if (!isMember) {
@@ -93,6 +161,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
           const contract = new ethers.Contract(
             deployments.WillWe[chainId.replace('eip155:', '')],
             ABIs.WillWe,
+            // @ts-ignore
             signer
           );
           
@@ -124,6 +193,65 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     }
   };
 
+  const handleBurnPath = async () => {
+    if (isBurning || !rootTokenBalance || !endpointNodeData) return;
+    setIsBurning(true);
+
+    try {
+      const provider = getEthersProvider();
+      const signer = provider.getSigner();
+      const cleanChainId = chainId.replace('eip155:', '');
+      
+      const proxyContract = new ethers.Contract(
+        endpointAddress,
+        ABIs.PowerProxy,
+        // @ts-ignore
+        signer
+      );
+
+      const willWeContract = new ethers.Contract(
+        deployments.WillWe[cleanChainId],
+        ABIs.WillWe,
+        readProvider
+      );
+
+      // Use endpoint's node data for burn path
+      const burnCalldata = willWeContract.interface.encodeFunctionData('burnPath', [
+        nodeData.basicInfo[0],
+        endpointNodeData.basicInfo[5]
+      ]);
+
+      const calls = [{
+        target: deployments.WillWe[cleanChainId],
+        callData: burnCalldata,
+        value: '0'
+      }];
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          return proxyContract.tryAggregate(true, calls);
+        },
+        {
+          successMessage: 'Successfully burned tokens through path',
+          onSuccess: () => {
+            setRootTokenBalance('0');
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to burn tokens:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to burn tokens',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsBurning(false);
+    }
+  };
+
   const addCall = () => {
     if (!currentCall.target || !currentCall.callData) {
       toast({
@@ -142,6 +270,56 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     setCalls(calls.filter((_, i) => i !== index));
   };
 
+
+  const handleRedistribute = async () => {
+    if (isRedistributing || !endpointNodeData) return;
+    setIsRedistributing(true);
+  
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+  
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer as unknown as ethers.ContractRunner
+          );
+  
+          return contract.redistributePath(endpointId, { gasLimit: 500000 });
+        },
+        {
+          onSuccess: () => {
+            toast({
+              title: 'Redistribution complete',
+              description: 'Value has been redistributed from parent node to endpoint',
+              status: 'success',
+              duration: 5000,
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to redistribute:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to redistribute value',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsRedistributing(false);
+    }
+  };
+
   const executeAggregatedCalls = async () => {
     if (!endpointAddress || calls.length === 0) return;
 
@@ -155,6 +333,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
           const endpointContract = new ethers.Contract(
             endpointAddress,
             ABIs.PowerProxy,
+            // @ts-ignore
             signer
           );
 
@@ -168,8 +347,8 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         },
         {
           successMessage: 'Calls executed successfully',
-          onSuccess: (result) => {
-            setExecutionResult(JSON.stringify(result, null, 2));
+          onSuccess: () => {
+            setExecutionResult('Execution successful');
             setCalls([]);
           }
         }
@@ -268,6 +447,49 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         </HStack>
       </Box>
 
+      <HStack spacing={8} justify="center">
+        <Stat>
+          <StatLabel>Endpoint Budget</StatLabel>
+          <StatNumber>
+            {endpointNodeData ? Number(ethers.formatEther(endpointNodeData.basicInfo[5])).toFixed(4) : '0'} tokens
+          </StatNumber>
+        </Stat>
+        
+        <Stat>
+          <StatLabel>Root Token Balance</StatLabel>
+          <StatNumber>{Number(formatBalance(rootTokenBalance)).toFixed(4)} tokens</StatNumber>
+        </Stat>
+      </HStack>
+
+      <HStack justify="center">
+        <Button
+          leftIcon={<RefreshCw size={16} />}
+          onClick={handleRedistribute}
+          isLoading={isRedistributing}
+          loadingText="Redistributing..."
+          colorScheme="purple"
+          size="md"
+        >
+          Redistribute to Endpoint
+        </Button>
+        
+        {endpointNodeData && (
+          <Tooltip label={parseFloat(ethers.formatEther(endpointNodeData.basicInfo[5])) <= 0 ? "No budget available to burn" : ""}>
+            <Button
+              leftIcon={<Wallet size={16} />}
+              onClick={handleBurnPath}
+              isLoading={isBurning}
+              loadingText="Burning..."
+              colorScheme="red"
+              size="md"
+              isDisabled={parseFloat(ethers.formatEther(endpointNodeData.basicInfo[5])) <= 0}
+            >
+              Withdraw All to Endpoint
+            </Button>
+          </Tooltip>
+        )}
+      </HStack>
+
       <Divider />
 
       <Box>
@@ -275,38 +497,81 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         
         <VStack spacing={4} mb={6}>
           <FormControl>
-            <FormLabel>Target Address</FormLabel>
-            <Input
-              value={currentCall.target}
-              onChange={(e) => setCurrentCall({...currentCall, target: e.target.value})}
-              placeholder="0x..."
-            />
+            <FormLabel>Action Type</FormLabel>
+            <Select 
+              value={currentCall.actionType || 'tokenTransfer'}
+              onChange={(e) => {
+                setCurrentCall({
+                  target: '',
+                  callData: '',
+                  value: '0',
+                  actionType: e.target.value,
+                  params: {}
+                });
+              }}
+            >
+              {rootTokenAddress && getEndpointActions(rootTokenAddress).map(action => (
+                <option key={action.id} value={action.id}>
+                  {action.label}
+                </option>
+              ))}
+            </Select>
+            <FormHelperText>
+              {currentCall.actionType && 
+                getEndpointActions(rootTokenAddress || '')[
+                  getEndpointActions(rootTokenAddress || '').findIndex(a => a.id === currentCall.actionType)
+                ]?.description
+              }
+            </FormHelperText>
           </FormControl>
 
-          <FormControl>
-            <FormLabel>Call Data</FormLabel>
-            <Input
-              value={currentCall.callData}
-              onChange={(e) => setCurrentCall({...currentCall, callData: e.target.value})}
-              placeholder="0x..."
-            />
-          </FormControl>
-
-          <FormControl>
-            <FormLabel>Value (ETH)</FormLabel>
-            <Input
-              type="number"
-              value={currentCall.value}
-              onChange={(e) => setCurrentCall({...currentCall, value: e.target.value})}
-              placeholder="0"
-            />
-          </FormControl>
+          {currentCall.actionType && getEndpointActions(rootTokenAddress || '').map(action => {
+            if (action.id !== currentCall.actionType) return null;
+            
+            return (
+              <React.Fragment key={action.id}>
+                {action.fields.map(field => (
+                  <FormControl key={field.name} isRequired={field.required}>
+                    <FormLabel>{field.label}</FormLabel>
+                    <Input
+                      type={field.type === 'number' ? 'number' : 'text'}
+                      value={currentCall.params?.[field.name] || ''}
+                      onChange={(e) => setCurrentCall({
+                        ...currentCall,
+                        params: {
+                          ...currentCall.params,
+                          [field.name]: e.target.value
+                        }
+                      })}
+                      placeholder={field.placeholder}
+                    />
+                  </FormControl>
+                ))}
+              </React.Fragment>
+            );
+          })}
 
           <Button
             leftIcon={<Plus size={16} />}
-            onClick={addCall}
+            onClick={() => {
+              const action = getEndpointActions(rootTokenAddress || '').find(
+                a => a.id === currentCall.actionType
+              );
+              if (!action) return;
+              
+              const callData = action.getCallData(currentCall.params || {});
+              setCalls([...calls, callData]);
+              setCurrentCall({
+                target: '',
+                callData: '',
+                value: '0',
+                actionType: currentCall.actionType,
+                params: {}
+              });
+            }}
             colorScheme="blue"
             size="sm"
+            isDisabled={!currentCall.actionType}
           >
             Add Call
           </Button>

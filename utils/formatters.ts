@@ -45,6 +45,9 @@ export const nodeIdToAddress = (nodeId: string | number | bigint): string => {
  */
 export const addressToNodeId = (address: string): string => {
   try {
+    if (!address || address === ethers.ZeroAddress) {
+      throw new Error('Empty or zero address');
+    }
     if (!isHexString(address)) {
       throw new Error('Invalid address format');
     }
@@ -53,7 +56,7 @@ export const addressToNodeId = (address: string): string => {
     return nodeId;
   } catch (error) {
     console.error('Error converting address to node ID:', error);
-    throw new Error('Invalid address format');
+    throw error; // Propagate the specific error
   }
 };
 
