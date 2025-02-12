@@ -19,12 +19,48 @@ export interface EndpointActionConfig {
   }[];
 }
 
-export const getEndpointActions = (rootTokenAddress: string): EndpointActionConfig[] => [
+export const getEndpointActions = (rootTokenAddress: string, rootTokenSymbol: string): EndpointActionConfig[] => [
   {
     id: 'tokenTransfer',
-    label: 'Token Transfer',
-    description: 'Transfer root tokens to an address',
+    label: `${rootTokenSymbol} Transfer`,
+    description: `Transfer ${rootTokenSymbol} tokens to an address`,
     fields: [
+      {
+        name: 'to',
+        label: 'Recipient Address',
+        type: 'address',
+        placeholder: '0x...',
+        required: true
+      },
+      {
+        name: 'amount',
+        label: `Amount (${rootTokenSymbol})`,
+        type: 'number',
+        placeholder: '0.0',
+        required: true
+      }
+    ],
+    getCallData: ({ to, amount }) => ({
+      target: rootTokenAddress,
+      callData: new ethers.Interface(ABIs.IERC20).encodeFunctionData('transfer', [
+        to,
+        ethers.parseEther(amount.toString())
+      ]),
+      value: '0'
+    })
+  },
+  {
+    id: 'customTokenTransfer',
+    label: 'Custom Token Transfer',
+    description: 'Transfer any ERC20 token to an address',
+    fields: [
+      {
+        name: 'tokenAddress',
+        label: 'Token Address',
+        type: 'address',
+        placeholder: '0x...',
+        required: true
+      },
       {
         name: 'to',
         label: 'Recipient Address',
@@ -40,8 +76,8 @@ export const getEndpointActions = (rootTokenAddress: string): EndpointActionConf
         required: true
       }
     ],
-    getCallData: ({ to, amount }) => ({
-      target: rootTokenAddress,
+    getCallData: ({ tokenAddress, to, amount }) => ({
+      target: tokenAddress,
       callData: new ethers.Interface(ABIs.IERC20).encodeFunctionData('transfer', [
         to,
         ethers.parseEther(amount.toString())

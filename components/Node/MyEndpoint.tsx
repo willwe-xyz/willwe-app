@@ -79,6 +79,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
   const { getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
   const toast = useToast();
+  const [rootTokenSymbol, setRootTokenSymbol] = useState<string>('');
 
   // Get endpoint address and membership status from nodeData
   const endpointAddress = nodeData.basicInfo[10];  // endpoint address is at index 10
@@ -137,6 +138,28 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
 
     fetchEndpointData();
   }, [endpointAddress, endpointId, chainId, readProvider]);
+
+  useEffect(() => {
+    const fetchRootTokenSymbol = async () => {
+      if (!rootTokenAddress) return;
+      
+      try {
+        const tokenContract = new ethers.Contract(
+          rootTokenAddress,
+          ABIs.IERC20,
+          readProvider
+        );
+        
+        const symbol = await tokenContract.symbol();
+        setRootTokenSymbol(symbol);
+      } catch (error) {
+        console.error('Error fetching root token symbol:', error);
+        setRootTokenSymbol('tokens');
+      }
+    };
+
+    fetchRootTokenSymbol();
+  }, [rootTokenAddress, readProvider]);
 
   const deployEndpoint = async () => {
     if (!isMember) {
@@ -451,13 +474,13 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         <Stat>
           <StatLabel>Endpoint Budget</StatLabel>
           <StatNumber>
-            {endpointNodeData ? Number(ethers.formatEther(endpointNodeData.basicInfo[5])).toFixed(4) : '0'} tokens
+            {endpointNodeData ? Number(ethers.formatEther(endpointNodeData.basicInfo[5])).toFixed(4) : '0'} {rootTokenSymbol}
           </StatNumber>
         </Stat>
         
         <Stat>
           <StatLabel>Root Token Balance</StatLabel>
-          <StatNumber>{Number(formatBalance(rootTokenBalance)).toFixed(4)} tokens</StatNumber>
+          <StatNumber>{Number(formatBalance(rootTokenBalance)).toFixed(4)} {rootTokenSymbol}</StatNumber>
         </Stat>
       </HStack>
 
@@ -510,7 +533,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
                 });
               }}
             >
-              {rootTokenAddress && getEndpointActions(rootTokenAddress).map(action => (
+              {rootTokenAddress && getEndpointActions(rootTokenAddress, rootTokenSymbol).map(action => (
                 <option key={action.id} value={action.id}>
                   {action.label}
                 </option>
@@ -518,14 +541,14 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
             </Select>
             <FormHelperText>
               {currentCall.actionType && 
-                getEndpointActions(rootTokenAddress || '')[
-                  getEndpointActions(rootTokenAddress || '').findIndex(a => a.id === currentCall.actionType)
+                getEndpointActions(rootTokenAddress || '', rootTokenSymbol)[
+                  getEndpointActions(rootTokenAddress || '', rootTokenSymbol).findIndex(a => a.id === currentCall.actionType)
                 ]?.description
               }
             </FormHelperText>
           </FormControl>
 
-          {currentCall.actionType && getEndpointActions(rootTokenAddress || '').map(action => {
+          {currentCall.actionType && getEndpointActions(rootTokenAddress || '', rootTokenSymbol).map(action => {
             if (action.id !== currentCall.actionType) return null;
             
             return (
@@ -554,7 +577,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
           <Button
             leftIcon={<Plus size={16} />}
             onClick={() => {
-              const action = getEndpointActions(rootTokenAddress || '').find(
+              const action = getEndpointActions(rootTokenAddress || '', rootTokenSymbol).find(
                 a => a.id === currentCall.actionType
               );
               if (!action) return;
