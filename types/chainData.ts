@@ -45,7 +45,8 @@ export interface NodeState {
   ];
   membraneMeta: string;          
   membersOfNode: string[];       
-  childrenNodes: string[];       
+  childrenNodes: string[];
+  movementEndpoints: string[];       
   rootPath: string[];            
   signals: UserSignal[];         
 }
@@ -125,6 +126,12 @@ export enum SignatureQueueState {
   Stale = 4
 }
 
+export interface Call {
+  target: string;
+  callData: string;
+  value: string;
+}
+
 export interface Movement {
   category: MovementType;
   initiatior: string;
@@ -140,15 +147,29 @@ export interface SignatureQueue {
   Action: Movement;
   Signers: string[];
   Sigs: string[];
+  exeSig: string;
 }
 
 export interface LatentMovement {
   movement: Movement;
+  movementHash: string; // This is derived from the movement data
   signatureQueue: SignatureQueue;
 }
 
-export interface MovementData extends SignatureQueue {
-  hash: string;
+export interface IPFSMetadata {
+  description: string;
+  timestamp: number;
+}
+
+export interface MovementDescription {
+  description: string;
+  timestamp: number;
+}
+
+export interface MovementSignatureStatus {
+  current: number;
+  required: number;
+  hasUserSigned: boolean;
 }
 
 ///////////////////////////////////////////

@@ -28,6 +28,7 @@ import { ActivitySection } from './Node/ActivitySection';
 import { Chat } from './Node/Chat';
 import { MyEndpoint } from './Node/MyEndpoint';
 import { EndpointComponent } from './Node/EndpointComponent';
+import { MovementsErrorBoundary } from './Node/MovementsErrorBoundary';
 
 import { 
   Signal, 
@@ -179,7 +180,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
                 <TabPanel p={6}>
                   <Box maxW="900px" mx="auto">
-                    <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} />
+                    <MovementsErrorBoundary>
+                      <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} nodeData={nodeData} />
+                    </MovementsErrorBoundary>
                   </Box>
                 </TabPanel>
 

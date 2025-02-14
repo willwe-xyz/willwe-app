@@ -1,70 +1,36 @@
 import { ethers } from 'ethers';
 import { ABIs } from './contracts';
 
+interface ActionField {
+  name: string;
+  label: string;
+  type: 'text' | 'number';
+  placeholder: string;
+  required?: boolean;
+}
+
 export interface EndpointActionConfig {
   id: string;
   label: string;
   description: string;
-  getCallData: (params: any) => {
+  fields: ActionField[];
+  getCallData: (params: Record<string, any>, rootTokenAddress: string) => {
     target: string;
     callData: string;
     value: string;
   };
-  fields: {
-    name: string;
-    label: string;
-    type: 'address' | 'number' | 'string';
-    placeholder?: string;
-    required?: boolean;
-  }[];
 }
 
-export const getEndpointActions = (rootTokenAddress: string, rootTokenSymbol: string): EndpointActionConfig[] => [
+export const getEndpointActions = (rootTokenAddress: string, tokenSymbol: string): EndpointActionConfig[] => [
   {
     id: 'tokenTransfer',
-    label: `${rootTokenSymbol} Transfer`,
-    description: `Transfer ${rootTokenSymbol} tokens to an address`,
+    label: `Transfer ${tokenSymbol}`,
+    description: `Transfer ${tokenSymbol} tokens to another address`,
     fields: [
       {
         name: 'to',
         label: 'Recipient Address',
-        type: 'address',
-        placeholder: '0x...',
-        required: true
-      },
-      {
-        name: 'amount',
-        label: `Amount (${rootTokenSymbol})`,
-        type: 'number',
-        placeholder: '0.0',
-        required: true
-      }
-    ],
-    getCallData: ({ to, amount }) => ({
-      target: rootTokenAddress,
-      callData: new ethers.Interface(ABIs.IERC20).encodeFunctionData('transfer', [
-        to,
-        ethers.parseEther(amount.toString())
-      ]),
-      value: '0'
-    })
-  },
-  {
-    id: 'customTokenTransfer',
-    label: 'Custom Token Transfer',
-    description: 'Transfer any ERC20 token to an address',
-    fields: [
-      {
-        name: 'tokenAddress',
-        label: 'Token Address',
-        type: 'address',
-        placeholder: '0x...',
-        required: true
-      },
-      {
-        name: 'to',
-        label: 'Recipient Address',
-        type: 'address',
+        type: 'text',
         placeholder: '0x...',
         required: true
       },
@@ -76,14 +42,35 @@ export const getEndpointActions = (rootTokenAddress: string, rootTokenSymbol: st
         required: true
       }
     ],
-    getCallData: ({ tokenAddress, to, amount }) => ({
-      target: tokenAddress,
-      callData: new ethers.Interface(ABIs.IERC20).encodeFunctionData('transfer', [
-        to,
-        ethers.parseEther(amount.toString())
-      ]),
-      value: '0'
-    })
+    getCallData: (params) => {
+      // If we don't have both required params, or if rootTokenAddress is invalid, return empty calldata
+      if (!params.to || !params.amount || !rootTokenAddress?.startsWith('0x')) {
+        return {
+          target: rootTokenAddress,
+          callData: '0x',
+          value: '0'
+        };
+      }
+
+      try {
+        const contract = new ethers.Contract(rootTokenAddress, ABIs.IERC20);
+        // Handle empty amount as 0
+        const amount = params.amount?.trim() ? ethers.parseEther(params.amount) : BigInt(0);
+        
+        return {
+          target: rootTokenAddress,
+          callData: contract.interface.encodeFunctionData('transfer', [params.to, amount]),
+          value: '0'
+        };
+      } catch (error) {
+        console.error('Error generating token transfer calldata:', error);
+        return {
+          target: rootTokenAddress,
+          callData: '0x',
+          value: '0'
+        };
+      }
+    }
   },
   {
     id: 'customCall',
@@ -92,30 +79,32 @@ export const getEndpointActions = (rootTokenAddress: string, rootTokenSymbol: st
     fields: [
       {
         name: 'target',
-        label: 'Target Address',
-        type: 'address',
+        label: 'Target Contract',
+        type: 'text',
         placeholder: '0x...',
         required: true
       },
       {
-        name: 'callData',
+        name: 'calldata',
         label: 'Call Data',
-        type: 'string',
+        type: 'text',
         placeholder: '0x...',
         required: true
       },
       {
         name: 'value',
-        label: 'Value (ETH)',
+        label: 'ETH Value',
         type: 'number',
-        placeholder: '0',
-        required: true
+        placeholder: '0.0'
       }
     ],
-    getCallData: ({ target, callData, value }) => ({
-      target,
-      callData,
-      value: value.toString()
-    })
+    getCallData: (params) => {
+      const value = params.value || '0';
+      return {
+        target: params.target || ethers.ZeroAddress,
+        callData: params.calldata && params.calldata.length >= 10 ? params.calldata : '0x',
+        value: value
+      };
+    }
   }
 ];

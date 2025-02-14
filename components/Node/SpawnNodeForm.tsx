@@ -263,7 +263,7 @@ const SpawnNodeForm = ({
       <VStack spacing={6} align="stretch">
         <FormControl display="flex" alignItems="center">
           <FormLabel htmlFor="use-membrane" mb="0">
-            Define Membership Requirements
+            Define Node
           </FormLabel>
           <Switch
             id="use-membrane"

@@ -6,44 +6,34 @@ import { Network } from 'alchemy-sdk';
 type Deployments = { [key: string]: { [key: string]: string } };
 type ABIKP = { [key: string]: InterfaceAbi };
 
-// Hekla
-// ###############################
-// Foundation Agent Safe at:  0xE9a6CaCD129732dc840051676e9cab2490dbE851
-// Will:  0x82Cb12995f4861D317a6C7C72917BE3C243222a6
-// Membrane:  0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac
-// Execution:  0x3d7A9839935333C7C373e1338C12B593F78318D3
-// WillWe:  0x88AB91578876A7fC13F9F4A9332083Ddfb062049
-// ###############################
-
-// Control [0,1] :  0x0B0674Bd77Bd57e46271701687dDa3FdBAB4f303 0x0000000000000000000000000000000000000000
-// Will Price in ETH: 1000000000
- 
-// ###############################
- 
-// Will: 0x23b40d8f96Ccd7f82eB30362Cb94423A5C216dEA
-// Membrane: 0xA2fDaf03E13B7a1299cF8E6EE7f3adB7deFDE0DB
-// Execution: 0x2A0E36818fcb81c50302105C1f70443F23c622E8
-// WillWe: 0x91c55e1764876947881c7281F1b5434C792bdB45
+// === Final Deployment Addresses ===
+//   Will: 0x5ec9810a6E0342DE4635c2a85fBd53DB2488A0b0
+//   Membrane: 0xEE71A59167a89E5955a9151cf231ED88EA107aD3
+//   Execution: 0xeb9207b6Dd401E178c0c6FFA1d4C2d7F8cC738E2
+//   WillWe: 0xF3A3235bCdad33B4e613829993Ed51a8E9815EB3
+//   Kibern Director: 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0xFF736E96b20B03A84f7D7EBa7Ee264Cdaa5e7eCe 0x0000000000000000000000000000000000000000
+//   Will Price in ETH: 1000000000
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x23b40d8f96Ccd7f82eB30362Cb94423A5C216dEA",
+        "11155420": "0x5ec9810a6E0342DE4635c2a85fBd53DB2488A0b0",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0xA2fDaf03E13B7a1299cF8E6EE7f3adB7deFDE0DB",
+        "11155420": "0xEE71A59167a89E5955a9151cf231ED88EA107aD3",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0x2A0E36818fcb81c50302105C1f70443F23c622E8",
+        "11155420": "0xeb9207b6Dd401E178c0c6FFA1d4C2d7F8cC738E2",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0x91c55e1764876947881c7281F1b5434C792bdB45",
+        "11155420": "0xF3A3235bCdad33B4e613829993Ed51a8E9815EB3",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -335,25 +325,12 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "endpoint",
+                    "name": "",
                     "type": "address",
                     "internalType": "address"
                 }
             ],
             "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "entityCount",
-            "inputs": [],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -427,6 +404,11 @@ export const ABIs: ABIKP = {
                             "name": "childrenNodes",
                             "type": "string[]",
                             "internalType": "string[]"
+                        },
+                        {
+                            "name": "movementEndpoints",
+                            "type": "address[]",
+                            "internalType": "address[]"
                         },
                         {
                             "name": "rootPath",
@@ -578,6 +560,11 @@ export const ABIs: ABIKP = {
                             "internalType": "string[]"
                         },
                         {
+                            "name": "movementEndpoints",
+                            "type": "address[]",
+                            "internalType": "address[]"
+                        },
+                        {
                             "name": "rootPath",
                             "type": "string[]",
                             "internalType": "string[]"
@@ -639,6 +626,11 @@ export const ABIs: ABIKP = {
                             "name": "childrenNodes",
                             "type": "string[]",
                             "internalType": "string[]"
+                        },
+                        {
+                            "name": "movementEndpoints",
+                            "type": "address[]",
+                            "internalType": "address[]"
                         },
                         {
                             "name": "rootPath",
@@ -1958,6 +1950,11 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
+            "name": "Endpoint",
+            "inputs": []
+        },
+        {
+            "type": "error",
             "name": "ExecutionOnly",
             "inputs": []
         },
@@ -2029,6 +2026,11 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "NotOwnerNorApproved",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "Overreach",
             "inputs": []
         },
         {
