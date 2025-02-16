@@ -5,10 +5,6 @@ import { getRPCUrl } from '../config/contracts';
 
 interface WillWeContract extends ethers.BaseContract {
   totalSupply: (nodeId: string) => Promise<bigint>;
-  getChildParentEligibilityPerSec: (
-    childId: string,
-    parentId: string
-  ) => Promise<bigint>;
   calculateUserTargetedPreferenceAmount: (
     childId: string,
     parentId: string,
