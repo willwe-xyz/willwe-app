@@ -24,7 +24,7 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
     const labels: string[] = [];
     const parents: string[] = [];
     const ids: string[] = [];
-    const values: number[] = [];
+    const values: number[] = []; // Changed back to number[] for plotly
 
     if (!nodeData?.rootPath?.length) {
       console.warn('No root path data available');
@@ -35,7 +35,6 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
     const membanes = await getMembraneData(chainId, nodeIds);
     const membraneDatas = membanes.membraneMetadata;
 
-    
     // Process all nodes in the path
     for (let index = 0; index < nodeData.rootPath.length; index++) {
       const nodeId = nodeData.rootPath[index];
@@ -50,13 +49,16 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
           const hexAddress = ethers.toBigInt(formattedId).toString(16).padStart(40, '0');
           displayName = `0x${hexAddress.slice(0, 6)}...${hexAddress.slice(-4)}`;
         } else {
-
           displayName = membraneDatas[index -1]?.name || `Node ${nodeId.slice(-6)}`;
         }
         
         labels.push(displayName);
         ids.push(formattedId);
-        values.push(1);
+        
+        // Format budget value for the sunburst size
+        const budget = nodeData.basicInfo[4];
+        const formattedBudget = budget ? Number(ethers.formatUnits(budget, 'gwei')) : 1;
+        values.push(formattedBudget);
 
         if (index === 0) {
           parents.push('');
@@ -114,7 +116,7 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
           ids: sunburstData.ids,
           values: sunburstData.values,
           branchvalues: 'total',
-          hovertemplate: '<b>%{label}</b><br>go to<extra></extra>',
+          hovertemplate: '%{label}<br>Budget: %{value} PSC<extra></extra>',
           textposition: 'inside'
         }]}
         layout={{

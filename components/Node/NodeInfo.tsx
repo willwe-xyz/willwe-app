@@ -29,8 +29,8 @@ interface NodeInfoProps {
 }
 
 interface NodeMetrics {
-  inflation: string;
-  budget: string;
+  dailyUnlock: string;
+  TVL: string;
   totalValue: string;
   availableShares: string;
   inflow: string;
@@ -47,16 +47,19 @@ interface MemberData {
 }
 
 const calculateMetrics = (node: NodeState): NodeMetrics => {
+  // Per-second rates in gwei, multiply by seconds in a day
+  const dailyUnlockedValue =  BigInt(Number(node.basicInfo[1]) * 86400);
+  console.log('childParentEligibilityinRoot:', node);
   return {
-    inflation: ethers.formatEther((BigInt(node.basicInfo[1]) * BigInt(86400)).toString()),
-    budget: node.basicInfo[4],
-    totalValue: node.basicInfo[5],
-    availableShares: node.basicInfo[3],
-    inflow: (Number(node.basicInfo[7]) * 86400).toString(),
-    value: node.basicInfo[4],
+    dailyUnlock: ethers.formatUnits(dailyUnlockedValue, 'ether'),
+    TVL: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
+    totalValue: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
+    availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'ether'),
+    inflow: ethers.formatUnits(node.basicInfo[7], 'ether'), // Keep this as per-second rate
+    value: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
     memberCount: node.membersOfNode.length,
     membersList: node.membersOfNode,
-    userOwnedShares: node.basicInfo[9]
+    userOwnedShares: ethers.formatUnits(node.basicInfo[9] || '0', 'gwei')
   };
 };
 
@@ -131,9 +134,15 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
 
   const formatCurrency = (value: string): string => {
     const number = parseFloat(value);
+    if (isNaN(number)) return '0.0000';
+    // Format with appropriate precision based on value size
+    if (number < 0.0001) {
+      return number.toExponential(4);
+    }
     return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4,
+      maximumSignificantDigits: 6
     }).format(number);
   };
 
@@ -209,20 +218,28 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             p={4}
           >
             <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Inflation</Text>
-              <Text fontWeight="medium">0.09 PSC/day</Text>
+              <Tooltip label="Daily token creation rate for this node" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Daily Unlock</Text>
+              </Tooltip>
+              <Text fontWeight="medium">{formatCurrency(metrics.dailyUnlock)} PSC/day</Text>
             </HStack>
             <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Budget</Text>
-              <Text fontWeight="medium">0.03 $PSC</Text>
+              <Tooltip label="Amount of tokens held in node's own account" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Total Node Value</Text>
+              </Tooltip>
+              <Text fontWeight="medium">{formatCurrency(metrics.TVL)} PSC</Text>
             </HStack>
             <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Inflow</Text>
-              <Text fontWeight="medium">0.00 PSC/day</Text>
+              <Tooltip label="Current per-second inflation rate" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Inflow Rate</Text>
+              </Tooltip>
+              <Text fontWeight="medium">{formatCurrency(metrics.inflow)} PSC/sec</Text>
             </HStack>
             <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Active Shares</Text>
-              <Text fontWeight="medium">{metrics.availableShares}</Text>
+              <Tooltip label="Current balance available in the node's budget" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Active Shares</Text>
+              </Tooltip>
+              <Text fontWeight="medium">{formatCurrency(metrics.availableShares)} PSC</Text>
             </HStack>
           </VStack>
 

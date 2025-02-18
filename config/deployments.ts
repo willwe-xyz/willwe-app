@@ -8,33 +8,33 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-//   Will: 0x86545166F8B92294b62bD49F0d3134464548d5e9
-//   Membrane: 0xcDF21745a4f1f3222545399079eB8a3A6f0160Fc
-//   Execution: 0x0A25367D29bC3d30c4C2c7b30C04a3019eDfc08E
-//   WillWe: 0xbe69f14c4B5e90dD89F9B0Ed881d3BBA180a843D
+//   Will: 0x512427f2A5461F5C8a152aAa69b2ce92604C3C4A
+//   Membrane: 0xdd5C04AEe8eCeA49ca96826fdD926D504CF7EB43
+//   Execution: 0x7F3ab5e963F566cf71eA90053a9De1f8876e0760
+//   WillWe: 0xF8FD86d9E198CF4ef8684352D88920C274B1B02a
 //   Kibern Director: 0x0000000000000000000000000000000000000000
-//   Control [0,1]: 0x534C773EA14342669FE05f7d9287a518830f8DE1 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0x0A944445BA140A7f30B2DDd58B64657936E5316B 0x0000000000000000000000000000000000000000
 //   Will Price in ETH: 1000000000
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x86545166F8B92294b62bD49F0d3134464548d5e9",
+        "11155420": "0x512427f2A5461F5C8a152aAa69b2ce92604C3C4A",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0xcDF21745a4f1f3222545399079eB8a3A6f0160Fc",
+        "11155420": "0xdd5C04AEe8eCeA49ca96826fdD926D504CF7EB43",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0x0A25367D29bC3d30c4C2c7b30C04a3019eDfc08E",
+        "11155420": "0x7F3ab5e963F566cf71eA90053a9De1f8876e0760",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0xbe69f14c4B5e90dD89F9B0Ed881d3BBA180a843D",
+        "11155420": "0xF8FD86d9E198CF4ef8684352D88920C274B1B02a",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -159,7 +159,7 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "rAmt",
+                    "name": "",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
@@ -388,8 +388,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[11]",
-                            "internalType": "string[11]"
+                            "type": "string[12]",
+                            "internalType": "string[12]"
                         },
                         {
                             "name": "membraneMeta",
@@ -518,8 +518,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[11]",
-                            "internalType": "string[11]"
+                            "type": "string[12]",
+                            "internalType": "string[12]"
                         },
                         {
                             "name": "membraneMeta",
@@ -586,8 +586,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[11]",
-                            "internalType": "string[11]"
+                            "type": "string[12]",
+                            "internalType": "string[12]"
                         },
                         {
                             "name": "membraneMeta",
@@ -727,11 +727,6 @@ export const ABIs: ABIKP = {
                             "name": "Sigs",
                             "type": "bytes[]",
                             "internalType": "bytes[]"
-                        },
-                        {
-                            "name": "exeSig",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
                         }
                     ]
                 }
@@ -1712,6 +1707,12 @@ export const ABIs: ABIKP = {
                     "internalType": "uint256"
                 },
                 {
+                    "name": "initiator",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                },
+                {
                     "name": "movementHash",
                     "type": "bytes32",
                     "indexed": false,
@@ -2066,7 +2067,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Execution" :  [
+    "Execution" : [
         {
             "type": "constructor",
             "inputs": [
@@ -2085,6 +2086,19 @@ export const ABIs: ABIKP = {
         {
             "type": "receive",
             "stateMutability": "payable"
+        },
+        {
+            "type": "function",
+            "name": "DOMAIN_SEPARATOR",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -2343,11 +2357,6 @@ export const ABIs: ABIKP = {
                                     "name": "Sigs",
                                     "type": "bytes[]",
                                     "internalType": "bytes[]"
-                                },
-                                {
-                                    "name": "exeSig",
-                                    "type": "bytes32",
-                                    "internalType": "bytes32"
                                 }
                             ]
                         }
@@ -2428,11 +2437,6 @@ export const ABIs: ABIKP = {
                             "name": "Sigs",
                             "type": "bytes[]",
                             "internalType": "bytes[]"
-                        },
-                        {
-                            "name": "exeSig",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
                         }
                     ]
                 }
@@ -2441,109 +2445,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "hashDomain",
-            "inputs": [
-                {
-                    "name": "domain",
-                    "type": "tuple",
-                    "internalType": "struct EIP712Domain",
-                    "components": [
-                        {
-                            "name": "name",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "version",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "chainId",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "verifyingContract",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "salt",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        }
-                    ]
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "stateMutability": "pure"
-        },
-        {
-            "type": "function",
             "name": "hashMessage",
-            "inputs": [
-                {
-                    "name": "movement",
-                    "type": "tuple",
-                    "internalType": "struct Movement",
-                    "components": [
-                        {
-                            "name": "category",
-                            "type": "uint8",
-                            "internalType": "enum MovementType"
-                        },
-                        {
-                            "name": "initiatior",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "exeAccount",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "viaNode",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "expiresAt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "description",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "executedPayload",
-                            "type": "bytes",
-                            "internalType": "bytes"
-                        }
-                    ]
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "stateMutability": "pure"
-        },
-        {
-            "type": "function",
-            "name": "hashMovement",
             "inputs": [
                 {
                     "name": "movement",
@@ -2643,6 +2545,19 @@ export const ABIs: ABIKP = {
         {
             "type": "function",
             "name": "lastSalt",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "nextSalt",
             "inputs": [],
             "outputs": [
                 {
@@ -2778,82 +2693,6 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [],
             "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "verifyMessage",
-            "inputs": [
-                {
-                    "name": "movement",
-                    "type": "tuple",
-                    "internalType": "struct Movement",
-                    "components": [
-                        {
-                            "name": "category",
-                            "type": "uint8",
-                            "internalType": "enum MovementType"
-                        },
-                        {
-                            "name": "initiatior",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "exeAccount",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "viaNode",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "expiresAt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "description",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "executedPayload",
-                            "type": "bytes",
-                            "internalType": "bytes"
-                        }
-                    ]
-                },
-                {
-                    "name": "v",
-                    "type": "uint8",
-                    "internalType": "uint8"
-                },
-                {
-                    "name": "r",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "s",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "expectedAddress",
-                    "type": "address",
-                    "internalType": "address"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bool",
-                    "internalType": "bool"
-                }
-            ],
-            "stateMutability": "view"
         },
         {
             "type": "event",
@@ -3255,9 +3094,15 @@ export const ABIs: ABIKP = {
             "name": "MembraneCreated",
             "inputs": [
                 {
+                    "name": "creator",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                },
+                {
                     "name": "membraneId",
                     "type": "uint256",
-                    "indexed": true,
+                    "indexed": false,
                     "internalType": "uint256"
                 },
                 {

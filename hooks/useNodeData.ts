@@ -62,6 +62,8 @@ export function useNodeData(
 
       const nodeData = await contract.getNodeData(formattedId, addressToUse);
 
+      console.log('Node data received:', nodeData);
+
       if (!nodeData?.basicInfo) {
         throw new Error('Invalid node data received');
       }

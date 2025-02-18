@@ -10,6 +10,7 @@ export interface NodeBasicInfo {
   lastRedistribution: string;       
   balanceOfUser: string;            
   endpointOfUserForNode: string;    
+  totalSupply: string;              
 }
 
 export interface UserSignal {
@@ -41,7 +42,8 @@ export interface NodeState {
     eligibilityPerSec: string,
     lastRedistributionTime: string,
     balanceOfUser: string,
-    endpointOfUserForNode: string
+    endpointOfUserForNode: string,
+    totalSupply: string
   ];
   membraneMeta: string;          
   membersOfNode: string[];       
@@ -50,112 +52,6 @@ export interface NodeState {
   rootPath: string[];            
   signals: UserSignal[];         
 }
-
-//  /// @notice returns a node's data given its identifier
-//     /// @notice basicInfo: [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, (balance of user), balanceOfUser, childParentEligibilityPerSec, lastParentRedistribution]
-//     /// @param nodeId node identifier
-//     /// @dev for eth_call
-//     function getNodeData(uint256 nodeId) private view returns (NodeState memory NodeData) {
-//       /// Node identifier
-//       NodeData.basicInfo[0] = nodeId.toString();
-//       /// Current inflation rate per second
-//       NodeData.basicInfo[1] = inflSec[nodeId][0].toString();
-//       /// Reserve balance - amount of tokens held in parent's reserve
-//       NodeData.basicInfo[2] = balanceOf(toAddress(nodeId), parentOf[nodeId]).toString();
-//       /// Budget balance - amount of tokens held in node's own account
-//       NodeData.basicInfo[3] = balanceOf(toAddress(nodeId), nodeId).toString();
-//       /// Root valuation of node's budget (denominated in root token)
-//       NodeData.basicInfo[4] = (asRootValuation(nodeId, balanceOf(toAddress(nodeId), nodeId))).toString();
-//       /// Root valuation of node's reserve (denominated in root token)
-//       NodeData.basicInfo[5] = (asRootValuation(nodeId, balanceOf(toAddress(nodeId), parentOf[nodeId]))).toString();
-//       /// Active membrane identifier
-//       NodeData.basicInfo[6] = (inUseMembraneId[nodeId][0]).toString();
-//       /// Redistribution eligibility rate from parent per second in root valuation
-//       NodeData.basicInfo[7] = (
-//           asRootValuation(options[keccak256(abi.encodePacked(nodeId, parentOf[nodeId]))][0], parentOf[nodeId])
-//       ).toString();
-
-//       /// Timestamp of last redistribution
-//       NodeData.basicInfo[8] = inflSec[nodeId][2].toString();
-//       /// Balance of user
-//       /// basicInfo[9];
-//       /// Endpoint of user for node if any
-//       /// basicInfo[10];
-
-//       /// Membrane Metadata CID
-//       NodeData.membraneMeta = M.getMembraneById(inUseMembraneId[nodeId][0]).meta;
-//       /// Array of member addresses
-//       NodeData.membersOfNode = members[nodeId];
-
-//       NodeData.movementEndpoints = members[toID(executionAddress) + nodeId];
-//       /// Array of direct children node IDs
-//       NodeData.childrenNodes = uintArrayToStringArray(childrenOf[nodeId]);
-//       /// Path from root token to node ID (ancestors)
-//       NodeData.rootPath = uintArrayToStringArray(getFidPath(nodeId));
-//   }
-
-//   function getNodes(uint256[] memory nodeIds) external view returns (NodeState[] memory nodes) {
-//       nodes = new NodeState[](nodeIds.length);
-//       for (uint256 i = 0; i < nodeIds.length; i++) {
-//           nodes[i] = getNodeData(nodeIds[i]);
-//       }
-//   }
-
-//   ///
-//   function getAllNodesForRoot(address rootAddress, address userIfAny)
-//       external
-//       view
-//       returns (NodeState[] memory nodes)
-//   {
-//       uint256 rootId = toID(rootAddress);
-//       nodes = new NodeState[](members[rootId].length);
-//       for (uint256 i = 0; i < members[rootId].length; i++) {
-//           nodes[i] = getNodeData(toID(members[rootId][i]), userIfAny);
-//       }
-//   }
-
-//   /// @notice Returns the array containing signal info for each child node in given originator and parent context
-//   /// @param signalOrigin address of originator
-//   /// @param parentNodeId node id for which originator has expressed
-//   function getUserNodeSignals(address signalOrigin, uint256 parentNodeId)
-//       external
-//       view
-//       returns (uint256[2][] memory UserNodeSignals)
-//   {
-//       uint256[] memory childNodes = childrenOf[parentNodeId];
-//       UserNodeSignals = new uint256[2][](childNodes.length);
-
-//       for (uint256 i = 0; i < childNodes.length; i++) {
-//           // Include the signalOrigin (user's address) in the signalKey
-//           bytes32 userTargetedPreference = keccak256(abi.encodePacked(signalOrigin, parentNodeId, childNodes[i]));
-
-//           // Store the signal value and the timestamp (assuming options[userKey] structure)
-//           UserNodeSignals[i][0] = options[userTargetedPreference][0]; // Signal value
-//           UserNodeSignals[i][1] = options[userTargetedPreference][1]; // Last updated timestamp
-//       }
-
-//       return UserNodeSignals;
-//   }
-
-//   function getNodeData(uint256 nodeId, address user) public view returns (NodeState memory nodeData) {
-//       nodeData = getNodeData(nodeId);
-//       if (user == address(0)) return nodeData;
-//       nodeData.basicInfo[9] = balanceOf(user, nodeId).toString();
-//       uint256 userEndpointId = toID(user) + nodeId;
-//       if (members[userEndpointId].length > 0) {
-//           nodeData.basicInfo[10] = Strings.toHexString(members[userEndpointId][0]);
-//       }
-//       nodeData.signals = new UserSignal[](1);
-//       nodeData.signals[0].MembraneInflation = new string[2][](childrenOf[nodeId].length);
-//       nodeData.signals[0].lastRedistSignal = new string[](childrenOf[nodeId].length);
-
-//       for (uint256 i = 0; i < childrenOf[nodeId].length; i++) {
-//           nodeData.signals[0].MembraneInflation[i][1] = inflSec[nodeId][0].toString();
-
-//           bytes32 userKey = keccak256(abi.encodePacked(user, nodeId, childrenOf[nodeId][i]));
-//           nodeData.signals[0].lastRedistSignal[i] = options[userKey][0].toString();
-//       }
-//   }
 
 
 export interface MembraneRequirement {
@@ -245,7 +141,7 @@ export interface Movement {
   exeAccount: string;
   viaNode: string;
   expiresAt: string;
-  descriptionHash: string;
+  description: string;
   executedPayload: string;
 }
 
@@ -254,13 +150,16 @@ export interface SignatureQueue {
   Action: Movement;
   Signers: string[];
   Sigs: string[];
-  exeSig: string;
 }
 
 export interface LatentMovement {
   movement: Movement;
-  movementHash: string; // This is derived from the movement data
-  signatureQueue: SignatureQueue;
+  signatureQueue: {
+    state: SignatureQueueState;
+    Action: Movement;  // This should match the Movement interface
+    Signers: string[];
+    Sigs: string[];
+  };
 }
 
 export interface IPFSMetadata {
@@ -285,7 +184,7 @@ export interface MovementSignatureStatus {
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 11 &&
+    data.basicInfo.length === 12 &&
     typeof data.membraneMeta === 'string' &&
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
@@ -319,6 +218,7 @@ export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
     eligibilityPerSec: nodeData.basicInfo[7],
     lastRedistribution: nodeData.basicInfo[8],
     balanceOfUser: nodeData.basicInfo[9],
-    endpointOfUserForNode: nodeData.basicInfo[10]
+    endpointOfUserForNode: nodeData.basicInfo[10],
+    totalSupply: nodeData.basicInfo[11]
   };
 };

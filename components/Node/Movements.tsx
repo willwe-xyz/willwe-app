@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useMemo, Suspense, lazy } from 'react';
 import { ethers } from 'ethers';
 import {
@@ -38,24 +40,27 @@ interface MovementsProps {
   nodeId: string;
   chainId: string;
   nodeData: NodeState;
+  userAddress?: string;
 }
 
-export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData }) => {
+export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData, userAddress }) => {
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   
   const {
-    movements,
-    descriptions,
-    signatures,
+    movements = [],
+    signatures = {},
     isLoading,
     createMovement,
     signMovement,
     executeMovement
-  } = useMovements({ nodeId, chainId });
-  
-  // Load endpoint data in parallel
-  const { endpoints, isLoading: isLoadingEndpoints } = useEndpoints(nodeData, chainId);
+  } = useMovements({ nodeId, chainId, userAddress }) || {};
+
+  // Add error state
+  const [error, setError] = useState<Error | null>(null);
+
+  // Load endpoint data in parallel with error handling
+  const { endpoints, isLoading: isLoadingEndpoints, error: endpointsError } = useEndpoints(nodeData, chainId);
 
   const handleCreateMovement = async (formData: any) => {
     try {
@@ -78,10 +83,18 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData 
     }
   };
 
+  if (error || endpointsError) {
+    return (
+      <Alert status="error">
+        <AlertIcon />
+        <Text>{error?.message || endpointsError || 'An error occurred loading movements'}</Text>
+      </Alert>
+    );
+  }
+
   return (
     <Box>
-      <HStack justify="space-between" mb={6}>
-        <Text fontSize="lg" fontWeight="bold">Movements</Text>
+      <HStack justify="space-between" mb={6} mt={4} ml={2} mr={2}>
         <Button
           leftIcon={<Plus size={16} />}
           onClick={onOpen}
@@ -99,34 +112,35 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData 
           <Skeleton height="50px" width="100%" />
           <Skeleton height="50px" width="100%" />
         </VStack>
-      ) : movements.length === 0 ? (
+      ) : movements?.length === 0 ? (
         <Alert status="info">
           <AlertIcon />
           <Text>No active movements found</Text>
         </Alert>
       ) : (
-        <Table variant="simple">
+        <Table variant="simple" width="100%">
           <Thead>
             <Tr>
-              <Th>Type</Th>
-              <Th>Description</Th>
-              <Th>Expiry</Th>
-              <Th>Status</Th>
-              <Th>Signatures</Th>
-              <Th>Actions</Th>
+              <Th width="15%">Type</Th>
+              <Th width="30%">Description</Th>
+              <Th width="15%">Expiry</Th>
+              <Th width="15%">Status</Th>
+              <Th width="10%">Signatures</Th>
+              <Th width="15%">Actions</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {movements.map((movement) => (
-              <LazyLoadWrapper key={movement.movementHash} height="80px">
-                <MovementRow
-                  movement={movement}
-                  description={descriptions[movement.movement.descriptionHash] || ''}
-                  signatures={signatures[movement.movementHash] || { current: 0, required: 0 }}
-                  onSign={() => signMovement(movement)}
-                  onExecute={() => executeMovement(movement)}
-                />
-              </LazyLoadWrapper>
+            {movements?.map((movement, index) => (
+              movement && (
+                <LazyLoadWrapper key={index} height="80px" isTableRow colSpan={6}>
+                  <MovementRow
+                    movement={movement}
+                    signatures={signatures?.[movement?.movementHash] || { current: 0, required: 0 }}
+                    onSign={() => signMovement?.(movement)}
+                    onExecute={() => executeMovement?.(movement)}
+                  />
+                </LazyLoadWrapper>
+              )
             ))}
           </Tbody>
         </Table>

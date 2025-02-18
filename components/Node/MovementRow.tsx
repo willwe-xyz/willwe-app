@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import {
   Tr,
@@ -7,7 +9,6 @@ import {
   Button,
   Text,
   Tooltip,
-  Collapse,
   Box,
   IconButton
 } from '@chakra-ui/react';
@@ -17,7 +18,6 @@ import { MovementDetails } from './MovementDetails';
 
 interface MovementRowProps {
   movement: LatentMovement;
-  description: string;
   signatures: { current: number; required: number };
   onSign: () => void;
   onExecute: () => void;
@@ -48,25 +48,17 @@ const MovementRow: React.FC<MovementRowProps> = ({
   };
 
   const state = getStateDisplay(movement.signatureQueue.state);
-
   return (
     <>
-      <Tr 
-        cursor="pointer" 
-        onClick={() => setIsExpanded(!isExpanded)}
-        _hover={{ bg: 'gray.50' }}
-      >
-        <Td>
+      <Tr>
+        <Td width="15%">
           <HStack>
             <IconButton
               aria-label="Toggle details"
               icon={isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               size="xs"
               variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsExpanded(!isExpanded);
-              }}
+              onClick={() => setIsExpanded(!isExpanded)}
             />
             <Badge>
               {movement.movement.category === MovementType.AgentMajority 
@@ -75,14 +67,16 @@ const MovementRow: React.FC<MovementRowProps> = ({
             </Badge>
           </HStack>
         </Td>
-        <Td>
-          <Tooltip label={movement.movement.descriptionHash}>
-            <Text isTruncated maxW="200px">
-              {description || 'Loading description...'}
-            </Text>
-          </Tooltip>
+        <Td width="30%">
+          <Text 
+            noOfLines={isExpanded ? undefined : 1}
+            cursor="pointer"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {movement.movement.description || 'Loading description...'}
+          </Text>
         </Td>
-        <Td>
+        <Td width="15%">
           <HStack>
             <Clock size={14} />
             <Text>
@@ -90,7 +84,7 @@ const MovementRow: React.FC<MovementRowProps> = ({
             </Text>
           </HStack>
         </Td>
-        <Td>
+        <Td width="15%">
           <HStack>
             {state.icon}
             <Badge colorScheme={state.color}>
@@ -98,15 +92,15 @@ const MovementRow: React.FC<MovementRowProps> = ({
             </Badge>
           </HStack>
         </Td>
-        <Td>
+        <Td width="10%">
           <Tooltip label={`${signatures.current} / ${signatures.required} ${movement.movement.category === MovementType.AgentMajority ? 'signatures' : 'voting power'}`}>
             <Text>
               {signatures.current} / {signatures.required}
             </Text>
           </Tooltip>
         </Td>
-        <Td>
-          <HStack>
+        <Td width="15%">
+          <HStack spacing={2}>
             <Button
               size="sm"
               onClick={(e) => {
@@ -131,19 +125,17 @@ const MovementRow: React.FC<MovementRowProps> = ({
           </HStack>
         </Td>
       </Tr>
-      <Tr>
-        <Td colSpan={6} p={0}>
-          <Collapse in={isExpanded}>
-            <Box p={4}>
-              <MovementDetails
-                movement={movement}
-                signatures={signatures}
-                description={description}
-              />
+      {isExpanded && (
+        <Tr>
+          <Td colSpan={6} pb={4}>
+            <Box pl={10} pr={4}>
+              <Text whiteSpace="pre-wrap">
+                {movement.movement.description}
+              </Text>
             </Box>
-          </Collapse>
-        </Td>
-      </Tr>
+          </Td>
+        </Tr>
+      )}
     </>
   );
 };

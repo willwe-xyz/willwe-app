@@ -14,7 +14,8 @@
     "start": "next start",
     "format": "npx prettier --write \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\"",
     "lint": "next lint && npx prettier --check \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\" && npx tsc --noEmit",
-    "context": "./create-context.sh"
+    "context": "./create-context.sh",
+    "find:unused": "next-unused"
   },
   "dependencies": {
     "@airstack/airstack-react": "^0.6.3",
@@ -46,6 +47,7 @@
     "color": "^4.2.3",
     "d3": "^7.9.0",
     "ethers": "^6.12.0",
+    "form-data": "^4.0.1",
     "framer-motion": "^11.2.12",
     "helia": "^5.0.1",
     "json-bigint": "^1.0.0",
@@ -53,6 +55,8 @@
     "json-bignumber": "^1.1.1",
     "lucide-react": "^0.399.0",
     "next": "latest",
+    "next-unused": "^0.0.6",
+    "node-fetch": "^2.7.0",
     "plotly.js-dist-min": "^2.35.3",
     "react": "^18.3.1",
     "react-force-graph": "^1.44.4",
@@ -110,8 +114,25 @@ module.exports = {
         source: '/nodes/:chainId/:nodeId',
         destination: '/nodes/[chainId]/[nodeId]',
       },
+      {
+        source: '/ipfs/:path*',
+        destination: `${process.env.IPFS_GATEWAY}:path*`
+      }
     ];
   },
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
+          { key: 'Access-Control-Allow-Headers', value: 'Authorization, Content-Type' },
+        ],
+      },
+    ];
+  }
 };
 
 
@@ -663,6 +684,41 @@ export default NodePage;
 
 
 
+// File: ./pages/api/get-ipfs-data.ts
+// This file implements the logic for fetching data from IPFS.
+// It defines an API endpoint that handles incoming requests and retrieves data based on the provided hash.
+
+import { NextApiRequest, NextApiResponse } from 'next';
+
+const getIpfsData = async (req: NextApiRequest, res: NextApiResponse) => {
+  const { hash } = req.query;
+
+  if (!hash || typeof hash !== 'string') {
+    return res.status(400).json({ error: 'Invalid hash parameter' });
+  }
+
+  const requestUrl = `${process.env.IPFS_GATEWAY}${hash}`;
+  console.log('Fetching data from IPFS:', requestUrl);
+  try {
+    // Implement your logic to fetch data from IPFS using the hash
+    const response = await fetch(`${process.env.IPFS_GATEWAY}${hash}`);
+    console.log("getIpfsData, response:", response);
+    if (!response.ok) {
+      throw new Error('Failed to fetch data from IPFS');
+    }
+
+    const data = await response.json();
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error('Error fetching data from IPFS:', error);
+    return res.status(500).json({ error: 'Failed to fetch data from IPFS' });
+  }
+};
+
+export default getIpfsData;
+
+
+
 // File: ./pages/api/upload-to-ipfs.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { ObjectManager } from "@filebase/sdk";
@@ -902,9 +958,159 @@ export default MyApp;
 
 
 
+// File: ./components/Node/MovementDetails.tsx
+import React from 'react';
+import {
+  Box,
+  VStack,
+  HStack,
+  Text,
+  Badge,
+  Tooltip,
+  Progress,
+  useColorModeValue,
+} from '@chakra-ui/react';
+import { ethers } from 'ethers';
+import { LatentMovement, MovementType } from '../../types/chainData';
+
+interface MovementDetailsProps {
+  movement: LatentMovement;
+  signatures: {
+    current: number;
+    required: number;
+  };
+  description: string;
+}
+
+export const MovementDetails = React.memo(({ 
+  movement, 
+  signatures,
+  description 
+}: MovementDetailsProps) => {
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const bgColor = useColorModeValue('gray.50', 'gray.800');
+
+  const decodeCalls = (executedPayload: string) => {
+    try {
+      const decoded = ethers.AbiCoder.defaultAbiCoder().decode(
+        [{
+          type: 'tuple[]',
+          components: [
+            { name: 'target', type: 'address' },
+            { name: 'callData', type: 'bytes' },
+            { name: 'value', type: 'uint256' }
+          ]
+        }],
+        executedPayload
+      );
+
+      return decoded[0];
+    } catch {
+      return [];
+    }
+  };
+
+  const calls = decodeCalls(movement.movement.executedPayload);
+  const progress = (signatures.current / signatures.required) * 100;
+
+  return (
+    <Box 
+      border="1px solid" 
+      borderColor={borderColor} 
+      borderRadius="md" 
+      p={4}
+    >
+      <VStack align="stretch" spacing={4}>
+        <Box>
+          <Text fontSize="sm" color="gray.500">Description</Text>
+          <Text>{description || 'No description available'}</Text>
+        </Box>
+
+        <Box>
+          <Text fontSize="sm" color="gray.500">Authorization Type</Text>
+          <Badge colorScheme={movement.movement.category === MovementType.AgentMajority ? 'blue' : 'purple'}>
+            {movement.movement.category === MovementType.AgentMajority ? 'Agent Majority' : 'Value Majority'}
+          </Badge>
+        </Box>
+
+        <Box>
+          <Text fontSize="sm" color="gray.500">Target Endpoint</Text>
+          <Tooltip label={movement.movement.exeAccount}>
+            <Text fontSize="sm" fontFamily="mono">
+              {movement.movement.exeAccount.slice(0, 6)}...{movement.movement.exeAccount.slice(-4)}
+            </Text>
+          </Tooltip>
+        </Box>
+
+        <Box>
+          <Text fontSize="sm" color="gray.500">Actions ({calls.length})</Text>
+          <VStack align="stretch" spacing={2} mt={2}>
+            {calls.map((call: any, index: number) => (
+              <Box 
+                key={index} 
+                bg={bgColor} 
+                p={3} 
+                borderRadius="md"
+                fontSize="sm"
+              >
+                <HStack justify="space-between">
+                  <Tooltip label={call.target}>
+                    <Text fontFamily="mono">To: {call.target.slice(0, 6)}...{call.target.slice(-4)}</Text>
+                  </Tooltip>
+                  {call.value.toString() !== '0' && (
+                    <Badge colorScheme="green">
+                      Value: {ethers.formatEther(call.value)} ETH
+                    </Badge>
+                  )}
+                </HStack>
+                <Tooltip label={call.callData}>
+                  <Text 
+                    fontFamily="mono" 
+                    mt={1} 
+                    isTruncated
+                  >
+                    Data: {call.callData.slice(0, 10)}...
+                  </Text>
+                </Tooltip>
+              </Box>
+            ))}
+          </VStack>
+        </Box>
+
+        <Box>
+          <HStack justify="space-between" mb={2}>
+            <Text fontSize="sm" color="gray.500">Signature Progress</Text>
+            <Text fontSize="sm" fontWeight="medium">
+              {signatures.current} / {signatures.required} 
+              {movement.movement.category === MovementType.AgentMajority ? ' signatures' : ' voting power'}
+            </Text>
+          </HStack>
+          <Progress 
+            value={progress} 
+            size="sm" 
+            borderRadius="full"
+            colorScheme={progress >= 100 ? 'green' : 'blue'}
+          />
+        </Box>
+
+        <Box>
+          <Text fontSize="sm" color="gray.500">Expires</Text>
+          <Text>
+            {new Date(Number(movement.movement.expiresAt) * 1000).toLocaleString()}
+          </Text>
+        </Box>
+      </VStack>
+    </Box>
+  );
+});
+
+MovementDetails.displayName = 'MovementDetails';
+
+
+
 // File: ./components/Node/NodeOperations.tsx
-import React, { useState, useCallback } from 'react';
-import { ethers, ContractRunner } from 'ethers';
+import React, { useState, useCallback, useEffect } from 'react';
+import { ethers } from 'ethers';
 import {
   ButtonGroup,
   Button,
@@ -940,47 +1146,32 @@ import {
   HStack,
   Link,
   ToastId,
-  IconButton
+  IconButton,
+  FormHelperText,
+  Switch
 } from '@chakra-ui/react';
 import {
-  GitBranch,
+  GitBranchPlus,
   Shield,
   UserPlus,
   RefreshCw,
   Plus,
   Trash,
   ChevronDown,
-  Trash2
+  Trash2,
+  Info
 } from 'lucide-react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
-import { deployments, ABIs } from '../../config/contracts';
+import { deployments } from '../../config/deployments';
+import { ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
-import { RequirementsTable } from '../TokenOperations/RequirementsTable';
-import { MembraneMetadata, MembraneRequirement } from '../../types/chainData';
-import { Link as ChakraLink } from '@chakra-ui/react';
-import { ExternalLinkIcon } from '@chakra-ui/icons';
+import  SpawnNodeForm  from './SpawnNodeForm';
 
-const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
-
-export type NodeOperationsProps = {
-  nodeId: string;
-  chainId: string;
-  selectedTokenColor?: string;
-  onSuccess?: () => void;
-};
-
-interface MembraneCharacteristic {
-  title: string;
-  description?: string;
-  link?: string;
-}
-
-// Add this type definition near the top of the file
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
 
-// Add these interfaces near the top
+
 interface TokenRequirement {
   tokenAddress: string;
   requiredBalance: string;
@@ -990,72 +1181,129 @@ interface SpawnFormData {
   name: string;
   characteristics: { title: string; link: string }[];
   tokenRequirements: TokenRequirement[];
+  inflation: number;
 }
 
-export const NodeOperations = ({
+interface MembraneMetadata {
+  name: string;
+  description?: string;
+  characteristics: string[];
+}
+
+interface MembraneRequirement {
+  tokenAddress: string;
+  symbol: string;
+  requiredBalance: string;
+  formattedBalance: string;
+}
+
+export type NodeOperationsProps = {
+  nodeId: string;
+  chainId: string;
+  selectedTokenColor?: string;
+  userAddress?: string;
+  onSuccess?: () => void;
+  initialTab?: 'spawn' | 'membrane' | 'mint' | 'burn' | null;
+  showToolbar?: boolean;
+};
+
+export const NodeOperations: React.FC<NodeOperationsProps> = ({
   nodeId,
   chainId,
   selectedTokenColor,
-  onSuccess
-}: NodeOperationsProps) => {
+  userAddress,
+  onSuccess,
+  initialTab = null,
+  showToolbar = false
+}) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [activeModal, setActiveModal] = useState<ModalType>(initialTab);
   const [membraneId, setMembraneId] = useState('');
   const [mintAmount, setMintAmount] = useState('');
   const [needsApproval, setNeedsApproval] = useState(false);
   const [allowance, setAllowance] = useState('0');
   const [burnAmount, setBurnAmount] = useState('');
   const [userBalance, setUserBalance] = useState('0');
+  const [useDirectParentMint, setUseDirectParentMint] = useState(false);
+  const [useDirectParentBurn, setUseDirectParentBurn] = useState(false);
   const [formData, setFormData] = useState<SpawnFormData>({
     name: '',
     characteristics: [],
-    tokenRequirements: []
+    tokenRequirements: [],
+    inflation: 0
   });
+
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
-  
-  // Fetch node data to check membership
-  const { data: nodeData } = useNodeData(chainId, nodeId);
+  const { data: nodeData } = useNodeData(chainId, userAddress, nodeId);
   const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address || '');
+
+  // Effect to handle initialTab prop changes
+  useEffect(() => {
+    setActiveModal(initialTab);
+  }, [initialTab]);
+
+  // Reset states when modal closes
+  useEffect(() => {
+    if (!activeModal) {
+      setMintAmount('');
+      setBurnAmount('');
+      setNeedsApproval(false);
+      setAllowance('0');
+      setUseDirectParentMint(false);
+      setUseDirectParentBurn(false);
+    }
+  }, [activeModal]);
 
   const checkAllowance = useCallback(async () => {
     try {
-      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
-        console.warn('Token address or user address not available');
+      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address || !mintAmount) {
+        console.warn('Required data not available');
         return;
       }
-
-      const tokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+  
+      const rootTokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
       const cleanChainId = chainId.replace('eip155:', '');
       const willWeAddress = deployments.WillWe[cleanChainId];
-
+  
       if (!willWeAddress) {
         console.warn('WillWe contract address not available');
         return;
       }
-
+  
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-
+  
       const tokenContract = new ethers.Contract(
-        tokenAddress,
+        rootTokenAddress,
         [
           'function allowance(address,address) view returns (uint256)',
-          'function approve(address,uint256) returns (bool)'
+          'function decimals() view returns (uint8)'
         ],
-        //@ts-ignore
         signer
       );
+  
+      const [currentAllowance, decimals] = await Promise.all([
+        tokenContract.allowance(user.wallet.address, willWeAddress),
+        tokenContract.decimals()
+      ]);
 
-      const currentAllowance = await tokenContract.allowance(
-        user.wallet.address,
-        willWeAddress
-      );
+      // Convert amount to BigInt with proper decimals
+      const requiredAmount = ethers.parseUnits(mintAmount, decimals);
       
+      // Store both values
       setAllowance(currentAllowance.toString());
-      const requiredAmount = ethers.parseUnits(mintAmount || '0', 18);
-      setNeedsApproval(BigInt(currentAllowance) < BigInt(requiredAmount));
+      
+      // Strict BigInt comparison
+      setNeedsApproval(currentAllowance < requiredAmount);
+
+      console.log('Allowance check:', {
+        currentAllowance: currentAllowance.toString(),
+        requiredAmount: requiredAmount.toString(),
+        needsApproval: currentAllowance < requiredAmount
+      });
+
     } catch (error) {
       console.error('Error checking allowance:', error);
       toast({
@@ -1068,45 +1316,52 @@ export const NodeOperations = ({
   }, [chainId, nodeData?.rootPath, user?.wallet?.address, mintAmount, getEthersProvider, toast]);
 
   const handleApprove = useCallback(async () => {
-    if (!nodeData?.rootPath?.[0] || isProcessing) {
+    if (!nodeData?.rootPath?.[0] || isProcessing || !mintAmount) {
       return;
     }
-
+  
     try {
-      const tokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+      const cleanChainId = chainId.replace('eip155:', '');
+      const willWeAddress = deployments.WillWe[cleanChainId];
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-      
+      const rootTokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+  
       const tokenContract = new ethers.Contract(
-        tokenAddress,
-        [
-          'function approve(address,uint256) returns (bool)',
-          'function allowance(address,address) view returns (uint256)'
-        ],
+        rootTokenAddress,
+        ['function approve(address,uint256) returns (bool)'],
         //@ts-ignore
         signer
       );
-
+  
       await executeTransaction(
         chainId,
         async () => {
           const tx = await tokenContract.approve(
-            deployments.WillWe[chainId.replace('eip155:', '')],
-            ethers.MaxUint256
+            willWeAddress,
+            ethers.parseUnits(mintAmount, 18)
           );
           return tx;
         },
         {
-          successMessage: 'Approval granted successfully',
+          successMessage: 'Token approval granted successfully',
+          errorMessage: 'Failed to approve token spending',
           onSuccess: async () => {
             await checkAllowance();
+            setNeedsApproval(false);
           }
         }
       );
     } catch (error) {
       console.error('Approval error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to approve tokens',
+        status: 'error',
+        duration: 5000
+      });
     }
-  }, [chainId, nodeData?.rootPath, getEthersProvider, checkAllowance, isProcessing]);
+  }, [chainId, nodeData?.rootPath, mintAmount, getEthersProvider, checkAllowance, isProcessing, executeTransaction, toast]);
 
   const checkNodeBalance = useCallback(async () => {
     try {
@@ -1114,39 +1369,29 @@ export const NodeOperations = ({
         console.warn('Token address or user address not available');
         return;
       }
-
+  
       const cleanChainId = chainId.replace('eip155:', '');
       const contractAddress = deployments.WillWe[cleanChainId];
       
       if (!contractAddress) {
         throw new Error(`No contract deployment found for chain ${cleanChainId}`);
       }
-
+  
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
       
-      // Use WillWe contract address instead of token address
-      const tokenContract = new ethers.Contract(
+      const contract = new ethers.Contract(
         contractAddress,
-        [
-          'function balanceOf(address account, uint256 id) view returns (uint256)'
-        ],
+        ['function balanceOf(address account, uint256 id) view returns (uint256)'],
         //@ts-ignore
         signer
       );
-
-      console.log('Checking ERC1155 balance:', {
-        userAddress: user.wallet.address,
-        nodeId,
-        contractAddress
-      });
-
-      const balance = await tokenContract.balanceOf(
+  
+      const balance = await contract.balanceOf(
         user.wallet.address,
         BigInt(nodeId)
       );
       
-      console.log('Node token balance received:', balance.toString());
       setUserBalance(balance.toString());
     } catch (error) {
       console.error('Error checking node balance:', error);
@@ -1159,322 +1404,7 @@ export const NodeOperations = ({
     }
   }, [chainId, nodeData?.rootPath, user?.wallet?.address, nodeId, getEthersProvider, toast]);
 
-  const handleSpawnNode = useCallback(async () => {
-    if (isProcessing) return;
-    
-    let confirmToastId: ToastId | undefined;
-    let pendingToastId: ToastId | undefined;
-    
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-
-      confirmToastId = toast({
-        title: 'Confirm Transaction',
-        description: 'Please sign the transaction in your wallet',
-        status: 'info',
-        duration: null
-      });
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          if (confirmToastId) toast.close(confirmToastId);
-          
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            signer as unknown as ContractRunner
-          );
-          
-          pendingToastId = toast({
-            title: 'Transaction Pending',
-            description: 'Your transaction is being processed',
-            status: 'loading',
-            duration: null
-          });
-
-          const tx = await contract.spawnBranch(nodeId, {
-            gasLimit: BigInt(400000)
-          });
-          return tx;
-        },
-        {
-          successMessage: 'Node spawned successfully',
-          onSuccess: () => {
-            if (pendingToastId) toast.close(pendingToastId);
-            setActiveModal(null);
-            onSuccess?.();
-          }
-        }
-      );
-    } catch (error) {
-      if (confirmToastId) toast.close(confirmToastId);
-      if (pendingToastId) toast.close(pendingToastId);
-      
-      console.error('Failed to spawn node:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Transaction failed',
-        status: 'error',
-        duration: 5000
-      });
-    }
-  }, [chainId, nodeId, isProcessing, executeTransaction, getEthersProvider, toast, onSuccess, setActiveModal]);
-
-  const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
-  const [requirements, setRequirements] = useState<MembraneRequirement[]>([]);
-  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
-  const [isValidatingMembrane, setIsValidatingMembrane] = useState(false);
-  const [membraneError, setMembraneError] = useState<string | null>(null);
-
-  const validateMembrane = useCallback(async (membraneId: string) => {
-    setIsValidatingMembrane(true);
-    setMembraneError(null);
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const provider = await getEthersProvider();
-      
-      if (!provider) {
-        throw new Error('Provider not available');
-      }
-  
-      const contract = new ethers.Contract(
-        deployments.Membrane[cleanChainId],
-        ABIs.Membrane,
-        //@ts-ignore
-        provider.getSigner()
-      );
-  
-      const membrane = await contract.getMembraneById(membraneId);
-      if (!membrane) throw new Error('Membrane not found');
-  
-      const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
-      if (!response.ok) throw new Error('Failed to fetch membrane metadata');
-      
-      const metadata = await response.json();
-      setMembraneMetadata(metadata);
-  
-      setIsLoadingTokens(true);
-      const requirements = await Promise.all(
-        membrane.tokens.map(async (tokenAddress: string, index: number) => {
-          const tokenContract = new ethers.Contract(
-            tokenAddress,
-            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
-            //@ts-ignore  
-            provider.getSigner()
-          );
-  
-          const [symbol, decimals] = await Promise.all([
-            tokenContract.symbol(),
-            tokenContract.decimals()
-          ]);
-  
-          return {
-            tokenAddress,
-            symbol,
-            requiredBalance: membrane.balances[index].toString(),
-            formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
-          };
-        })
-      );
-  
-      setRequirements(requirements);
-    } catch (error) {
-      console.error('Error validating membrane:', error);
-      setMembraneError('Invalid membrane ID');
-      setMembraneMetadata(null);
-      setRequirements([]);
-    } finally {
-      setIsValidatingMembrane(false);
-      setIsLoadingTokens(false);
-    }
-  }, [
-    chainId,
-    getEthersProvider,
-    setIsValidatingMembrane,
-    setMembraneError,
-    setMembraneMetadata,
-    setRequirements,
-    setIsLoadingTokens,
-    IPFS_GATEWAY
-  ]);
-
-
-  const handleSpawnWithMembrane = useCallback(async () => {
-    if (!membraneId) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a membrane ID',
-        status: 'error',
-        duration: 3000
-      });
-      return;
-    }
-  
-    setIsProcessing(true);
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-  
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            //@ts-ignore
-            signer
-          );
-          return contract.spawnBranchWithMembrane(nodeId, membraneId, { gasLimit: 600000 });
-        },
-        {
-          successMessage: 'Node spawned with membrane successfully',
-          onSuccess: () => {
-            setActiveModal(null);
-            onSuccess?.();
-          }
-        }
-      );
-    } catch (error) {
-      console.error('Failed to spawn node with membrane:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Transaction failed',
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [
-    chainId,
-    nodeId,
-    membraneId,
-    executeTransaction,
-    getEthersProvider,
-    toast,
-    onSuccess,
-    setActiveModal,
-    setIsProcessing
-  ]);  
-
-  const handleMintMembership = useCallback(async () => {
-    setIsProcessing(true);
-    try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            deployments.WillWe[chainId.replace('eip155:', '')],
-            ABIs.WillWe,
-            //@ts-ignore
-            signer
-          );
-          return contract.mintMembership(nodeId);
-        },
-        {
-          successMessage: 'Membership minted successfully',
-          onSuccess
-        }
-      );
-    } catch (error) {
-      console.error('Failed to mint membership:', error);
-      toast({
-        title: 'Error',
-        //@ts-ignore
-        description: error.message,
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [chainId, nodeId, executeTransaction, toast, onSuccess]);
-
-  
-  const handleRedistribute = useCallback(async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    
-    let confirmToastId: ToastId | undefined;
-    let pendingToastId: ToastId | undefined;
-    
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-
-      confirmToastId = toast({
-        title: 'Confirm Transaction',
-        description: 'Please sign the transaction in your wallet',
-        status: 'info',
-        duration: null
-      });
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          if (confirmToastId) toast.close(confirmToastId);
-          
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            //@ts-ignore
-            signer
-          );
-
-          pendingToastId = toast({
-            title: 'Transaction Pending',
-            description: 'Your transaction is being processed',
-            status: 'loading',
-            duration: null
-          });
-
-          return contract.redistributePath(nodeId, { gasLimit: 500000 });
-        },
-        {
-          successMessage: 'Value redistributed successfully',
-          onSuccess: () => {
-            if (pendingToastId) toast.close(pendingToastId);
-            onSuccess?.();
-          }
-        }
-      );
-    } catch (error) {
-      if (confirmToastId) toast.close(confirmToastId);
-      if (pendingToastId) toast.close(pendingToastId);
-      
-      console.error('Failed to redistribute:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Transaction failed',
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, toast, onSuccess, isProcessing]);
+  // Continue to Part 3 for handler functions
 
   const handleMintPath = useCallback(async () => {
     if (!mintAmount || isProcessing) return;
@@ -1495,7 +1425,7 @@ export const NodeOperations = ({
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
-            //@ts-ignore
+            // @ts-ignore
             signer
           );
           
@@ -1504,7 +1434,7 @@ export const NodeOperations = ({
           });
         },
         {
-          successMessage: 'Tokens minted successfully',
+          successMessage: 'Tokens minted successfully via path',
           onSuccess: () => {
             setActiveModal(null);
             onSuccess?.();
@@ -1512,14 +1442,19 @@ export const NodeOperations = ({
         }
       );
     } catch (error) {
-      console.error('Failed to mint tokens:', error);
+      console.error('Failed to mint tokens via path:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to mint tokens',
+        status: 'error',
+        duration: 5000
+      });
     }
-  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing]);
+  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
-  const handleBurnPath = useCallback(async () => {
-    if (!burnAmount) return;
+  const handleMint = useCallback(async () => {
+    if (!mintAmount || isProcessing) return;
     
-    setIsProcessing(true);
     try {
       const cleanChainId = chainId.replace('eip155:', '');
       const contractAddress = deployments.WillWe[cleanChainId];
@@ -1535,19 +1470,62 @@ export const NodeOperations = ({
           const signer = await provider.getSigner();
           const contract = new ethers.Contract(
             contractAddress,
-            [
-              'function burnPath(uint256 target_, uint256 amount) external'
-            ],
-            //@ts-ignore
+            ABIs.WillWe,
+            // @ts-ignore
             signer
           );
           
-          const nodeIdBigInt = BigInt(nodeId);
-          const amountToBurn = ethers.parseUnits(burnAmount || '0', 18);
-          return contract.burnPath(nodeIdBigInt, amountToBurn);
+          return await contract.mint(nodeId, ethers.parseUnits(mintAmount, 18), {
+            gasLimit: BigInt(300000)
+          });
         },
         {
-          successMessage: 'Path burned successfully',
+          successMessage: 'Tokens minted successfully from parent',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to mint tokens from parent:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to mint tokens',
+        status: 'error',
+        duration: 5000
+      });
+    }
+  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+
+  const handleBurnPath = useCallback(async () => {
+    if (!burnAmount || isProcessing) return;
+    
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            // @ts-ignore
+            signer
+          );
+          
+          const amountToBurn = ethers.parseUnits(burnAmount, 18);
+          return contract.burnPath(nodeId, amountToBurn);
+        },
+        {
+          successMessage: 'Tokens burned successfully via path',
           onSuccess: () => {
             setActiveModal(null);
             onSuccess?.();
@@ -1555,96 +1533,64 @@ export const NodeOperations = ({
         }
       );
     } catch (error) {
-      console.error('Failed to burn path:', error);
+      console.error('Failed to burn tokens via path:', error);
       toast({
         title: 'Error',
-        //@ts-ignore
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Failed to burn tokens',
         status: 'error',
         duration: 5000
       });
-    } finally {
-      setIsProcessing(false);
     }
-  }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, toast, onSuccess]);
+  }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
-  const addCharacteristic = () => {
-    setFormData((prevData) => ({
-      ...prevData,
-      characteristics: [...prevData.characteristics, { title: '', link: '' }]
-    }));
-  };
+  const handleBurn = useCallback(async () => {
+    if (!burnAmount || isProcessing) return;
+    
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
 
-  const updateCharacteristic = (index: number, field: string, value: string) => {
-    setFormData((prevData) => {
-      const updatedCharacteristics = [...prevData.characteristics];
-      updatedCharacteristics[index] = {
-        ...updatedCharacteristics[index],
-        [field]: value
-      };
-      return { ...prevData, characteristics: updatedCharacteristics };
-    });
-  };
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            /// @ts-ignore
+            signer
+          );
+          
+          const amountToBurn = ethers.parseUnits(burnAmount, 18);
+          return contract.burn(nodeId, amountToBurn);
+        },
+        {
+          successMessage: 'Tokens burned successfully to parent',
+          onSuccess: () => {
+            setActiveModal(null);
+            onSuccess?.();
+          } 
+        }
+      );
+    } catch (error) {
+      console.error('Failed to burn tokens to parent:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to burn tokens',
+        status: 'error',
+        duration: 5000
+      });
+    }
+  }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
-  const removeCharacteristic = (index: number) => {
-    setFormData((prevData) => {
-      const updatedCharacteristics = [...prevData.characteristics];
-      updatedCharacteristics.splice(index, 1);
-      return { ...prevData, characteristics: updatedCharacteristics };
-    });
-  };
-
-  const addTokenRequirement = () => {
-    setFormData((prevData) => ({
-      ...prevData,
-      tokenRequirements: [...prevData.tokenRequirements, { tokenAddress: '', requiredBalance: '' }]
-    }));
-  };
-
-  const updateTokenRequirement = (index: number, field: string, value: string) => {
-    setFormData((prevData) => {
-      const updatedTokenRequirements = [...prevData.tokenRequirements];
-      updatedTokenRequirements[index] = {
-        ...updatedTokenRequirements[index],
-        [field]: value
-      };
-      return { ...prevData, tokenRequirements: updatedTokenRequirements };
-    });
-  };
-
-  const removeTokenRequirement = (index: number) => {
-    setFormData((prevData) => {
-      const updatedTokenRequirements = [...prevData.tokenRequirements];
-      updatedTokenRequirements.splice(index, 1);
-      return { ...prevData, tokenRequirements: updatedTokenRequirements };
-    });
-  };
-
-  const handleSpawn = async () => {
+  const handleMintMembership = useCallback(async () => {
     setIsProcessing(true);
     try {
-      // Prepare metadata for IPFS
-      const metadata = {
-        name: formData.name,
-        characteristics: formData.characteristics
-      };
-
-      // Upload to IPFS
-      const ipfsResponse = await fetch('/api/upload-to-ipfs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: metadata }),
-      });
-      
-      if (!ipfsResponse.ok) throw new Error('Failed to upload metadata');
-      const { cid } = await ipfsResponse.json();
-
-      // Format token requirements
-      const tokens = formData.tokenRequirements.map(req => req.tokenAddress);
-      const balances = formData.tokenRequirements.map(req => 
-        ethers.parseUnits(req.requiredBalance, 18)
-      );
-
       await executeTransaction(
         chainId,
         async () => {
@@ -1653,27 +1599,64 @@ export const NodeOperations = ({
           const contract = new ethers.Contract(
             deployments.WillWe[chainId.replace('eip155:', '')],
             ABIs.WillWe,
+            /// @ts-ignore
             signer
           );
-
-          return contract.spawnBranchWithMembrane(
-            nodeId,
-            tokens,
-            balances,
-            cid,
-            { gasLimit: 600000 }
-          );
+          return contract.mintMembership(nodeId);
         },
         {
-          successMessage: 'Node spawned successfully',
+          successMessage: 'Membership minted successfully',
+          onSuccess
+        }
+      );
+    } catch (error) {
+      console.error('Failed to mint membership:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to mint membership',
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, toast]);
+
+  const handleRedistribute = useCallback(async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+  
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            // @ts-ignore
+            signer
+          );
+  
+          return contract.redistributePath(nodeId, { gasLimit: 500000 });
+        },
+        {
+          successMessage: 'Value redistributed successfully',
           onSuccess: () => {
-            setActiveModal(null);
             onSuccess?.();
           }
         }
       );
     } catch (error) {
-      console.error('Failed to spawn node:', error);
+      console.error('Failed to redistribute:', error);
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Transaction failed',
@@ -1683,346 +1666,329 @@ export const NodeOperations = ({
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+
+  // Mint Modal Content
+  const renderMintModalContent = () => (
+    <VStack spacing={4}>
+      <HStack width="100%" justify="space-between" align="center" pb={2}>
+        <FormControl display="flex" alignItems="center">
+          <FormLabel htmlFor="mint-from-parent" mb="0">
+            Mint from Parent
+          </FormLabel>
+          <Switch 
+            id="mint-from-parent"
+            isChecked={useDirectParentMint}
+            onChange={(e) => setUseDirectParentMint(e.target.checked)}
+            colorScheme="purple"
+          />
+        </FormControl>
+      </HStack>
+      
+      <FormControl isRequired>
+        <FormLabel>Amount</FormLabel>
+        <Input
+          value={mintAmount}
+          onChange={async (e) => {
+            const newAmount = e.target.value;
+            setMintAmount(newAmount); // Update form value immediately
+            
+            // Skip allowance check if amount is empty or 0
+            if (!newAmount || parseFloat(newAmount) === 0) {
+              setNeedsApproval(false);
+              return;
+            }
+
+            // Immediately check allowance with new value
+            try {
+              if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
+                console.warn('Required data not available');
+                return;
+              }
+
+              const provider = await getEthersProvider();
+              const signer = await provider.getSigner();
+              const rootTokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
+              const cleanChainId = chainId.replace('eip155:', '');
+              const willWeAddress = deployments.WillWe[cleanChainId];
+
+              const tokenContract = new ethers.Contract(
+                rootTokenAddress,
+                [
+                  'function allowance(address,address) view returns (uint256)',
+                  'function decimals() view returns (uint8)'
+                ],
+                signer
+              );
+
+              const [currentAllowance, decimals] = await Promise.all([
+                tokenContract.allowance(user.wallet.address, willWeAddress),
+                tokenContract.decimals()
+              ]);
+
+              const requiredAmount = ethers.parseUnits(newAmount, decimals);
+              setAllowance(currentAllowance.toString());
+              setNeedsApproval(currentAllowance < requiredAmount);
+
+              console.log('Immediate allowance check:', {
+                currentAllowance: currentAllowance.toString(),
+                requiredAmount: requiredAmount.toString(),
+                needsApproval: currentAllowance < requiredAmount
+              });
+            } catch (error) {
+              console.error('Error in immediate allowance check:', error);
+              setNeedsApproval(true); // Fail safe: require approval on error
+            }
+          }}
+          placeholder="Enter amount to mint"
+          type="number"
+          min="0"
+          step="any"
+        />
+        <FormHelperText>
+          {useDirectParentMint 
+            ? "Mints tokens directly from parent node's reserve"
+            : "Mints tokens through the entire path from root"
+          }
+        </FormHelperText>
+      </FormControl>
+
+      {mintAmount && parseFloat(mintAmount) > 0 && (
+        <Alert status={needsApproval ? "warning" : "success"}>
+          <AlertIcon />
+          <VStack align="start" spacing={1} width="100%">
+            <Text>
+              {needsApproval 
+                ? "Approval required before minting" 
+                : "Ready to mint"}
+            </Text>
+            <Text fontSize="sm" color="gray.600">
+              Current allowance: {ethers.formatUnits(allowance || '0', 18)}
+              {needsApproval && ` (Need: ${mintAmount})`}
+            </Text>
+          </VStack>
+        </Alert>
+      )}
+
+      {needsApproval ? (
+        <Button
+          colorScheme="blue"
+          onClick={handleApprove}
+          isLoading={isProcessing}
+          width="100%"
+        >
+          Approve Tokens
+        </Button>
+      ) : (
+        <Button
+          colorScheme="purple"
+          onClick={() => useDirectParentMint ? handleMint() : handleMintPath()}
+          isLoading={isProcessing}
+          width="100%"
+          isDisabled={!mintAmount || parseFloat(mintAmount) === 0}
+        >
+          {useDirectParentMint ? 'Mint from Parent' : 'Mint Path'}
+        </Button>
+      )}
+    </VStack>
+  );
+
+  // Burn Modal Content
+  const renderBurnModalContent = () => (
+    <VStack spacing={4}>
+      <HStack width="100%" justify="space-between" align="center" pb={2}>
+        <FormControl display="flex" alignItems="center">
+          <FormLabel htmlFor="burn-to-parent" mb="0">
+            Burn to Parent
+          </FormLabel>
+          <Switch 
+            id="burn-to-parent"
+            isChecked={useDirectParentBurn}
+            onChange={(e) => setUseDirectParentBurn(e.target.checked)}
+            colorScheme="purple"
+          />
+        </FormControl>
+      </HStack>
+
+      <FormControl isRequired>
+        <FormLabel>Amount</FormLabel>
+        <Input
+          value={burnAmount}
+          onChange={(e) => {
+            setBurnAmount(e.target.value);
+            checkNodeBalance();
+          }}
+          placeholder="Enter amount to burn"
+          type="number"
+        />
+        <FormHelperText>
+          {useDirectParentBurn 
+            ? "Burns tokens directly to parent node"
+            : "Burns tokens through the entire path to root"
+          }
+        </FormHelperText>
+      </FormControl>
+
+      {burnAmount && (
+        <Alert 
+          status={
+            BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
+              ? "success" 
+              : "error"
+          }
+        >
+          <AlertIcon />
+          <Text>
+            {BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
+              ? "Ready to burn"
+              : "Insufficient balance"
+            }
+          </Text>
+        </Alert>
+      )}
+
+      <Button
+        colorScheme="purple"
+        onClick={() => useDirectParentBurn ? handleBurn() : handleBurnPath()}
+        isLoading={isProcessing}
+        width="100%"
+        isDisabled={!burnAmount}
+      >
+        {useDirectParentBurn ? 'Burn to Parent' : 'Burn Path'}
+      </Button>
+    </VStack>
+  );
 
   return (
     <>
-      <Box 
-        display="flex" 
-        justifyContent="flex-end" 
-        mb={4} 
-        px={6}
-        borderBottom="1px solid"
-        borderColor="gray.200"
-        py={4}
-        bg="gray.50"
-      >
-        <ButtonGroup 
-          size="sm" 
-          spacing={3} 
+      {showToolbar && (
+        <Box 
           display="flex" 
-          flexWrap="wrap" 
-          gap={2}
-          sx={{
-            '& button': {
-              minWidth: '120px',
-              height: '36px',
-              justifyContent: 'center',
-              borderWidth: '1.5px',
-              borderRadius: 'md',
-              fontWeight: 'medium',
-              transition: 'all 0.2s',
-              _hover: {
-                transform: 'translateY(-1px)',
-                shadow: 'sm'
-              }
-            }
-          }}
+          justifyContent="flex-end" 
+          mb={4} 
+          px={6}
+          borderBottom="1px solid"
+          borderColor="gray.200"
+          py={4}
+          bg="gray.50"
         >
-          <Tooltip label="Spawn new node with optional membrane">
-            <Button
-              leftIcon={<GitBranch size={16} />}
-              onClick={() => setActiveModal('spawn')}
-              colorScheme="purple"
-              variant="outline"
-            >
-              Spawn Node
-            </Button>
-          </Tooltip>
-
-          <Tooltip label={isMember ? "Already a member" : "Mint membership"}>
-            <Button
-              leftIcon={<UserPlus size={16} />}
-              onClick={handleMintMembership}
-              isDisabled={isMember}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Join
-            </Button>
-          </Tooltip>
-
-          <Tooltip label="Redistribute value">
-            <Button
-              leftIcon={<RefreshCw size={16} />}
-              onClick={handleRedistribute}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Redistribute
-            </Button>
-          </Tooltip>
-
-          <Tooltip label="Mint path tokens">
-            <Button
-              leftIcon={<Plus size={16} />}
-              onClick={() => setActiveModal('mint')}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Mint
-            </Button>
-          </Tooltip>
-
-          <Tooltip label="Burn path tokens">
-            <Button
-              leftIcon={<Trash size={16} />}
-              onClick={() => {
-                setActiveModal('burn');
-                checkNodeBalance();
-              }}
-              colorScheme="purple"
-              variant="outline"
-              size="sm"
-            >
-              Burn
-            </Button>
-          </Tooltip>
-        </ButtonGroup>
-      </Box>
-
-      {/* Spawn Node Modal */}
-      <Modal 
-        isOpen={activeModal === 'spawn'} 
-        onClose={() => setActiveModal(null)}
-        size="xl"
-      >
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Spawn New Node</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={6}>
-            <VStack spacing={4} align="stretch">
-              <FormControl isRequired>
-                <FormLabel>Node Name</FormLabel>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    name: e.target.value
-                  })}
-                  placeholder="Enter node name"
-                />
-              </FormControl>
-
-              {/* Characteristics Section */}
-              <Box>
-                <HStack justify="space-between" mb={2}>
-                  <FormLabel mb={0}>Characteristics</FormLabel>
-                  <Button
-                    size="sm"
-                    leftIcon={<Plus size={14} />}
-                    onClick={() => addCharacteristic()}
-                  >
-                    Add
-                  </Button>
-                </HStack>
-                <VStack spacing={2}>
-                  {formData.characteristics.map((char, idx) => (
-                    <HStack key={idx}>
-                      <Input
-                        placeholder="Title"
-                        value={char.title}
-                        onChange={(e) => updateCharacteristic(idx, 'title', e.target.value)}
-                        size="sm"
-                      />
-                      <Input
-                        placeholder="Link"
-                        value={char.link}
-                        onChange={(e) => updateCharacteristic(idx, 'link', e.target.value)}
-                        size="sm"
-                      />
-                      <IconButton
-                        aria-label="Remove characteristic"
-                        icon={<Trash2 size={14} />}
-                        onClick={() => removeCharacteristic(idx)}
-                        size="sm"
-                      />
-                    </HStack>
-                  ))}
-                </VStack>
-              </Box>
-
-              {/* Token Requirements Section */}
-              <Box>
-                <HStack justify="space-between" mb={2}>
-                  <FormLabel mb={0}>Token Requirements</FormLabel>
-                  <Button
-                    size="sm"
-                    leftIcon={<Plus size={14} />}
-                    onClick={() => addTokenRequirement()}
-                  >
-                    Add
-                  </Button>
-                </HStack>
-                <VStack spacing={2}>
-                  {formData.tokenRequirements.map((req, idx) => (
-                    <HStack key={idx}>
-                      <Input
-                        placeholder="Token Address"
-                        value={req.tokenAddress}
-                        onChange={(e) => updateTokenRequirement(idx, 'tokenAddress', e.target.value)}
-                        size="sm"
-                      />
-                      <Input
-                        placeholder="Required Balance"
-                        value={req.requiredBalance}
-                        onChange={(e) => updateTokenRequirement(idx, 'requiredBalance', e.target.value)}
-                        size="sm"
-                        type="number"
-                      />
-                      <IconButton
-                        aria-label="Remove requirement"
-                        icon={<Trash2 size={14} />}
-                        onClick={() => removeTokenRequirement(idx)}
-                        size="sm"
-                      />
-                    </HStack>
-                  ))}
-                </VStack>
-              </Box>
-
+          <ButtonGroup 
+            size="sm" 
+            spacing={3} 
+            display="flex" 
+            flexWrap="wrap" 
+            gap={2}
+          >
+            <Tooltip label="Mint membership">
               <Button
+                leftIcon={<UserPlus size={16} />}
+                onClick={handleMintMembership}
+                isDisabled={isMember}
                 colorScheme="purple"
-                onClick={handleSpawn}
-                isLoading={isProcessing}
-                width="100%"
-                mt={4}
+                variant="outline"
               >
-                Spawn Node
+                Join
               </Button>
-            </VStack>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
+            </Tooltip>
 
-      {/* Mint Path Modal */}
+            <Tooltip label="Create new node">
+  <Button
+    leftIcon={<GitBranchPlus size={16} />}
+    onClick={() => setActiveModal('spawn')}
+    colorScheme="purple"
+    variant="outline"
+  >
+    Spawn Node
+  </Button>
+</Tooltip>
+
+            <Tooltip label="Redistribute value">
+              <Button
+                leftIcon={<RefreshCw size={16} />}
+                onClick={handleRedistribute}
+                colorScheme="purple"
+                variant="outline"
+              >
+                Redistribute
+              </Button>
+            </Tooltip>
+
+            <Tooltip label="Mint tokens">
+              <Button
+                leftIcon={<Plus size={16} />}
+                onClick={() => setActiveModal('mint')}
+                colorScheme="purple"
+                variant="outline"
+              >
+                Mint
+              </Button>
+            </Tooltip>
+
+            <Tooltip label="Burn tokens">
+              <Button
+                leftIcon={<Trash size={16} />}
+                onClick={() => {
+                  setActiveModal('burn');
+                  checkNodeBalance();
+                }}
+                colorScheme="purple"
+                variant="outline"
+              >
+                Burn
+              </Button>
+            </Tooltip>
+          </ButtonGroup>
+        </Box>
+      )}
+
+<Modal 
+  isOpen={activeModal === 'spawn'} 
+  onClose={() => setActiveModal(null)}
+  motionPreset="slideInBottom"
+>
+  <ModalOverlay backdropFilter="blur(4px)" />
+  <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
+    <ModalHeader>Create New Node</ModalHeader>
+    <ModalCloseButton />
+    <ModalBody pb={6}>
+      <SpawnNodeForm
+        nodeId={nodeId}
+        chainId={chainId}
+        onSuccess={onSuccess}
+        onClose={() => setActiveModal(null)}
+      />
+    </ModalBody>
+  </ModalContent>
+</Modal>
+
+      {/* Mint Modal */}
       <Modal 
         isOpen={activeModal === 'mint'} 
         onClose={() => setActiveModal(null)}
         motionPreset="slideInBottom"
       >
         <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent 
-          mx={4}
-          bg="white" 
-          shadow="xl"
-          borderRadius="xl"
-        >
+        <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
           <ModalHeader>Mint Tokens</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
-            <VStack spacing={4}>
-              <FormControl isRequired>
-                <FormLabel>Amount</FormLabel>
-                <Input
-                  value={mintAmount}
-                  onChange={(e) => {
-                    setMintAmount(e.target.value);
-                    checkAllowance();
-                  }}
-                  placeholder="Enter amount to mint"
-                  type="number"
-                />
-              </FormControl>
-
-              {mintAmount && (
-                <Alert status={needsApproval ? "warning" : "success"}>
-                  <AlertIcon />
-                  <Text>
-                    {needsApproval 
-                      ? "Approval required before minting" 
-                      : "Ready to mint"}
-                  </Text>
-                </Alert>
-              )}
-
-              {needsApproval ? (
-                <Button
-                  colorScheme="blue"
-                  onClick={handleApprove}
-                  isLoading={isProcessing}
-                  width="100%"
-                >
-                  Approve Tokens
-                </Button>
-              ) : (
-                <Button
-                  colorScheme="purple"
-                  onClick={handleMintPath}
-                  isLoading={isProcessing}
-                  width="100%"
-                  isDisabled={!mintAmount}
-                >
-                  Mint Tokens
-                </Button>
-              )}
-            </VStack>
+            {renderMintModalContent()}
           </ModalBody>
         </ModalContent>
       </Modal>
 
-      {/* Burn Path Modal */}
+      {/* Burn Modal */}
       <Modal 
         isOpen={activeModal === 'burn'} 
         onClose={() => setActiveModal(null)}
         motionPreset="slideInBottom"
       >
         <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent 
-          mx={4}
-          bg="white" 
-          shadow="xl"
-          borderRadius="xl"
-        >
+        <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
           <ModalHeader>Burn Tokens</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
-            <VStack spacing={4}>
-              <FormControl isRequired>
-                <FormLabel>Amount</FormLabel>
-                <Input
-                  value={burnAmount}
-                  onChange={(e) => {
-                    setBurnAmount(e.target.value);
-                    checkNodeBalance();
-                  }}
-                  placeholder="Enter amount to burn"
-                  type="number"
-                />
-              </FormControl>
-
-              {burnAmount && (
-                <Alert 
-                  status={
-                    BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
-                      ? "success" 
-                      : "error"
-                  }
-                >
-                  <AlertIcon />
-                  <Text>
-                    {BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
-                      ? "Ready to burn"
-                      : "Insufficient balance"
-                    }
-                  </Text>
-                </Alert>
-              )}
-
-              <Button
-                colorScheme="purple"
-                onClick={handleBurnPath}
-                isLoading={isProcessing}
-                width="100%"
-                isDisabled={!burnAmount}
-              >
-                Burn Tokens
-              </Button>
-            </VStack>
+            {renderBurnModalContent()}
           </ModalBody>
         </ModalContent>
       </Modal>
@@ -2358,6 +2324,468 @@ export default React.memo(NodePill, (prevProps, nextProps) => {
 
 
 
+// File: ./components/Node/CreateMovementForm.tsx
+import { DEFAULT_FORM_STATE, FormState, MovementFormValidation, validateFormField, validateFormForSubmission } from '../../types/movements';
+import React, { useState, useMemo, memo } from 'react';
+import { ethers } from 'ethers';
+import {
+  VStack,
+  FormControl,
+  FormLabel,
+  Input,
+  Select,
+  Textarea,
+  Button,
+  FormHelperText,
+  FormErrorMessage,
+  useToast,
+  Progress,
+  HStack
+} from '@chakra-ui/react';
+import { MovementType } from '../../types/chainData';
+import { getEndpointActions } from '../../config/endpointActions';
+import { nodeIdToAddress } from '../../utils/formatters';
+
+interface CreateMovementFormProps {
+  nodeData: any;
+  onSubmit: (data: FormState) => Promise<void>;
+  onClose: () => void;
+}
+
+const CreateMovementForm: React.FC<CreateMovementFormProps> = ({ 
+  nodeData,
+  onSubmit,
+  onClose 
+}) => {
+  const [formData, setFormData] = useState<FormState>(DEFAULT_FORM_STATE);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Initialize validation based on action type
+  const [validation, setValidation] = useState<MovementFormValidation>({
+    target: true,
+    calldata: true,
+    description: true,
+    value: true,
+    to: true
+  });
+  // const { description, isUploading, error, uploadDescription } = useMovementDescription();
+  const toast = useToast();
+
+
+  const endpointOptions = useMemo(() => {
+    if (!nodeData?.movementEndpoints?.length) return [];
+    
+    return nodeData.movementEndpoints.map(endpoint => ({
+      value: endpoint,
+      label: `${endpoint.slice(0, 6)}...${endpoint.slice(-4)}`,
+      authType: nodeData.childrenNodes.includes(endpoint) ? 
+        MovementType.AgentMajority : 
+        MovementType.EnergeticMajority,
+      balance: nodeData.basicInfo[2] // Use balance anchor
+    }));
+  }, [nodeData?.movementEndpoints, nodeData?.childrenNodes, nodeData?.basicInfo]);
+
+  // Update the handleEndpointChange to also set safe defaults
+  const handleEndpointChange = (endpoint: string) => {
+    const selectedEndpoint = endpointOptions.find(opt => opt.value === endpoint);
+    setFormData(prev => ({
+      ...prev,
+      endpoint,
+      type: selectedEndpoint ? selectedEndpoint.authType : prev.type,
+      target: selectedEndpoint ? selectedEndpoint.value : ethers.ZeroAddress,
+      calldata: '0x',
+      value: '0'
+    }));
+    // Reset validations on endpoint change
+    setValidation({
+      target: true,
+      calldata: true,
+      description: true,
+      value: true
+    });
+    setTouchedFields({});
+  };
+
+  const isValidHexString = (value: string) => /^0x[0-9a-fA-F]*$/.test(value);
+
+  const validateField = (name: keyof FormState, value: string) => {
+    if (!value && name === 'value') return true; // Empty value is valid, will default to 0
+    if (!value) return true; // Don't show validation errors for empty fields until submit
+    
+    switch (name) {
+      case 'target':
+        return isValidHexString(value);
+      case 'calldata':
+        return isValidHexString(value) && value.length >= 10; // At least function signature
+      case 'value':
+        return !isNaN(Number(value));
+      case 'description':
+        return value.length >= 10;
+      default:
+        return true;
+    }
+  };
+
+  // Update to handle empty values properly
+  const handleInputChange = (field: keyof FormState, value: string) => {
+    // Ensure value is treated as string
+    let finalValue = value;
+    if (field === 'value') {
+      // Strip non-numeric characters and leading zeros for value field
+      finalValue = value.replace(/[^\d.]/g, '').replace(/^0+(\d)/, '$1');
+      if (finalValue === '') finalValue = '0';
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      [field]: finalValue
+    }));
+
+    setTouchedFields(prev => ({ ...prev, [field]: true }));
+    setValidation(prev => ({
+      ...prev,
+      [field]: validateFormField(field, finalValue)
+    }));
+  };
+
+  const handleSubmit = async () => {
+    const isTokenTransfer = formData.actionType === 'tokenTransfer';
+    
+    try {
+      const action = getActionOptions.find(a => a.id === formData.actionType);
+      if (!action) throw new Error('Invalid action type');
+  
+      // Get target address based on action type
+      let targetAddress;
+      if (isTokenTransfer) {
+        targetAddress = nodeData?.rootPath?.[0];
+        targetAddress = nodeIdToAddress(targetAddress); 
+      } else {
+        targetAddress = formData.target || formData.params?.target;
+      }
+  
+      // Validate target address
+      if (!targetAddress || !ethers.isAddress(targetAddress)) {
+        throw new Error('Target address is required');
+      }
+  
+      // Extract CID from description if it's an object
+      const descriptionCid = typeof formData.description === 'object' && 'cid' in formData.description
+        ? formData.description.cid
+        : formData.description;
+  
+      // Create clean parameters object without CID objects
+      const cleanParams = Object.entries(formData.params || {}).reduce((acc, [key, value]) => {
+        let cleanValue;
+        
+        // Convert CID objects to strings
+        if (typeof value === 'object' && 'cid' in value) {
+          cleanValue = value.cid;
+        }
+        // Convert numbers to strings
+        else if (typeof value === 'number') {
+          cleanValue = value.toString();
+        }
+        // Handle addresses
+        else if (key.toLowerCase().includes('address') || key === 'target' || key === 'to') {
+          try {
+            cleanValue = ethers.getAddress(value as string);
+          } catch {
+            cleanValue = value;
+          }
+        }
+        // Use value as is for other cases
+        else {
+          cleanValue = value;
+        }
+  
+        return { ...acc, [key]: cleanValue };
+      }, {});
+  
+      // Add required parameters
+      const formattedParams = {
+        ...cleanParams,
+        value: formData.value || '0',
+        target: targetAddress,
+        description: descriptionCid // Use string CID instead of object
+      };
+  
+      // Get call data with formatted parameters
+      const callData = action.getCallData(formattedParams, nodeData.rootPath[0]);
+  
+      // Prepare final submission data
+      const submissionData = {
+        ...formData,
+        description: descriptionCid, // Use string CID
+        value: formData.value || '0',
+        target: targetAddress,
+        callData: callData.callData || '0x',
+        params: formattedParams // Use cleaned parameters
+      };
+  
+      // Validate submission data
+      const validationResult = {
+        ...validateFormForSubmission({
+          ...submissionData,
+          description: descriptionCid // Ensure validation uses string CID
+        }),
+        target: true
+      };
+  
+      setValidation(prev => ({
+        ...prev,
+        ...validationResult
+      }));
+  
+      if (!Object.values(validationResult).every(Boolean)) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please check the form for errors',
+          status: 'error',
+          duration: 3000
+        });
+        return;
+      }
+  
+      setIsSubmitting(true);
+      await onSubmit(submissionData);
+      onClose();
+    } catch (error) {
+      console.error('Submission error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create movement',
+        status: 'error',
+        duration: 5000
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getActionOptions = useMemo(() => {
+    let rootTokenAddress;
+    try {
+      rootTokenAddress = nodeData?.rootPath?.[0] ? 
+        nodeIdToAddress(nodeData.rootPath[0]) : 
+        ethers.ZeroAddress;
+    } catch (error) {
+      console.error('Error converting node ID:', error);
+      rootTokenAddress = ethers.ZeroAddress;
+    }
+    return getEndpointActions(rootTokenAddress, 'tokens');
+  }, [nodeData?.rootPath]);
+
+  // Ensure we reset validation states when switching between token transfer and custom call
+  const handleActionChange = (actionId: string) => {
+    const action = getActionOptions.find(a => a.id === actionId);
+    if (action) {
+      const defaultTarget = actionId === 'tokenTransfer' ? 
+        nodeData?.rootPath?.[0] : 
+        ethers.ZeroAddress; // Use ZeroAddress as fallback
+  
+      setFormData(prev => ({
+        ...prev,
+        actionType: actionId,
+        target: defaultTarget,
+        calldata: '0x',
+        value: '0',
+        params: {
+          to: '',
+          amount: '0',
+          target: defaultTarget, // Initialize target in params as well
+          calldata: '0x',
+          value: '0'
+        }
+      }));
+      
+      // Reset validation state based on action type
+      setValidation({
+        target: true,
+        calldata: true,
+        description: true,
+        value: true,
+        to: true
+      });
+      
+      setTouchedFields({});
+    }
+  };
+
+  // Update the form controls to only validate on touch or submit
+  const renderDynamicFields = () => {
+    const action = getActionOptions.find(a => a.id === formData.actionType);
+    if (!action) return null;
+
+    return action.fields
+      // For token transfers, skip any 'target' field since it's handled automatically
+      .filter(field => !(formData.actionType === 'tokenTransfer' && field.name === 'target'))
+      .map(field => (
+      <FormControl 
+        key={field.name} 
+        isRequired={field.required}
+        isInvalid={touchedFields[field.name] && !validation[field.name]}
+      >
+        <FormLabel>{field.label}</FormLabel>
+        <Input
+          type={field.type || 'text'}
+          value={formData.params?.[field.name] || ''}
+          onChange={(e) => {
+            const value = e.target.value;
+            setFormData(prev => ({
+              ...prev,
+              params: {
+                ...prev.params,
+                [field.name]: value
+              }
+            }));
+            if (touchedFields[field.name]) {
+              setValidation(prev => ({
+                ...prev,
+                [field.name]: validateFormField(field.name, value)
+              }));
+            }
+          }}
+          onBlur={() => {
+            setTouchedFields(prev => ({ ...prev, [field.name]: true }));
+            const value = formData.params?.[field.name] || '';
+            setValidation(prev => ({
+              ...prev,
+              [field.name]: validateFormField(field.name, value)
+            }));
+          }}
+          placeholder={field.placeholder}
+        />
+        {touchedFields[field.name] && !validation[field.name] && (
+          <FormErrorMessage>
+            {field.type === 'number' 
+              ? 'Please enter a valid number' 
+              : field.name === 'to' 
+                ? 'Please enter a valid Ethereum address'
+                : 'Please enter a valid value'}
+          </FormErrorMessage>
+        )}
+      </FormControl>
+    ));
+  };
+
+  return (
+    <VStack spacing={4}>
+      <FormControl>
+        <FormLabel>Execution Endpoint</FormLabel>
+        <Select
+          value={formData.endpoint}
+          onChange={(e) => handleEndpointChange(e.target.value)}
+        >
+          <option value="new">Create New Execution Endpoint</option>
+          {endpointOptions.map(({ value, label, authType, balance }) => (
+            <option key={value} value={value}>
+              {label} {authType === MovementType.AgentMajority ? '(Agent)' : '(Value)'} - {ethers.formatEther(balance || '0')} tokens
+            </option>
+          ))}
+        </Select>
+        <FormHelperText>
+          {formData.endpoint === 'new' 
+            ? 'A new execution endpoint will be created for this movement'
+            : 'Using existing endpoint with matching authorization type'}
+        </FormHelperText>
+      </FormControl>
+
+      <FormControl>
+        <FormLabel>Movement Type</FormLabel>
+        <Select
+          value={formData.type}
+          onChange={(e) => handleInputChange('type', e.target.value)}
+          isDisabled={formData.endpoint !== 'new'}
+        >
+          <option value={MovementType.AgentMajority}>Agent Majority</option>
+          <option value={MovementType.EnergeticMajority}>Value Majority</option>
+        </Select>
+        <FormHelperText>
+          {formData.endpoint !== 'new' && 'Movement type must match endpoint authorization type'}
+        </FormHelperText>
+      </FormControl>
+
+      <FormControl isInvalid={touchedFields.description && !validation.description}>
+        <FormLabel>Description</FormLabel>
+        <Textarea
+          value={formData.description}
+          onChange={(e) => handleInputChange('description', e.target.value)}
+          onBlur={() => setTouchedFields(prev => ({ ...prev, description: true }))}
+          placeholder="Describe the purpose of this movement..."
+          minH="100px"
+          isDisabled={isUploading}
+        />
+        <FormErrorMessage>
+          {error || 'Description must be at least 10 characters long'}
+        </FormErrorMessage>
+      </FormControl>
+
+      <FormControl>
+        <FormLabel>Expires In (Days)</FormLabel>
+        <HStack>
+          <Button onClick={() => handleInputChange('expiryDays', String(Math.max(1, formData.expiryDays - 1)))}>
+            -
+          </Button>
+          <Input
+            type="number"
+            value={formData.expiryDays}
+            onChange={(e) => handleInputChange('expiryDays', e.target.value)}
+            min={1}
+            textAlign="center"
+          />
+          <Button onClick={() => handleInputChange('expiryDays', String(formData.expiryDays + 1))}>
+            +
+          </Button>
+        </HStack>
+      </FormControl>
+
+      <FormControl isRequired>
+        <FormLabel>Action Type</FormLabel>
+        <Select
+          value={formData.actionType || 'customCall'}
+          onChange={(e) => handleActionChange(e.target.value)}
+        >
+          {getActionOptions.map(action => (
+            <option key={action.id} value={action.id}>
+              {action.label}
+            </option>
+          ))}
+        </Select>
+        <FormHelperText>
+          {getActionOptions.find(a => a.id === formData.actionType)?.description}
+        </FormHelperText>
+      </FormControl>
+
+      {/* Dynamic fields based on selected action */}
+      {renderDynamicFields()}
+
+      <Button
+        colorScheme="purple"
+        onClick={handleSubmit}
+        width="100%"
+        isLoading={isSubmitting || isUploading}
+        loadingText={isUploading ? "Uploading Description..." : "Creating Movement..."}
+        isDisabled={!Object.values(validation).every(Boolean)}
+      >
+        Create Movement
+      </Button>
+
+      {(isSubmitting || isUploading) && (
+        <Progress size="xs" isIndeterminate width="100%" colorScheme="purple" />
+      )}
+    </VStack>
+  );
+};
+
+CreateMovementForm.displayName = 'CreateMovementForm';
+
+export default CreateMovementForm;
+
+
+
 // File: ./components/Node/NodeHierarchyView.tsx
 import React from 'react';
 import {
@@ -2581,6 +3009,86 @@ export const StatsCard: React.FC<StatsCardProps> = ({
 
 
 
+// File: ./components/Node/MovementsErrorBoundary.tsx
+import React, { Component, ErrorInfo } from 'react';
+import { Box, Alert, AlertIcon, AlertTitle, AlertDescription, Button, VStack } from '@chakra-ui/react';
+
+interface Props {
+  children: React.ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+}
+
+export class MovementsErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+    error: null,
+    errorInfo: null
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error, errorInfo: null };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    this.setState({
+      error,
+      errorInfo
+    });
+    console.error('Movement error:', error, errorInfo);
+  }
+
+  private handleReset = () => {
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null
+    });
+  };
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <Box p={4}>
+          <Alert
+            status="error"
+            variant="subtle"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            textAlign="center"
+            height="200px"
+            borderRadius="md"
+          >
+            <AlertIcon boxSize="40px" mr={0} />
+            <AlertTitle mt={4} mb={1} fontSize="lg">
+              Movement Error
+            </AlertTitle>
+            <AlertDescription maxWidth="sm">
+              <VStack spacing={4}>
+                <Box>
+                  {this.state.error?.message || 'An unexpected error occurred while processing movements'}
+                </Box>
+                <Button colorScheme="red" onClick={this.handleReset}>
+                  Try Again
+                </Button>
+              </VStack>
+            </AlertDescription>
+          </Alert>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+
+
 // File: ./components/Node/RootNodeDetails.tsx
 
 
@@ -2695,6 +3203,757 @@ export const SignalHistory: React.FC<SignalHistoryProps> = ({
 
 
 
+// File: ./components/Node/SpawnNodeForm.tsx
+import { useState, useCallback } from 'react';
+import {
+  VStack,
+  FormControl,
+  FormLabel,
+  Input,
+  Button,
+  Text,
+  Alert,
+  AlertIcon,
+  FormHelperText,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
+  Box,
+  Switch,
+  HStack,
+  IconButton,
+  useToast,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Code,
+  Link,
+  Progress,
+  Divider,
+} from '@chakra-ui/react';
+import { Plus, Trash2, ExternalLink, Copy } from 'lucide-react';
+import { ethers } from 'ethers';
+import { usePrivy } from '@privy-io/react-auth';
+import { deployments, ABIs, getExplorerLink } from '../../config/contracts';
+import { validateToken } from '../../utils/tokenValidation';
+import { useTransaction } from '../../contexts/TransactionContext';
+
+interface Characteristic {
+  title: string;
+  link: string;
+}
+
+interface MembershipCondition {
+  tokenAddress: string;
+  requiredBalance: string;
+  symbol?: string;
+}
+
+interface SpawnNodeFormProps {
+  nodeId: string;
+  chainId: string;
+  onSuccess?: () => void;
+  onClose?: () => void;
+}
+
+const SpawnNodeForm = ({
+  nodeId,
+  chainId,
+  onSuccess,
+  onClose
+}: SpawnNodeFormProps) => {
+  // Form state
+  const [entityName, setEntityName] = useState('');
+  const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
+  const [newCharTitle, setNewCharTitle] = useState('');
+  const [newCharLink, setNewCharLink] = useState('');
+  const [membershipConditions, setMembershipConditions] = useState<MembershipCondition[]>([]);
+  const [newTokenAddress, setNewTokenAddress] = useState('');
+  const [newTokenBalance, setNewTokenBalance] = useState('');
+  const [inflationRate, setInflationRate] = useState(1);
+  const [useMembrane, setUseMembrane] = useState(false);
+
+  // Transaction state
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validatingToken, setValidatingToken] = useState(false);
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
+
+  // Hooks
+  const { getEthersProvider } = usePrivy();
+  const toast = useToast();
+  const { executeTransaction } = useTransaction();
+
+  // Token validation and handling
+  const validateAndAddToken = useCallback(async () => {
+    if (!newTokenAddress || !newTokenBalance) {
+      toast({
+        title: 'Error',
+        description: 'Both token address and balance are required',
+        status: 'error',
+        duration: 3000
+      });
+      return;
+    }
+
+    setValidatingToken(true);
+    console.log('Validating token:', { address: newTokenAddress, balance: newTokenBalance });
+
+    try {
+      const tokenInfo = await validateToken(newTokenAddress, chainId);
+      if (!tokenInfo) throw new Error('Invalid token address');
+
+      const isDuplicate = membershipConditions.some(
+        mc => mc.tokenAddress.toLowerCase() === newTokenAddress.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        throw new Error('Token already added to conditions');
+      }
+
+      setMembershipConditions(prev => [...prev, {
+        tokenAddress: newTokenAddress.toLowerCase(),
+        requiredBalance: newTokenBalance,
+        symbol: tokenInfo.symbol
+      }]);
+
+      setNewTokenAddress('');
+      setNewTokenBalance('');
+
+      toast({
+        title: 'Success',
+        description: `Added ${tokenInfo.symbol} token requirement`,
+        status: 'success',
+        duration: 2000
+      });
+
+    } catch (error: any) {
+      console.error('Token validation error:', error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        status: 'error',
+        duration: 3000
+      });
+    } finally {
+      setValidatingToken(false);
+    }
+  }, [newTokenAddress, newTokenBalance, chainId, membershipConditions, toast]);
+
+  // Characteristic handling
+  const addCharacteristic = useCallback(() => {
+    if (!newCharTitle || !newCharLink) {
+      toast({
+        title: 'Error',
+        description: 'Both title and link are required',
+        status: 'error',
+        duration: 3000
+      });
+      return;
+    }
+
+    setCharacteristics(prev => [...prev, {
+      title: newCharTitle,
+      link: newCharLink
+    }]);
+
+    setNewCharTitle('');
+    setNewCharLink('');
+  }, [newCharTitle, newCharLink, toast]);
+
+  const submitTransaction = async (cid: string = '') => {
+    const cleanChainId = chainId.replace('eip155:', '');
+    const contractAddress = deployments.WillWe[cleanChainId];
+    
+    if (!contractAddress) {
+      throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+    }
+
+    const tx = await executeTransaction(
+      chainId,
+      async () => {
+        const provider = await getEthersProvider();
+        const signer = await provider.getSigner();
+        const contract = new ethers.Contract(
+          contractAddress,
+          ABIs.WillWe,
+          signer
+        );
+
+        let transaction;
+        if (useMembrane) {
+          transaction = await contract.spawnBranchWithMembrane(
+            nodeId,
+            membershipConditions.map(mc => mc.tokenAddress.toLowerCase()),
+            membershipConditions.map(mc => ethers.parseUnits(mc.requiredBalance, 18)),
+            cid,
+            inflationRate,
+            { gasLimit: BigInt(1000000) }
+          );
+        } else {
+          transaction = await contract.spawnBranch(
+            nodeId,
+            { gasLimit: BigInt(500000) }
+          );
+        }
+
+        setTransactionHash(transaction.hash);
+        return transaction;
+      },
+      {
+        successMessage: "Node created successfully",
+        errorMessage: "Failed to create node",
+        onSuccess: () => {
+          onSuccess?.();
+          onClose?.();
+        }
+      }
+    );
+
+    return tx;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (useMembrane && (!entityName || characteristics.length === 0)) {
+      toast({
+        title: 'Error',
+        description: 'Entity name and at least one characteristic are required',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      let cid = '';
+      if (useMembrane) {
+        // Prepare and upload metadata to IPFS
+        const metadata = {
+          name: entityName,
+          characteristics,
+          membershipConditions
+        };
+
+        const response = await fetch('/api/upload-to-ipfs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: metadata }),
+        });
+
+        if (!response.ok) throw new Error('Failed to upload metadata');
+        const { cid: ipfsCid } = await response.json();
+        cid = ipfsCid;
+      }
+
+      await submitTransaction(cid);
+    } catch (err) {
+      console.error('Error spawning node:', err);
+      setError(err instanceof Error ? err.message : 'Failed to spawn node');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Box as="form" onSubmit={handleSubmit} width="100%">
+      <VStack spacing={6} align="stretch">
+        <FormControl display="flex" alignItems="center">
+          <FormLabel htmlFor="use-membrane" mb="0">
+            Define Node
+          </FormLabel>
+          <Switch
+            id="use-membrane"
+            isChecked={useMembrane}
+            onChange={(e) => setUseMembrane(e.target.checked)}
+            colorScheme="purple"
+          />
+        </FormControl>
+
+        {useMembrane && (
+          <>
+            <FormControl isRequired>
+              <FormLabel>Name</FormLabel>
+              <Input
+                value={entityName}
+                onChange={(e) => setEntityName(e.target.value)}
+                placeholder="Enter name for the membrane"
+              />
+            </FormControl>
+
+            {/* Characteristics Section */}
+            <Box>
+              <FormLabel>Characteristics</FormLabel>
+              <HStack mb={4}>
+                <Input
+                  placeholder="Title"
+                  value={newCharTitle}
+                  onChange={(e) => setNewCharTitle(e.target.value)}
+                />
+                <Input
+                  placeholder="Link"
+                  value={newCharLink}
+                  onChange={(e) => setNewCharLink(e.target.value)}
+                />
+                <IconButton
+                  aria-label="Add characteristic"
+                  icon={<Plus size={20} />}
+                  onClick={addCharacteristic}
+                  isDisabled={!newCharTitle || !newCharLink}
+                />
+              </HStack>
+
+              {characteristics.length > 0 && (
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Title</Th>
+                      <Th>Link</Th>
+                      <Th width="50px"></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {characteristics.map((char, idx) => (
+                      <Tr key={idx}>
+                        <Td>{char.title}</Td>
+                        <Td>
+                          <Link href={char.link} isExternal color="purple.500">
+                            {char.link.substring(0, 30)}...
+                            <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
+                          </Link>
+                        </Td>
+                        <Td>
+                          <IconButton
+                            aria-label="Delete characteristic"
+                            icon={<Trash2 size={18} />}
+                            onClick={() => setCharacteristics(prev => prev.filter((_, i) => i !== idx))}
+                          />
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              )}
+            </Box>
+
+            <Divider />
+
+            {/* Membership Conditions Section */}
+            <Box>
+              <FormLabel>Membership Conditions</FormLabel>
+              <HStack mb={4}>
+                <Input
+                  placeholder="Token address"
+                  value={newTokenAddress}
+                  onChange={(e) => setNewTokenAddress(e.target.value)}
+                />
+                <Input
+                  placeholder="Required balance"
+                  value={newTokenBalance}
+                  onChange={(e) => setNewTokenBalance(e.target.value)}
+                />
+                <Button
+                  colorScheme="purple"
+                  onClick={validateAndAddToken}
+                  isLoading={validatingToken}
+                  isDisabled={!newTokenAddress || !newTokenBalance}
+                >
+                  Add
+                </Button>
+              </HStack>
+
+              {membershipConditions.length > 0 && (
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Token</Th>
+                      <Th>Required Balance</Th>
+                      <Th width="50px"></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {membershipConditions.map((mc, idx) => (
+                      <Tr key={idx}>
+                        <Td>
+                          <Code>{mc.symbol ? `${mc.symbol} (${mc.tokenAddress})` : mc.tokenAddress}</Code>
+                        </Td>
+                        <Td>{mc.requiredBalance}</Td>
+                        <Td>
+                          <IconButton
+                            aria-label="Delete condition"
+                            icon={<Trash2 size={18} />}
+                            onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
+                          />
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              )}
+            </Box>
+
+            <Divider />
+          </>
+        )}
+
+        <FormControl>
+          <FormLabel>Inflation Rate (gwei/sec)</FormLabel>
+          <NumberInput
+            value={inflationRate}
+            onChange={(valueString) => setInflationRate(parseInt(valueString))}
+            min={1}
+            max={100000000}
+          >
+            <NumberInputField />
+            <NumberInputStepper>
+              <NumberIncrementStepper />
+              <NumberDecrementStepper />
+            </NumberInputStepper>
+          </NumberInput>
+          <FormHelperText>
+            Rate at which new node shares are generated
+          </FormHelperText>
+        </FormControl>
+
+        {isLoading && <Progress size="xs" isIndeterminate colorScheme="purple" />}
+
+        {error && (
+          <Alert status="error" variant="left-accent">
+            <AlertIcon />
+            {error}
+          </Alert>
+        )}
+
+        {transactionHash && (
+          <Alert status="success">
+            <AlertIcon />
+            <VStack align="stretch" width="100%" spacing={2}>
+              <Text>Node successfully created</Text>
+              <Link 
+                href={getExplorerLink(chainId, transactionHash)}
+                isExternal
+                color="purple.500"
+                fontSize="sm"
+                display="flex"
+                alignItems="center"
+              >
+                View transaction <ExternalLink size={14} style={{ marginLeft: 4 }} />
+              </Link>
+            </VStack>
+          </Alert>
+        )}
+
+        <Button
+          type="submit"
+          colorScheme="purple"
+          isLoading={isLoading}
+          loadingText="Creating Node..."
+          size="lg"
+          width="100%"
+          isDisabled={
+            (useMembrane && (!entityName || characteristics.length === 0)) ||
+            isLoading ||
+            inflationRate <= 0
+          }
+        >
+          Create Node
+        </Button>
+      </VStack>
+    </Box>
+  );
+};
+
+export default SpawnNodeForm;
+
+
+
+// File: ./components/Node/EndpointComponent.tsx
+import React from 'react';
+import { Box, Text, Link, Button, HStack, Alert, AlertIcon } from "@chakra-ui/react";
+import { RefreshCw } from "lucide-react";
+import { usePrivy } from "@privy-io/react-auth";
+import { ethers } from 'ethers';
+import { useTransaction } from '../../contexts/TransactionContext';
+import { deployments, ABIs, getRPCUrl } from '../../config/contracts';
+import { NodeState } from '../../types/chainData';
+import { nodeIdToAddress } from '../../utils/formatters';
+import { useToast } from '@chakra-ui/react';
+import { useState } from 'react';
+
+interface EndpointProps {
+  parentNodeId: string;
+  chainId: string;
+  userAddress?: string;
+  nodeData: NodeState;
+}
+
+export const EndpointComponent = ({ parentNodeId, chainId, nodeData, userAddress }: EndpointProps) => {
+  const [isRedistributing, setIsRedistributing] = useState(false);
+  const { getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
+  const toast = useToast();
+
+  const endpointAddress = nodeIdToAddress(nodeData.basicInfo[0]);
+
+  const handleRedistribute = async () => {
+    if (isRedistributing) return;
+    setIsRedistributing(true);
+
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            // @ts-ignore
+            signer
+          );
+
+          return contract.redistributePath(nodeData.basicInfo[0], { gasLimit: 500000 });
+        },
+        {
+          successMessage: 'Value redistributed successfully to endpoint',
+          onSuccess: () => {
+            toast({
+              title: 'Redistribution complete',
+              description: 'Value has been redistributed from parent node to endpoint',
+              status: 'success',
+              duration: 5000,
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to redistribute:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to redistribute value',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsRedistributing(false);
+    }
+  };
+
+  return (
+    <Box p={6}>
+      <Alert status="info" rounded="md">
+        <AlertIcon />
+        <Text>
+          This is an endpoint corresponding to an action or user of node{' '}
+          <Link 
+            href={`/nodes/${chainId}/${parentNodeId}`}
+            color="blue.500"
+            fontWeight="medium"
+          >
+            {parentNodeId}
+          </Link>
+        </Text>
+      </Alert>
+
+      {userAddress && (
+        <HStack spacing={4} justify="center" mt={4}>
+          <Button
+            leftIcon={<RefreshCw size={16} />}
+            onClick={handleRedistribute}
+            isLoading={isRedistributing}
+            loadingText="Redistributing..."
+            colorScheme="purple"
+            size="md"
+          >
+            Redistribute
+          </Button>
+        </HStack>
+      )}
+
+      {endpointAddress && (
+        <Text fontSize="sm" color="gray.500" textAlign="center" mt={4}>
+          Endpoint Address: {endpointAddress}
+        </Text>
+      )}
+    </Box>
+  );
+};
+
+export default EndpointComponent;
+
+
+
+// File: ./components/Node/MovementRow.tsx
+import React, { useState } from 'react';
+import {
+  Tr,
+  Td,
+  Badge,
+  HStack,
+  Button,
+  Text,
+  Tooltip,
+  Collapse,
+  Box,
+  IconButton
+} from '@chakra-ui/react';
+import { Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { MovementType, SignatureQueueState, LatentMovement } from '../../types/chainData';
+import { MovementDetails } from './MovementDetails';
+
+interface MovementRowProps {
+  movement: LatentMovement;
+  description: string;
+  signatures: { current: number; required: number };
+  onSign: () => void;
+  onExecute: () => void;
+}
+
+const MovementRow: React.FC<MovementRowProps> = ({ 
+  movement, 
+  description, 
+  signatures, 
+  onSign, 
+  onExecute 
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const getStateDisplay = (state: SignatureQueueState) => {
+    switch (state) {
+      case SignatureQueueState.Valid:
+        return { label: 'Valid', color: 'green', icon: <CheckCircle size={14} /> };
+      case SignatureQueueState.Initialized:
+        return { label: 'Pending Signatures', color: 'yellow', icon: <Clock size={14} /> };
+      case SignatureQueueState.Executed:
+        return { label: 'Executed', color: 'blue', icon: <CheckCircle size={14} /> };
+      case SignatureQueueState.Stale:
+        return { label: 'Expired', color: 'red', icon: <XCircle size={14} /> };
+      default:
+        return { label: 'Unknown', color: 'gray', icon: <AlertTriangle size={14} /> };
+    }
+  };
+
+  const state = getStateDisplay(movement.signatureQueue.state);
+
+  return (
+    <>
+      <Tr 
+        cursor="pointer" 
+        onClick={() => setIsExpanded(!isExpanded)}
+        _hover={{ bg: 'gray.50' }}
+      >
+        <Td>
+          <HStack>
+            <IconButton
+              aria-label="Toggle details"
+              icon={isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              size="xs"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+            />
+            <Badge>
+              {movement.movement.category === MovementType.AgentMajority 
+                ? 'Agent Majority' 
+                : 'Value Majority'}
+            </Badge>
+          </HStack>
+        </Td>
+        <Td>
+          <Tooltip label={movement.movement.descriptionHash}>
+            <Text isTruncated maxW="200px">
+              {description || 'Loading description...'}
+            </Text>
+          </Tooltip>
+        </Td>
+        <Td>
+          <HStack>
+            <Clock size={14} />
+            <Text>
+              {new Date(Number(movement.movement.expiresAt) * 1000).toLocaleDateString()}
+            </Text>
+          </HStack>
+        </Td>
+        <Td>
+          <HStack>
+            {state.icon}
+            <Badge colorScheme={state.color}>
+              {state.label}
+            </Badge>
+          </HStack>
+        </Td>
+        <Td>
+          <Tooltip label={`${signatures.current} / ${signatures.required} ${movement.movement.category === MovementType.AgentMajority ? 'signatures' : 'voting power'}`}>
+            <Text>
+              {signatures.current} / {signatures.required}
+            </Text>
+          </Tooltip>
+        </Td>
+        <Td>
+          <HStack>
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSign();
+              }}
+              isDisabled={movement.signatureQueue.state !== SignatureQueueState.Initialized}
+            >
+              Sign
+            </Button>
+            <Button
+              size="sm"
+              colorScheme="green"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExecute();
+              }}
+              isDisabled={movement.signatureQueue.state !== SignatureQueueState.Valid}
+            >
+              Execute
+            </Button>
+          </HStack>
+        </Td>
+      </Tr>
+      <Tr>
+        <Td colSpan={6} p={0}>
+          <Collapse in={isExpanded}>
+            <Box p={4}>
+              <MovementDetails
+                movement={movement}
+                signatures={signatures}
+                description={description}
+              />
+            </Box>
+          </Collapse>
+        </Td>
+      </Tr>
+    </>
+  );
+};
+
+export default MovementRow;
+
+
+
 // File: ./components/Node/SunburstChart.tsx
 import React from 'react';
 import { useRouter } from 'next/router';
@@ -2722,7 +3981,7 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
     const labels: string[] = [];
     const parents: string[] = [];
     const ids: string[] = [];
-    const values: number[] = [];
+    const values: number[] = []; // Changed back to number[] for plotly
 
     if (!nodeData?.rootPath?.length) {
       console.warn('No root path data available');
@@ -2733,7 +3992,6 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
     const membanes = await getMembraneData(chainId, nodeIds);
     const membraneDatas = membanes.membraneMetadata;
 
-    
     // Process all nodes in the path
     for (let index = 0; index < nodeData.rootPath.length; index++) {
       const nodeId = nodeData.rootPath[index];
@@ -2748,13 +4006,16 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
           const hexAddress = ethers.toBigInt(formattedId).toString(16).padStart(40, '0');
           displayName = `0x${hexAddress.slice(0, 6)}...${hexAddress.slice(-4)}`;
         } else {
-
           displayName = membraneDatas[index -1]?.name || `Node ${nodeId.slice(-6)}`;
         }
         
         labels.push(displayName);
         ids.push(formattedId);
-        values.push(1);
+        
+        // Format budget value for the sunburst size
+        const budget = nodeData.basicInfo[4];
+        const formattedBudget = budget ? Number(ethers.formatUnits(budget, 'gwei')) : 1;
+        values.push(formattedBudget);
 
         if (index === 0) {
           parents.push('');
@@ -2812,7 +4073,7 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
           ids: sunburstData.ids,
           values: sunburstData.values,
           branchvalues: 'total',
-          hovertemplate: '<b>%{label}</b><br>go to<extra></extra>',
+          hovertemplate: '%{label}<br>Budget: %{value} PSC<extra></extra>',
           textposition: 'inside'
         }]}
         layout={{
@@ -2831,20 +4092,59 @@ export default SunburstChart;
 
 
 
-// File: ./components/Node/Activity.tsx
+// File: ./components/Node/ActivitySection.tsx
 import React from 'react';
-import { Box, Text, VStack } from '@chakra-ui/react';
+import { Box, Text, VStack, Skeleton, Alert, AlertIcon } from '@chakra-ui/react';
+import { SignalHistory } from './SignalHistory';
+import { UserSignal } from '../../types/chainData';
 
-export const ActivitySection = () => {
+interface ActivitySectionProps {
+  signals?: UserSignal[];
+  selectedTokenColor?: string;
+  isLoading?: boolean;
+}
+
+export const ActivitySection: React.FC<ActivitySectionProps> = ({
+  signals,
+  selectedTokenColor,
+  isLoading = false
+}) => {
+  if (isLoading) {
+    return (
+      <VStack spacing={4} w="full">
+        <Skeleton height="60px" w="full" />
+        <Skeleton height="100px" w="full" />
+        <Skeleton height="100px" w="full" />
+      </VStack>
+    );
+  }
+
+  if (!signals || signals.length === 0) {
+    return (
+      <Alert status="info">
+        <AlertIcon />
+        <Text>No activity recorded yet</Text>
+      </Alert>
+    );
+  }
+
   return (
-    <Box p={6}>
-      <VStack align="stretch" spacing={4}>
-        <Text fontSize="lg" fontWeight="bold">Activity</Text>
-        <Text>Recent activity will appear here...</Text>
+    <Box w="full">
+      <VStack align="stretch" spacing={6}>
+        <Text fontSize="lg" fontWeight="semibold" color="gray.700">
+          Recent Activity
+        </Text>
+        
+        <SignalHistory 
+          signals={signals} 
+          selectedTokenColor={selectedTokenColor || 'purple.500'}
+        />
       </VStack>
     </Box>
   );
 };
+
+export default ActivitySection;
 
 
 
@@ -3160,14 +4460,14 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
 // File: ./components/Node/NodeInfo.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { ethers } from 'ethers';
-import { 
-  Box, 
-  Text, 
-  HStack, 
-  VStack, 
-  IconButton, 
-  Tooltip, 
-  Badge, 
+import {
+  Box,
+  Text,
+  HStack,
+  VStack,
+  IconButton,
+  Tooltip,
+  Badge,
   Skeleton,
   useToast,
   useColorModeValue
@@ -3189,29 +4489,38 @@ interface NodeInfoProps {
 }
 
 interface NodeMetrics {
-  inflation: string;        // basicInfo[1] - daily inflation rate
-  budget: string;          // basicInfo[3] - current budget balance
-  inflow: string;          // eligibilityPerSec - daily inflow from parent
-  value: string;           // basicInfo[4] - total value in root token
-  memberCount: number;     // membersOfNode.length
+  inflation: string;
+  budget: string;
+  totalValue: string;
+  availableShares: string;
+  inflow: string;
+  value: string;
+  memberCount: number;
+  membersList: string[];
+  userOwnedShares: string;
+}
+
+// Add interface for member data
+interface MemberData {
+  address: string;
+  ensName: string | null;
 }
 
 const calculateMetrics = (node: NodeState): NodeMetrics => {
+  // Per-second rates in gwei, multiply by seconds in a day
+  const inflationPerSec = BigInt(node.basicInfo[1] || '0');
+  const dailyInflation = inflationPerSec * BigInt(86400);
+  
   return {
-    // Convert inflation to daily rate
-    inflation: node.basicInfo[1],
-    
-    // Direct budget balance
-    budget: node.basicInfo[3],
-    
-    // Convert per-second to daily rate
-    inflow: (Number(node.basicInfo[7]) * 86400).toString(),
-    
-    // Total value
-    value: node.basicInfo[4],
-    
-    // Member count
-    memberCount: node.membersOfNode.length
+    inflation: ethers.formatUnits(dailyInflation, 'gwei'),
+    budget: ethers.formatUnits(node.basicInfo[4] || '0', 'gwei'),
+    totalValue: ethers.formatUnits(node.basicInfo[5] || '0', 'gwei'),
+    availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'gwei'),
+    inflow: ethers.formatUnits(inflationPerSec, 'gwei'), // Keep this as per-second rate
+    value: ethers.formatUnits(node.basicInfo[4] || '0', 'gwei'),
+    memberCount: node.membersOfNode.length,
+    membersList: node.membersOfNode,
+    userOwnedShares: ethers.formatUnits(node.basicInfo[9] || '0', 'gwei')
   };
 };
 
@@ -3220,8 +4529,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
   const [tokenSymbol, setTokenSymbol] = useState<string>('');
   const toast = useToast();
-  
-  // Theme colors
+
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const bgColor = useColorModeValue('white', 'gray.800');
   const mutedColor = useColorModeValue('gray.600', 'gray.400');
@@ -3232,21 +4540,25 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   });
   const tokenAddress = nodeIdToAddress(node.rootPath[0]);
 
-
   const tokenContract = new ethers.Contract(
-    tokenAddress, 
+    tokenAddress,
     ABIs.IERC20,
     provider
   );
 
-  // Fetch token symbol
+  const [memberData, setMemberData] = useState<MemberData[]>([]);
+
   useEffect(() => {
     const fetchTokenSymbol = async () => {
       if (!node?.rootPath?.[0] || !chainId) return;
-      
+
       try {
-     
-        
+        const code = await provider.getCode(tokenAddress);
+        if (code === '0x') {
+          setTokenSymbol('NOT A TOKEN');
+          return;
+        }
+
         const symbol = await tokenContract.symbol();
         setTokenSymbol(symbol);
       } catch (error) {
@@ -3256,9 +4568,8 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     };
 
     fetchTokenSymbol();
-  }, [node?.rootPath, chainId]);
+  }, [node?.rootPath, chainId, tokenAddress, provider]);
 
-  // Load membrane metadata
   useEffect(() => {
     const fetchMembraneTitle = async () => {
       if (!node.membraneMeta) {
@@ -3282,19 +4593,22 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     fetchMembraneTitle();
   }, [node.membraneMeta]);
 
-  // Format values
   const formatCurrency = (value: string): string => {
     const number = parseFloat(value);
+    if (isNaN(number)) return '0.0000';
+    // Format with appropriate precision based on value size
+    if (number < 0.0001) {
+      return number.toExponential(4);
+    }
     return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4,
+      maximumSignificantDigits: 6
     }).format(number);
   };
 
-  // Calculate metrics
   const metrics = useMemo(() => calculateMetrics(node), [node]);
 
-  // Handle node ID copy
   const handleCopyNodeId = () => {
     navigator.clipboard.writeText(node.basicInfo[0]);
     toast({
@@ -3304,119 +4618,175 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     });
   };
 
+  // Add ENS resolution effect
+  useEffect(() => {
+    const resolveEnsNames = async () => {
+      if (!metrics.membersList.length) return;
 
-  
+      try {
+        // Use Ethereum mainnet for ENS resolution
+        const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
+
+        const resolvedMembers = await Promise.all(
+          metrics.membersList.map(async (address) => {
+            try {
+              const ensName = await mainnetProvider.lookupAddress(address);
+              return {
+                address,
+                ensName
+              };
+            } catch (error) {
+              console.error(`Error resolving ENS for ${address}:`, error);
+              return {
+                address,
+                ensName: null
+              };
+            }
+          })
+        );
+
+        setMemberData(resolvedMembers);
+      } catch (error) {
+        console.error('Error resolving ENS names:', error);
+        // Fallback to addresses only
+        setMemberData(metrics.membersList.map(address => ({
+          address,
+          ensName: null
+        })));
+      }
+    };
+
+    resolveEnsNames();
+  }, [metrics.membersList]);
 
   return (
-    <Box 
-      p={6} 
-      bg={bgColor} 
-      borderRadius="lg" 
-      border="1px" 
+    <Box
+      p={6}
+      bg={bgColor}
+      borderRadius="lg"
+      border="1px"
       borderColor={borderColor}
     >
-      <HStack align="start" spacing={6}>
-        {/* Left Section */}
-        <VStack align="stretch" flex="1">
-          {/* Title Section */}
-          <VStack align="stretch" spacing={2} mb={6}>
-            <HStack justify="space-between" maxW="100%">
-              {isLoadingTitle ? (
-                <Skeleton height="24px" width="200px" />
-              ) : (
-                <Text fontSize="lg" fontWeight="bold" isTruncated>
-                  {membraneTitle || `Node ${node.basicInfo[0].slice(-6)}`}
-                </Text>
-              )}
-            </HStack>
-            <HStack spacing={2}>
-              <Text fontSize="sm" color={mutedColor} isTruncated>
-                {node.basicInfo[0].slice(0, 6)}...{node.basicInfo[0].slice(-4)}
-              </Text>
-              <IconButton
-                aria-label="Copy node ID"
-                icon={<Copy size={14} />}
-                size="xs"
-                variant="ghost"
-                onClick={handleCopyNodeId}
-              />
-            </HStack>
-          </VStack>
-
-          {/* Updated Metrics Grid */}
-          <VStack align="stretch" spacing={4}>
+      <Box p={4}>
+        <HStack spacing={4} align="start" w="full" minH="300px">
+          <VStack
+            flex="1"
+            align="stretch"
+            spacing={3}
+            borderRadius="md"
+            borderWidth="1px"
+            borderColor={borderColor}
+            p={4}
+          >
             <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Inflation</Text>
-              <Text fontWeight="medium">{formatCurrency(metrics.inflation)} {tokenSymbol}/day</Text>
-            </HStack>
-
-            <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Budget</Text>
-              <Text fontWeight="medium">{formatCurrency(ethers.formatEther(metrics.budget))} {tokenSymbol}</Text>
-            </HStack>
-
-            <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Inflow</Text>
-              <Text fontWeight="medium">{formatCurrency(metrics.inflow)} {tokenSymbol}/day</Text>
-            </HStack>
-
-            <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Members</Text>
-              <Text fontWeight="medium">{metrics.memberCount}</Text>
-            </HStack>
-
-            <HStack justify="space-between">
-              <Text fontSize="sm" color={mutedColor}>Sub-Nodes</Text>
-              <Text fontWeight="medium">{node.childrenNodes.length}</Text>
-            </HStack>
-          </VStack>
-        </VStack>
-
-        {/* Right Section - Surface Map */}
-        <Box flex="1" h="100%" minH="300px">
-          <SunburstChart 
-            nodeData={node}
-            chainId={chainId}
-          />
-        </Box>
-      </HStack>
-                
-      {/* Path/Breadcrumbs
-      {node.rootPath.length > 0 && (
-        <HStack 
-          mt={6} 
-          spacing={2} 
-          overflow="auto" 
-          py={2}
-          sx={{
-            '&::-webkit-scrollbar': { height: '6px' },
-            '&::-webkit-scrollbar-thumb': { backgroundColor: 'gray.200', borderRadius: 'full' }
-          }}
-        >
-          {node.rootPath.map((pathNodeId, index) => (
-            <React.Fragment key={pathNodeId}>
-              {index > 0 && <ChevronRight size={14} color="gray.500" />}
-              <Tooltip
-                label={`View node details`}
-                placement="top"
-              >
-                <Badge
-                  px={2}
-                  py={1}
-                  cursor="pointer"
-                  onClick={() => onNodeSelect?.(pathNodeId)}
-                  _hover={{ bg: 'purple.50' }}
-                >
-                  {pathNodeId.slice(-6)}
-                </Badge>
+              <Tooltip label="Daily token creation rate for this node" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Inflation</Text>
               </Tooltip>
-            </React.Fragment>
-          ))}
+              <Text fontWeight="medium">{formatCurrency(metrics.inflation)} PSC/day</Text>
+            </HStack>
+            <HStack justify="space-between">
+              <Tooltip label="Amount of tokens held in node's own account" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Budget</Text>
+              </Tooltip>
+              <Text fontWeight="medium">{formatCurrency(metrics.budget)} PSC</Text>
+            </HStack>
+            <HStack justify="space-between">
+              <Tooltip label="Current per-second inflation rate" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Inflow Rate</Text>
+              </Tooltip>
+              <Text fontWeight="medium">{formatCurrency(metrics.inflow)} PSC/sec</Text>
+            </HStack>
+            <HStack justify="space-between">
+              <Tooltip label="Current balance available in the node's budget" fontSize="sm">
+                <Text fontSize="sm" color={mutedColor} cursor="help">Active Shares</Text>
+              </Tooltip>
+              <Text fontWeight="medium">{formatCurrency(metrics.availableShares)} PSC</Text>
+            </HStack>
+          </VStack>
+
+          <VStack flex="1" align="stretch" spacing={4}>
+            {metrics.membersList.length > 0 && (
+              <VStack align="stretch">
+                <Text fontSize="sm" color={mutedColor}>Members ({metrics.membersList.length})</Text>
+                <Box
+                  maxH="125px"
+                  overflowY="auto"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  borderColor={borderColor}
+                  p={2}
+                >
+                  {memberData.map((member, index) => (
+                    <Text 
+                      key={index} 
+                      fontSize="xs" 
+                      isTruncated 
+                      py={1}
+                      display="flex"
+                      alignItems="center"
+                    >
+                      {member.ensName || 
+                        `${member.address.slice(0, 6)}...${member.address.slice(-4)}`
+                      }
+                      {member.ensName && (
+                        <Text 
+                          as="span" 
+                          fontSize="xx-small" 
+                          color="gray.500" 
+                          ml={2}
+                        >
+                          ({`${member.address.slice(0, 6)}...${member.address.slice(-4)}`})
+                        </Text>
+                      )}
+                    </Text>
+                  ))}
+                </Box>
+              </VStack>
+            )}
+
+            {node.childrenNodes.length > 0 && (
+              <VStack align="stretch">
+                <Text fontSize="sm" color={mutedColor}>Sub-Nodes ({node.childrenNodes.length})</Text>
+                <Box
+                  maxH="125px"
+                  overflowY="auto"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  borderColor={borderColor}
+                  p={2}
+                >
+                  {node.childrenNodes.map((childId, index) => (
+                    <Text
+                      key={index}
+                      fontSize="xs"
+                      isTruncated
+                      py={1}
+                      cursor="pointer"
+                      onClick={() => {
+                      onNodeSelect?.(childId);
+                      router.push(`/nodes/${chainId}/${childId}`);
+                      }}
+                      _hover={{ color: 'purple.500', textDecoration: 'none' }}>
+                      {childId}
+                    </Text>
+                  ))}
+                </Box>
+              </VStack>
+            )}
+          </VStack>
+
+          <Box flex="1">
+            <SunburstChart
+              nodeData={node}
+              chainId={chainId}
+            />
+          </Box>
         </HStack>
-      )} */}
+      </Box>
     </Box>
   );
 };
+
 export default NodeInfo;
 
 
@@ -3509,19 +4879,172 @@ export const MembersList: React.FC<MembersListProps> = ({
 
 
 // File: ./components/Node/Movements.tsx
-import React from 'react';
-import { Box, Text, VStack } from '@chakra-ui/react';
+import React, { useState, useMemo, Suspense, lazy } from 'react';
+import { ethers } from 'ethers';
+import {
+  Box,
+  VStack,
+  HStack,
+  Button,
+  Text,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalCloseButton,
+  useToast,
+  Alert,
+  AlertIcon,
+  Skeleton,
+  useDisclosure,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th
+} from '@chakra-ui/react';
+import { Plus } from 'lucide-react';
+import { MovementType, NodeState } from '../../types/chainData';
+import { useMovements } from '../../hooks/useMovements';
+import { useEndpoints } from '../../hooks/useEndpoints';
+import { LazyLoadWrapper } from '../shared/LazyLoadWrapper';
+import { ErrorBoundary } from '../shared/ErrorBoundary';
 
-export const Movements = () => {
+// Lazy load components
+const MovementRow = lazy(() => import('./MovementRow'));
+const CreateMovementForm = lazy(() => import('./CreateMovementForm'));
+
+interface MovementsProps {
+  nodeId: string;
+  chainId: string;
+  nodeData: NodeState;
+}
+
+export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData }) => {
+  const toast = useToast();
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  
+  const {
+    movements,
+    descriptions,
+    signatures,
+    isLoading,
+    createMovement,
+    signMovement,
+    executeMovement
+  } = useMovements({ nodeId, chainId });
+  
+  // Load endpoint data in parallel
+  const { endpoints, isLoading: isLoadingEndpoints } = useEndpoints(nodeData, chainId);
+
+  const handleCreateMovement = async (formData: any) => {
+    try {
+      await createMovement(formData);
+      toast({
+        title: 'Success',
+        description: 'Movement created successfully',
+        status: 'success',
+        duration: 3000
+      });
+      onClose();
+    } catch (error) {
+      console.error('Movement creation error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create movement',
+        status: 'error',
+        duration: 5000
+      });
+    }
+  };
+
   return (
-    <Box p={6}>
-      <VStack align="stretch" spacing={4}>
+    <Box>
+      <HStack justify="space-between" mb={6}>
         <Text fontSize="lg" fontWeight="bold">Movements</Text>
-        <Text>Movement execution functionality coming soon...</Text>
-      </VStack>
+        <Button
+          leftIcon={<Plus size={16} />}
+          onClick={onOpen}
+          colorScheme="purple"
+          size="sm"
+          isLoading={isLoadingEndpoints}
+        >
+          Create Movement
+        </Button>
+      </HStack>
+
+      {isLoading ? (
+        <VStack spacing={4}>
+          <Skeleton height="50px" width="100%" />
+          <Skeleton height="50px" width="100%" />
+          <Skeleton height="50px" width="100%" />
+        </VStack>
+      ) : movements.length === 0 ? (
+        <Alert status="info">
+          <AlertIcon />
+          <Text>No active movements found</Text>
+        </Alert>
+      ) : (
+        <Table variant="simple">
+          <Thead>
+            <Tr>
+              <Th>Type</Th>
+              <Th>Description</Th>
+              <Th>Expiry</Th>
+              <Th>Status</Th>
+              <Th>Signatures</Th>
+              <Th>Actions</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {movements.map((movement) => (
+              <LazyLoadWrapper key={movement.movementHash} height="80px">
+                <MovementRow
+                  movement={movement}
+                  description={descriptions[movement.movement.descriptionHash] || ''}
+                  signatures={signatures[movement.movementHash] || { current: 0, required: 0 }}
+                  onSign={() => signMovement(movement)}
+                  onExecute={() => executeMovement(movement)}
+                />
+              </LazyLoadWrapper>
+            ))}
+          </Tbody>
+        </Table>
+      )}
+
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        size="xl"
+        closeOnOverlayClick={false}
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Create New Movement</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <LazyLoadWrapper height="400px">
+              <ErrorBoundary>
+                <CreateMovementForm
+                  nodeData={{
+                    ...nodeData,
+                    endpoints,
+                    isLoadingEndpoints
+                  }}
+                  onSubmit={handleCreateMovement}
+                  onClose={onClose}
+                />
+              </ErrorBoundary>
+            </LazyLoadWrapper>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 };
+
+export default Movements;
 
 
 
@@ -3739,10 +5262,6 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, onNodeClick }) => {
 };
 
 export default PlotlyChart;
-
-
-
-// File: ./components/Node/NodeDetails.tsx
 
 
 
@@ -4385,16 +5904,17 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 nodeId={nodeId}
                 parentId={child.nodeId}
                 childId={child.nodeId}
-                value={sliderValues[child.nodeId] }
+                value={sliderValues[child.nodeId]}
                 lastSignal={(child.currentSignal).toString()}
                 balance={child.eligibilityPerSecond}
                 eligibilityPerSecond={child.eligibilityPerSecond}
-                totalInflationPerSecond="0" // Add this from parent node data if available
+                totalInflationPerSecond="0"
                 onChange={(v) => handleSliderChange(child.nodeId, v)}
                 onChangeEnd={(v) => handleSliderChange(child.nodeId, v)}
                 isDisabled={isSubmitting}
                 selectedTokenColor="purple.500"
                 chainId={chainId}
+                totalAllocation={totalAllocation}
               />
             </VStack>
           </Box>
@@ -4603,8 +6123,7 @@ export interface SignalFormProps {
 
 
 // File: ./components/Node/SignalForm/SignalSlider.tsx
-import React, { memo } from 'react';
-import { useState, useCallback, useEffect } from 'react';
+import React, { memo, useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Slider,
@@ -4615,118 +6134,141 @@ import {
   HStack,
   Tooltip,
   VStack,
+  IconButton,
+  ButtonGroup,
 } from '@chakra-ui/react';
-import { formatBalance } from '../../../utils/formatters';
-import { formatUnits } from './utils';
+import { Plus, Minus } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
-import { getContract } from 'viem';
 import { useWillWeContract } from '../../../hooks/useWillWeContract';
 
-interface SignalSliderProps {
-  nodeId: string;
-  parentId: string;
-  childId: string;
-  value: number;
-  lastSignal: string;
-  balance: string;
-  eligibilityPerSecond: string;
-  totalInflationPerSecond: string;
-  onChange: (value: number) => void;
-  onChangeEnd: (value: number) => void;
-  isDisabled?: boolean;
-  selectedTokenColor: string;
-  chainId: string;
-  nodeName?: string;
-}
+const STEP_SIZE = 0.1;
 
-// Separate impact display component
-const EligibilityImpact = memo(({ impact }: { impact: string | null }) => {
+const EligibilityImpact = memo(({ 
+  impact, 
+  inflationRate,
+  parentBalance 
+}: { 
+  impact: string | null;
+  inflationRate: string;
+  parentBalance: string;
+}) => {
   if (!impact) return null;
+
+  const calculateScaledImpact = () => {
+    try {
+      // Convert all inputs to BigInt for precise calculation
+      const impactBN = BigInt(impact);
+      const inflationBN = BigInt(inflationRate);
+      const SECONDS_PER_DAY = BigInt(86400);
+      
+      // Calculate daily impact
+      // First multiply by seconds per day to get daily rate
+      let dailyImpact = impactBN * SECONDS_PER_DAY;
+      
+      // Convert to display format (18 decimals)
+      const displayValue = ethers.formatUnits(dailyImpact, 18);
+      return displayValue;
+    } catch (error) {
+      console.error('Error calculating scaled impact:', error);
+      return "0";
+    }
+  };
+
+  const scaledImpact = calculateScaledImpact();
+  const displayValue = parseFloat(scaledImpact).toFixed(4);
+
   return (
-    <Text fontSize="xs" color={parseFloat(impact) >= 0 ? "green.500" : "red.500"}>
-      Impact: {parseFloat(impact) >= 0 ? "+" : ""}
-      {formatUnits(impact, 10)} tokens/day
+    <Text fontSize="xs" color={parseFloat(displayValue) >= 0 ? "green.500" : "red.500"}>
+      Impact: {parseFloat(displayValue) >= 0 ? "+" : ""}
+      {displayValue} tokens/day
     </Text>
   );
 });
 
-// Add this line to fix the display-name error
 EligibilityImpact.displayName = 'EligibilityImpact';
 
-export const SignalSlider: React.FC<SignalSliderProps> = ({
-  nodeId,        // This is the parent/NodeDetails node id
-  parentId,      // This is the child/slider node id
+const SignalSlider = ({
+  nodeId,
+  parentId,
   value: externalValue,
   lastSignal,
   balance,
+  eligibilityPerSecond,
+  totalInflationPerSecond,
   onChange,
   onChangeEnd,
   isDisabled,
   selectedTokenColor,
   chainId,
   nodeName,
+  totalAllocation
 }) => {
   const { user } = usePrivy();
   const contract = useWillWeContract(chainId);
   const [localValue, setLocalValue] = useState(externalValue);
   const [eligibilityImpact, setEligibilityImpact] = useState<string | null>(null);
+  const [initialThumbValue, setInitialThumbValue] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [tempTotalAllocation, setTempTotalAllocation] = useState(totalAllocation);
 
-  // Convert basis points to percentage for display only - this should never change while sliding
-  const lastPreferencePercentage = (parseInt(lastSignal) / 100).toFixed(2);
+  const handleIncrement = useCallback(() => {
+    const newValue = Math.min(100, localValue + STEP_SIZE);
+    const newTotal = (totalAllocation - localValue + newValue);
+    if (newTotal <= 100) {
+      setLocalValue(newValue);
+      setTempTotalAllocation(newTotal);
+      onChange(newValue);
+      onChangeEnd(newValue);
+    }
+  }, [localValue, totalAllocation, onChange, onChangeEnd]);
 
-  // Update local value when external value changes
-  useEffect(() => {
-    setLocalValue(externalValue);
-  }, [externalValue]);
+  const handleDecrement = useCallback(() => {
+    const newValue = Math.max(0, localValue - STEP_SIZE);
+    setLocalValue(newValue);
+    setTempTotalAllocation(totalAllocation - localValue + newValue);
+    onChange(newValue);
+    onChangeEnd(newValue);
+  }, [localValue, totalAllocation, onChange, onChangeEnd]);
 
   const calculateEligibilityImpact = useCallback(async (newValue: number) => {
     if (!user?.wallet?.address || !contract) return;
+    
     try {
-      // Convert percentage to basis points for contract interaction
       const newValueBasis = Math.round(newValue * 100);
-      
-      let newEligibility, currentEligibility;
-      
-      try {
-        // Calculate current eligibility first (with last signal)
-        currentEligibility = await contract.calculateUserTargetedPreferenceAmount(
-          parentId,    // childId (slider node)
-          nodeId,      // parentId (NodeDetails node)
-          parseInt(lastSignal),
-          user.wallet.address
-        );
+      const lastSignalBasis = parseInt(lastSignal);
 
-        // Calculate new eligibility with the proposed signal value
-        newEligibility = await contract.calculateUserTargetedPreferenceAmount(
-          parentId,    // childId (slider node)
-          nodeId,      // parentId (NodeDetails node)
+      const [currentEligibility, newEligibility] = await Promise.all([
+        contract.calculateUserTargetedPreferenceAmount(
+          parentId,
+          nodeId,
+          lastSignalBasis,
+          user.wallet.address
+        ),
+        contract.calculateUserTargetedPreferenceAmount(
+          parentId,
+          nodeId,
           newValueBasis,
           user.wallet.address
-        );
+        )
+      ]);
 
-        // Calculate the difference
-        const impact = newEligibility - currentEligibility;
-        const formattedImpact = ethers.formatUnits(impact, 18);
-        // Calculate daily impact (multiply by seconds in a day)
-        const dailyImpact = parseFloat(formattedImpact) * (24 * 60 * 60);
-        setEligibilityImpact(dailyImpact.toString());
-      } catch (error) {
-        console.error('Error calculating eligibility:', error);
-        setEligibilityImpact("0");
-      }
+      const impact = newEligibility - currentEligibility;
+      setEligibilityImpact(impact.toString());
     } catch (error) {
-      console.error('Error in eligibility impact calculation:', error);
+      console.error('Error calculating eligibility:', error);
       setEligibilityImpact("0");
     }
   }, [nodeId, parentId, lastSignal, user?.wallet?.address, contract]);
 
-  // Handle local changes without propagating to parent immediately
   const handleChange = useCallback((v: number) => {
     setLocalValue(v);
-  }, []);
+    const diff = v - initialThumbValue;
+    const newTempTotal = totalAllocation + diff;
+    setTempTotalAllocation(newTempTotal);
+    onChange(v);
+  }, [onChange, initialThumbValue, totalAllocation]);
 
-  // Only notify parent when sliding ends
   const handleChangeEnd = useCallback((v: number) => {
     setLocalValue(v);
     onChange(v);
@@ -4734,31 +6276,78 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
     calculateEligibilityImpact(v);
   }, [onChange, onChangeEnd, calculateEligibilityImpact]);
 
+  const handleDragStart = () => {
+    setInitialThumbValue(localValue);
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  const calculateRemainingAllocation = () => {
+    if (!isDragging) {
+      return (100 - totalAllocation).toFixed(1);
+    }
+    const currentDiff = localValue - initialThumbValue;
+    const projectedTotal = totalAllocation + currentDiff;
+    return (100 - projectedTotal).toFixed(1);
+  };
+
   return (
     <VStack align="stretch" spacing={2} width="100%" mb={4}>
       <HStack justify="space-between">
         <Text fontSize="sm" color="gray.600">
-          Last Preference: {lastPreferencePercentage}%
+          Last Preference: {(parseInt(lastSignal) / 100).toFixed(2)}%
         </Text>
+        <ButtonGroup size="sm" spacing={1}>
+          <IconButton
+            aria-label="Decrease allocation"
+            icon={<Minus size={14} />}
+            onClick={handleDecrement}
+            isDisabled={isDisabled || localValue <= 0}
+            colorScheme="gray"
+            variant="ghost"
+          />
+          <IconButton
+            aria-label="Increase allocation"
+            icon={<Plus size={14} />}
+            onClick={handleIncrement}
+            isDisabled={isDisabled || tempTotalAllocation >= 100}
+            colorScheme="gray"
+            variant="ghost"
+          />
+        </ButtonGroup>
       </HStack>
 
       <Slider
         value={localValue}
         onChange={handleChange}
         onChangeEnd={handleChangeEnd}
+        onMouseDown={handleDragStart}
+        onMouseUp={handleDragEnd}
+        onTouchStart={handleDragStart}
+        onTouchEnd={handleDragEnd}
         min={0}
         max={100}
-        step={0.1}
+        step={STEP_SIZE}
         isDisabled={isDisabled}
       >
-        <SliderTrack 
-          bg={`${selectedTokenColor}20`} 
-          h="4px"
-        >
+        <SliderTrack bg={`${selectedTokenColor}20`} h="4px">
           <SliderFilledTrack bg={selectedTokenColor} />
         </SliderTrack>
         <Tooltip
-          label={`${localValue.toFixed(1)}%`}
+          label={
+            <VStack spacing={0} align="center">
+              <Text>{localValue.toFixed(1)}%</Text>
+              <Text
+                fontSize="xs"
+                color={calculateRemainingAllocation() < "0" ? "red.500" : "white"}
+              >
+                Remaining: {calculateRemainingAllocation()}%
+              </Text>
+            </VStack>
+          }
           placement="top"
           bg={selectedTokenColor}
         >
@@ -4774,14 +6363,18 @@ export const SignalSlider: React.FC<SignalSliderProps> = ({
         </Tooltip>
       </Slider>
 
-      <EligibilityImpact impact={eligibilityImpact} />
+      <EligibilityImpact 
+        impact={eligibilityImpact}
+        inflationRate={totalInflationPerSecond}
+        parentBalance={balance}
+      />
     </VStack>
   );
 };
 
 SignalSlider.displayName = 'SignalSlider';
 
-export default SignalSlider;
+export default memo(SignalSlider);
 
 
 
@@ -4921,6 +6514,671 @@ const NodeList: React.FC<NodeListProps> = ({
 };
 
 export default NodeList;
+
+
+
+// File: ./components/Node/MyEndpoint.tsx
+import React, { useState, useEffect } from 'react';
+import { ethers, Provider } from 'ethers';
+import { usePrivy } from '@privy-io/react-auth';
+import { useTransaction } from '../../contexts/TransactionContext';
+import { deployments } from '../../config/deployments';
+import { ABIs, getRPCUrl } from '../../config/contracts';
+import { NodeState } from '../../types/chainData';
+import {
+  Box,
+  Button,
+  VStack,
+  Text,
+  useToast,
+  Input,
+  Heading,
+  FormControl,
+  FormLabel,
+  Alert,
+  AlertIcon,
+  Divider,
+  Code,
+  IconButton,
+  HStack,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Stat,
+  StatLabel,
+  StatNumber,
+  Tooltip,
+  Select,
+  FormHelperText,
+} from '@chakra-ui/react';
+import { addressToNodeId, formatBalance, nodeIdToAddress } from '../../utils/formatters';
+import { Plus, Trash2, Play, Copy, AlertCircle } from 'lucide-react';
+import { RefreshCw, Wallet } from 'lucide-react';
+import { getEndpointActions, EndpointActionConfig } from '../../config/endpointActions';
+
+interface Call {
+  target: string;
+  callData: string;
+  value: string;
+}
+
+interface CurrentCallState extends Call {
+  actionType?: string;
+  params?: Record<string, any>;
+}
+
+interface MyEndpointProps {
+  nodeData: NodeState;
+  chainId: string;
+  onSuccess?: () => void;
+}
+
+export const MyEndpoint: React.FC<MyEndpointProps> = ({ 
+  nodeData, 
+  chainId,
+  onSuccess 
+}) => {
+  const { user } = usePrivy();
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [currentCall, setCurrentCall] = useState<CurrentCallState>({
+    target: '',
+    callData: '',
+    value: '0',
+    actionType: 'tokenTransfer',
+    params: {}
+  });
+  const [executionResult, setExecutionResult] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isBurning, setIsBurning] = useState(false);
+  const [rootTokenBalance, setRootTokenBalance] = useState<string>('0');
+  const [isRedistributing, setIsRedistributing] = useState(false);
+  const [endpointNodeData, setEndpointNodeData] = useState<NodeState | null>(null);
+  const { getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
+  const toast = useToast();
+  const [rootTokenSymbol, setRootTokenSymbol] = useState<string>('');
+
+  // Get endpoint address and membership status from nodeData
+  const endpointAddress = nodeData.basicInfo[10];  // endpoint address is at index 10
+  const endpointId = endpointAddress && endpointAddress !== ethers.ZeroAddress ? 
+    addressToNodeId(endpointAddress) : null;
+  const isMember = nodeData.membersOfNode.some(
+    member => member.toLowerCase() === user?.wallet?.address?.toLowerCase()
+  );
+  
+  const readProvider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+  const rootTokenAddress = nodeData.rootPath[0] ? nodeIdToAddress(nodeData.rootPath[0]) : null;
+
+  // Use root valuation reserve at index 5 instead of balance
+  const endpointBalance = Number(ethers.formatEther(nodeData.basicInfo[2])).toFixed(4);  // Use balance anchor (reserve)
+
+  useEffect(() => {
+    const fetchRootTokenBalance = async () => {
+      if (!endpointAddress || !rootTokenAddress) return;
+      
+      try {
+        const tokenContract = new ethers.Contract(
+          rootTokenAddress,
+          ABIs.IERC20,
+          readProvider
+        );
+        
+        const balance = await tokenContract.balanceOf(endpointAddress);
+        setRootTokenBalance(balance.toString());
+      } catch (error) {
+        console.error('Error fetching root token balance:', error);
+      }
+    };
+
+    fetchRootTokenBalance();
+  }, [endpointAddress, rootTokenAddress, readProvider]);
+
+  useEffect(() => {
+    const fetchEndpointData = async () => {
+      if (!endpointAddress || endpointAddress === ethers.ZeroAddress || !endpointId) return;
+      
+      try {
+        const willWeContract = new ethers.Contract(
+          deployments.WillWe[chainId.replace('eip155:', '')],
+          ABIs.WillWe,
+          readProvider
+        );
+
+        // Pass the window.ethereum address or zero address as fallback
+        const userAddress = window.ethereum?.selectedAddress || ethers.ZeroAddress;
+        const data = await willWeContract.getNodeData(endpointId, userAddress);
+        setEndpointNodeData(data);
+      } catch (error) {
+        console.error('Error fetching endpoint data:', error);
+      }
+    };
+
+    fetchEndpointData();
+  }, [endpointAddress, endpointId, chainId, readProvider]);
+
+  useEffect(() => {
+    const fetchRootTokenSymbol = async () => {
+      if (!rootTokenAddress) return;
+      
+      try {
+        const tokenContract = new ethers.Contract(
+          rootTokenAddress,
+          ABIs.IERC20,
+          readProvider
+        );
+        
+        const symbol = await tokenContract.symbol();
+        setRootTokenSymbol(symbol);
+      } catch (error) {
+        console.error('Error fetching root token symbol:', error);
+        setRootTokenSymbol('tokens');
+      }
+    };
+
+    fetchRootTokenSymbol();
+  }, [rootTokenAddress, readProvider]);
+
+  const deployEndpoint = async () => {
+    if (!isMember) {
+      toast({
+        title: 'Error',
+        description: 'You must be a member to create an endpoint',
+        status: 'error',
+        duration: 5000,
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const userAddress = await signer.getAddress();
+          
+          const contract = new ethers.Contract(
+            deployments.WillWe[chainId.replace('eip155:', '')],
+            ABIs.WillWe,
+            // @ts-ignore
+            signer
+          );
+          
+          return contract.createEndpointForOwner(nodeData.basicInfo[0], userAddress);
+        },
+        {
+          successMessage: 'Endpoint created successfully',
+          onSuccess: () => {
+            onSuccess?.();
+            toast({
+              title: 'Success',
+              description: 'Your endpoint has been created',
+              status: 'success',
+              duration: 5000,
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error creating endpoint:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create endpoint',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBurnPath = async () => {
+    if (isBurning || !rootTokenBalance || !endpointNodeData) return;
+    setIsBurning(true);
+
+    try {
+      const provider = getEthersProvider();
+      const signer = provider.getSigner();
+      const cleanChainId = chainId.replace('eip155:', '');
+      
+      const proxyContract = new ethers.Contract(
+        endpointAddress,
+        ABIs.PowerProxy,
+        // @ts-ignore
+        signer
+      );
+
+      const willWeContract = new ethers.Contract(
+        deployments.WillWe[cleanChainId],
+        ABIs.WillWe,
+        readProvider
+      );
+
+      // Use endpoint's node data for burn path
+      const burnCalldata = willWeContract.interface.encodeFunctionData('burnPath', [
+        nodeData.basicInfo[0],
+        endpointNodeData.basicInfo[5]
+      ]);
+
+      const calls = [{
+        target: deployments.WillWe[cleanChainId],
+        callData: burnCalldata,
+        value: '0'
+      }];
+
+      await executeTransaction(
+        chainId,
+        async () => {
+          return proxyContract.tryAggregate(true, calls);
+        },
+        {
+          successMessage: 'Successfully burned tokens through path',
+          onSuccess: () => {
+            setRootTokenBalance('0');
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to burn tokens:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to burn tokens',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsBurning(false);
+    }
+  };
+
+  const addCall = () => {
+    if (!currentCall.target || !currentCall.callData) {
+      toast({
+        title: 'Invalid call',
+        description: 'Target and call data are required',
+        status: 'warning',
+        duration: 3000,
+      });
+      return;
+    }
+    setCalls([...calls, currentCall]);
+    setCurrentCall({ target: '', callData: '', value: '0' });
+  };
+
+  const removeCall = (index: number) => {
+    setCalls(calls.filter((_, i) => i !== index));
+  };
+
+
+  const handleRedistribute = async () => {
+    if (isRedistributing || !endpointNodeData) return;
+    setIsRedistributing(true);
+  
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+  
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            contractAddress,
+            ABIs.WillWe,
+            signer as unknown as ethers.ContractRunner
+          );
+  
+          return contract.redistributePath(endpointId, { gasLimit: 500000 });
+        },
+        {
+          onSuccess: () => {
+            toast({
+              title: 'Redistribution complete',
+              description: 'Value has been redistributed from parent node to endpoint',
+              status: 'success',
+              duration: 5000,
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to redistribute:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to redistribute value',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsRedistributing(false);
+    }
+  };
+
+  const executeAggregatedCalls = async () => {
+    if (!endpointAddress || calls.length === 0) return;
+
+    setIsProcessing(true);
+    try {
+      await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const endpointContract = new ethers.Contract(
+            endpointAddress,
+            ABIs.PowerProxy,
+            // @ts-ignore
+            signer
+          );
+
+          const formattedCalls = calls.map(call => ({
+            target: call.target,
+            callData: call.callData,
+            value: ethers.parseEther(call.value || '0')
+          }));
+
+          return endpointContract.tryAggregate(true, formattedCalls);
+        },
+        {
+          successMessage: 'Calls executed successfully',
+          onSuccess: () => {
+            setExecutionResult('Execution successful');
+            setCalls([]);
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error executing calls:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to execute calls',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // If not a member, show membership required message
+  if (!isMember) {
+    return (
+      <Alert 
+        status="warning" 
+        variant="subtle"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        textAlign="center"
+        height="200px"
+        borderRadius="lg"
+      >
+        <AlertCircle size={40} />
+        <Text mt={4} fontSize="lg" fontWeight="medium">
+          Membership Required
+        </Text>
+        <Text mt={2}>
+          You need to be a member of this node to create and manage an endpoint.
+        </Text>
+      </Alert>
+    );
+  }
+
+  // If no endpoint exists, show creation option
+  if (!endpointAddress || endpointAddress === ethers.ZeroAddress) {
+    return (
+      <VStack spacing={6} align="stretch">
+        <Alert status="info" borderRadius="md">
+          <AlertIcon />
+          <VStack align="start" spacing={2}>
+            <Text fontWeight="medium">No Endpoint Found</Text>
+            <Text fontSize="sm">
+              Create an endpoint to execute transactions on behalf of this node.
+            </Text>
+          </VStack>
+        </Alert>
+
+        <Button
+          colorScheme="blue"
+          onClick={deployEndpoint}
+          isLoading={isProcessing}
+          loadingText="Creating..."
+        >
+          Create Endpoint
+        </Button>
+      </VStack>
+    );
+  }
+
+  // Main endpoint management interface
+  return (
+    <VStack spacing={6} align="stretch">
+      <Box 
+        p={4} 
+        borderRadius="md" 
+        bg="gray.50" 
+        border="1px" 
+        borderColor="gray.200"
+      >
+        <HStack justify="space-between">
+          <VStack align="start" spacing={1}>
+            <Text fontSize="sm" color="gray.600">Your Endpoint Address</Text>
+            <Code fontSize="sm">{endpointAddress}</Code>
+          </VStack>
+          <IconButton
+            aria-label="Copy endpoint address"
+            icon={<Copy size={16} />}
+            size="sm"
+            onClick={() => {
+              navigator.clipboard.writeText(endpointAddress);
+              toast({
+                title: 'Copied',
+                status: 'success',
+                duration: 2000,
+              });
+            }}
+          />
+        </HStack>
+      </Box>
+
+      <HStack spacing={8} justify="center">
+        <Stat>
+          <StatLabel>Endpoint Budget</StatLabel>
+          <StatNumber>
+            {endpointNodeData ? Number(ethers.formatEther(endpointNodeData.basicInfo[5])).toFixed(4) : '0'} {rootTokenSymbol}
+          </StatNumber>
+        </Stat>
+        
+        <Stat>
+          <StatLabel>Root Token Balance</StatLabel>
+          <StatNumber>{Number(formatBalance(rootTokenBalance)).toFixed(4)} {rootTokenSymbol}</StatNumber>
+        </Stat>
+      </HStack>
+
+      <HStack justify="center">
+        <Button
+          leftIcon={<RefreshCw size={16} />}
+          onClick={handleRedistribute}
+          isLoading={isRedistributing}
+          loadingText="Redistributing..."
+          colorScheme="purple"
+          size="md"
+        >
+          Redistribute to Endpoint
+        </Button>
+        
+        {endpointNodeData && (
+          <Tooltip label={parseFloat(ethers.formatEther(endpointNodeData.basicInfo[5])) <= 0 ? "No budget available to burn" : ""}>
+            <Button
+              leftIcon={<Wallet size={16} />}
+              onClick={handleBurnPath}
+              isLoading={isBurning}
+              loadingText="Burning..."
+              colorScheme="red"
+              size="md"
+              isDisabled={parseFloat(ethers.formatEther(endpointNodeData.basicInfo[5])) <= 0}
+            >
+              Withdraw All to Endpoint
+            </Button>
+          </Tooltip>
+        )}
+      </HStack>
+
+      <Divider />
+
+      <Box>
+        <Heading size="sm" mb={4}>Execute Multiple Calls</Heading>
+        
+        <VStack spacing={4} mb={6}>
+          <FormControl>
+            <FormLabel>Action Type</FormLabel>
+            <Select 
+              value={currentCall.actionType || 'tokenTransfer'}
+              onChange={(e) => {
+                setCurrentCall({
+                  target: '',
+                  callData: '',
+                  value: '0',
+                  actionType: e.target.value,
+                  params: {}
+                });
+              }}
+            >
+              {rootTokenAddress && getEndpointActions(rootTokenAddress, rootTokenSymbol).map(action => (
+                <option key={action.id} value={action.id}>
+                  {action.label}
+                </option>
+              ))}
+            </Select>
+            <FormHelperText>
+              {currentCall.actionType && 
+                getEndpointActions(rootTokenAddress || '', rootTokenSymbol)[
+                  getEndpointActions(rootTokenAddress || '', rootTokenSymbol).findIndex(a => a.id === currentCall.actionType)
+                ]?.description
+              }
+            </FormHelperText>
+          </FormControl>
+
+          {currentCall.actionType && getEndpointActions(rootTokenAddress || '', rootTokenSymbol).map(action => {
+            if (action.id !== currentCall.actionType) return null;
+            
+            return (
+              <React.Fragment key={action.id}>
+                {action.fields.map(field => (
+                  <FormControl key={field.name} isRequired={field.required}>
+                    <FormLabel>{field.label}</FormLabel>
+                    <Input
+                      type={field.type === 'number' ? 'number' : 'text'}
+                      value={currentCall.params?.[field.name] || ''}
+                      onChange={(e) => setCurrentCall({
+                        ...currentCall,
+                        params: {
+                          ...currentCall.params,
+                          [field.name]: e.target.value
+                        }
+                      })}
+                      placeholder={field.placeholder}
+                    />
+                  </FormControl>
+                ))}
+              </React.Fragment>
+            );
+          })}
+
+          <Button
+            leftIcon={<Plus size={16} />}
+            onClick={() => {
+              const action = getEndpointActions(rootTokenAddress || '', rootTokenSymbol).find(
+                a => a.id === currentCall.actionType
+              );
+              if (!action) return;
+              
+              const callData = action.getCallData(currentCall.params || {});
+              setCalls([...calls, callData]);
+              setCurrentCall({
+                target: '',
+                callData: '',
+                value: '0',
+                actionType: currentCall.actionType,
+                params: {}
+              });
+            }}
+            colorScheme="blue"
+            size="sm"
+            isDisabled={!currentCall.actionType}
+          >
+            Add Call
+          </Button>
+        </VStack>
+
+        {calls.length > 0 && (
+          <Box overflowX="auto">
+            <Table size="sm" mb={4}>
+              <Thead>
+                <Tr>
+                  <Th>Target</Th>
+                  <Th>Call Data</Th>
+                  <Th>Value</Th>
+                  <Th></Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {calls.map((call, index) => (
+                  <Tr key={index}>
+                    <Td><Code fontSize="xs">{call.target.slice(0, 10)}...</Code></Td>
+                    <Td><Code fontSize="xs">{call.callData.slice(0, 10)}...</Code></Td>
+                    <Td>{call.value} ETH</Td>
+                    <Td>
+                      <IconButton
+                        aria-label="Remove call"
+                        icon={<Trash2 size={14} />}
+                        size="xs"
+                        colorScheme="red"
+                        variant="ghost"
+                        onClick={() => removeCall(index)}
+                      />
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+
+            <Button
+              leftIcon={<Play size={16} />}
+              onClick={executeAggregatedCalls}
+              colorScheme="green"
+              isLoading={isProcessing}
+              loadingText="Executing..."
+              isDisabled={calls.length === 0}
+            >
+              Execute All Calls
+            </Button>
+          </Box>
+        )}
+
+        {executionResult && (
+          <Box mt={4}>
+            <Heading size="sm" mb={2}>Execution Result</Heading>
+            <Code display="block" whiteSpace="pre" p={4} borderRadius="md" bg="gray.50">
+              {executionResult}
+            </Code>
+          </Box>
+        )}
+      </Box>
+    </VStack>
+  );
+};
+
+export default MyEndpoint;
 
 
 
@@ -5854,6 +8112,7 @@ export * from './StatusIndicator';
 
 
 // File: ./components/TokenOperations/TokenValueOperations.tsx
+// File path: components/TokenOperations/TokenValueOperations.tsx
 import React, { useState, useCallback } from 'react';
 import { ethers } from 'ethers';
 import {
@@ -6526,6 +8785,32 @@ export const OperationForm: React.FC<OperationFormProps> = ({
 
 
 
+// File: ./components/shared/LazyLoadWrapper.tsx
+import React from 'react';
+import { Box, Skeleton, VStack } from '@chakra-ui/react';
+
+interface LazyLoadWrapperProps {
+  height?: string | number;
+  children: React.ReactNode;
+}
+
+export const LazyLoadWrapper: React.FC<LazyLoadWrapperProps> = ({ 
+  height = '400px',
+  children 
+}) => (
+  <React.Suspense
+    fallback={
+      <VStack spacing={4}>
+        <Skeleton height={height} width="100%" borderRadius="md" />
+      </VStack>
+    }
+  >
+    {children}
+  </React.Suspense>
+);
+
+
+
 // File: ./components/shared/ErrorState.tsx
 import React from 'react';
 import { Alert, AlertIcon, Text, Button, Box } from '@chakra-ui/react';
@@ -6676,6 +8961,55 @@ export default StatsCards;
 
 
 
+// File: ./components/shared/ErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Box, Text, Button } from '@chakra-ui/react';
+
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Uncaught error:', error, errorInfo);
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <Box p={4} borderRadius="md" bg="red.50">
+          <Text color="red.500">Something went wrong. Please try again.</Text>
+          <Button
+            mt={2}
+            size="sm"
+            colorScheme="red"
+            onClick={() => this.setState({ hasError: false })}
+          >
+            Try again
+          </Button>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+
+
 // File: ./components/shared/LoadingState.tsx
 import React from 'react';
 import { VStack, Spinner, Text, Box } from '@chakra-ui/react';
@@ -6821,13 +9155,16 @@ export const TransactionHandler: React.FC<TransactionHandlerProps> = ({ children
 
 // File: ./components/Layout/PaletteButton.tsx
 import React, { useState, useEffect } from 'react';
-import { IconButton, IconButtonProps, useToken } from '@chakra-ui/react';
-import { Palette } from 'lucide-react';
+import { useToken } from '@chakra-ui/react';
+import Image from 'next/image';
+import Link from 'next/link';
+import logoSrc from '../../public/logos/logo.png';
 
-interface PaletteButtonProps extends Omit<IconButtonProps, 'aria-label'> {
+interface PaletteButtonProps {
   cycleColors: () => void;
   contrastingColor: string;
   reverseColor: string;
+  className?: string;
 }
 
 export const PaletteButton: React.FC<PaletteButtonProps> = ({
@@ -6839,7 +9176,6 @@ export const PaletteButton: React.FC<PaletteButtonProps> = ({
   const [isHovering, setIsHovering] = useState(false);
   const [baseColor] = useToken('colors', [contrastingColor]);
 
-  // Set up auto-cycling on hover
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     if (isHovering) {
@@ -6851,30 +9187,34 @@ export const PaletteButton: React.FC<PaletteButtonProps> = ({
   }, [isHovering, cycleColors]);
 
   return (
-    <IconButton
-      aria-label="Cycle Colors"
-      icon={<Palette size={18} />}
+    <Link
+      href="/"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '9999px',
+        color: reverseColor,
+        backgroundColor: baseColor,
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
       onClick={cycleColors}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      size="md"
-      isRound
-      color={reverseColor}
-      bg={baseColor}
-      _hover={{ 
-        bg: reverseColor, 
-        color: baseColor,
-        transform: 'translateY(-1px)',
-      }}
-      _active={{
-        bg: reverseColor,
-        color: baseColor,
-        transform: 'translateY(0px)',
-      }}
-      transition="all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
-      boxShadow="sm"
       {...props}
-    />
+    >
+      <Image 
+        src={logoSrc} 
+        alt="Logo" 
+        width={66} 
+        height={66}
+        style={{ 
+          transform: isHovering ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s ease-in-out',
+          filter: 'brightness(0) saturate(100%)',
+        }}
+      />
+    </Link>
   );
 };
 
@@ -8232,6 +10572,7 @@ import { NodeFilters } from './Node/NodeFilters';
 import { NodeActions } from './Node/NodeActions';
 import { TokenNameDisplay } from './Token/TokenNameDisplay';
 import { useWillWeContract } from '../hooks/useWillWeContract';
+import { NodeOperations } from './Node/NodeOperations';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -8254,6 +10595,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   error,
   onRefresh
 }) => {
+  const [showSpawnModal, setShowSpawnModal] = useState(false);
   const toast = useToast();
   const { getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
@@ -8263,7 +10605,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   const willweContract = useWillWeContract(chainId);
   const [totalSupplyValue, setTotalSupplyValue] = useState<bigint>(BigInt(0));
 
-  // Fetch total supply
   useEffect(() => {
     const fetchTotalSupply = async () => {
       if (!selectedToken || !willweContract) return;
@@ -8272,12 +10613,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         const supply = await willweContract.totalSupply(tokenId);
         setTotalSupplyValue(supply);
       } catch (error) {
-        console.error('Error fetching total supply:', {
-          error,
-          contractAddress: willweContract.target,
-          tokenId: selectedToken,
-          abi: ABIs.WillWe
-        });
+        console.error('Error fetching total supply:', error);
       }
     };
 
@@ -8286,7 +10622,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     }
   }, [selectedToken, willweContract]);
 
-  // Calculate stats and organize nodes
   const {
     baseNodes,
     derivedNodes,
@@ -8306,25 +10641,20 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       averageExpense: 0
     };
 
-    // Organize nodes into base and derived
     const base = nodes.filter(node => node.rootPath.length === 1);
     const derived = nodes.filter(node => node.rootPath.length > 1);
 
-    // Calculate unique members (addresses)
     const uniqueAddresses = new Set<string>();
     nodes.forEach(node => {
       if (node.membersOfNode) {
-        const members = node.membersOfNode;
-        members.forEach((member: string) => uniqueAddresses.add(member));
+        node.membersOfNode.forEach((member: string) => uniqueAddresses.add(member));
       }
     });
 
-    // Calculate max depth
     const depth = nodes.reduce((max, node) => {
       return node.rootPath ? Math.max(max, node.rootPath.length) : max;
     }, 0);
 
-    // Calculate average expense per day (convert from gwei/sec to ether/day)
     const totalExpensePerSec = nodes.reduce((sum, node) => {
       const expensePerSec = node.basicInfo?.[1] ? BigInt(node.basicInfo[1]) : BigInt(0);
       return sum + expensePerSec;
@@ -8335,10 +10665,8 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       Number(totalExpensePerSec) / nodesWithExpense : 
       0;
     
-    // Convert gwei/sec to ether/day
     const avgExpensePerDay = (avgExpensePerSecGwei * 86400) / 1e9;
 
-    // Calculate node value percentages based on total supply
     const values: Record<string, number> = {};
     if (totalSupplyValue > BigInt(0)) {
       nodes.forEach(node => {
@@ -8362,61 +10690,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       averageExpense: avgExpensePerDay
     };
   }, [nodes, selectedToken, totalSupplyValue]);
-
-  // Handle spawning a new root node
-  const handleSpawnNode = useCallback(async () => {
-    if (!selectedToken) {
-      toast({
-        title: "Error",
-        description: "Please select a token first",
-        status: "error",
-        duration: 3000
-      });
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const cleanChainId = chainId.replace('eip155:', '');
-          const contract = new ethers.Contract(
-            deployments.WillWe[cleanChainId],
-            ABIs.WillWe,
-            signer as unknown as ethers.ContractRunner
-          );
-
-          return contract.spawnBranch(selectedToken, { gasLimit: 500000 });
-        },
-        {
-          successMessage: 'New node created successfully',
-          errorMessage: 'Failed to create node',
-          onSuccess: async () => {
-            if (onRefresh) {
-              await onRefresh();
-            }
-          }
-        }
-      );
-    } catch (error: any) {
-      console.error('Error spawning node:', error);
-      toast({
-        title: "Failed to Create Node",
-        description: error.message,
-        status: "error",
-        duration: 5000,
-        icon: <AlertTriangle size={16} />
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [chainId, selectedToken, getEthersProvider, executeTransaction, toast, onRefresh]);
-
-
 
   if (isLoading) {
     return (
@@ -8464,21 +10737,19 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     );
   }
 
-
   return (
     <Flex 
       direction="column" 
-      h="calc(100vh - 80px)" // Adjust this value based on your navbar/header height
+      h="calc(100vh - 80px)"
       bg="white" 
       rounded="xl" 
       shadow="sm"
-      overflow="hidden" // Prevents content from spilling out
+      overflow="hidden"
     >
-      {/* Fixed Header Section */}
       <Box p={4} borderBottom="1px" borderColor="gray.100">
         <HStack justify="space-between" mb={4}>
           <NodeActions
-            onSpawnNode={handleSpawnNode}
+            onSpawnNode={() => setShowSpawnModal(true)}
             isProcessing={isProcessing}
             selectedToken={selectedToken}
             userAddress={userAddress}
@@ -8492,7 +10763,6 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           )}
         </HStack>
 
-        {/* Adjusted Stats Cards */}
         <Grid 
           templateColumns="repeat(5, 1fr)"
           gap={3}
@@ -8501,7 +10771,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         >
           <StatsCard
             title="Total Value"
-            value={formatBalance(totalSupplyValue)}
+            value={Number(formatBalance(totalSupplyValue)).toFixed(3)}
             icon={<Wallet size={14} />}
             color="purple"
             tooltip="Total supply of the token"
@@ -8533,7 +10803,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           />
           <StatsCard
             title="Average Expense"
-            value={averageExpense.toFixed(6)}
+            value={formatBalance(averageExpense.toString())}
             icon={<Wallet size={14} />}
             color="red"
             tooltip="Average expense per node in ETH/day"
@@ -8542,13 +10812,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         </Grid>
       </Box>
 
-      {/* Scrollable Content Section */}
-      <Flex 
-        direction="column" 
-        flex="1"
-        overflow="hidden"
-      >
-        {/* Filters - Fixed below header */}
+      <Flex direction="column" flex="1" overflow="hidden">
         <Box px={6} py={4} borderBottom="1px" borderColor="gray.100">
           <NodeFilters
             nodes={nodes}
@@ -8558,52 +10822,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           />
         </Box>
 
-        {/* Scrollable Node Content */}
-        <Box 
-          flex="1"
-          overflowY="auto"
-          px={6}
-          py={4}
-          pb={20}
-          sx={{
-            '&::-webkit-scrollbar': {
-              width: '8px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(0, 0, 0, 0.05)',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'rgba(0, 0, 0, 0.1)',
-              borderRadius: '8px',
-              '&:hover': {
-                backgroundColor: 'rgba(0, 0, 0, 0.15)',
-              },
-            },
-            // Add these styles to create a more distinct hierarchy
-            '.node-level-0': {
-              borderLeft: '0px solid',
-              ml: '0',
-            },
-            '.node-level-1': {
-              borderLeft: '2px solid',
-              borderColor: 'gray.200',
-              ml: '2',
-              pl: '4',
-            },
-            '.node-level-2': {
-              borderLeft: '2px solid',
-              borderColor: 'gray.300',
-              ml: '4',
-              pl: '4',
-            },
-            '.node-level-3': {
-              borderLeft: '2px solid',
-              borderColor: 'gray.400',
-              ml: '6',
-              pl: '4',
-            },
-            // Add more levels if needed
-          }}
-        >
+        <Box flex="1" overflowY="auto" px={6} py={4} pb={20}>
           {nodes.length === 0 ? (
             <Box 
               p={8} 
@@ -8615,32 +10834,58 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             >
               <VStack spacing={4}>
                 <Text color="gray.600">
-                  No nodes found. Create a new root node to get started.
+                  No nodes found. Create a new node to get started.
                 </Text>
+
                 <Button
-                  leftIcon={<Plus size={16} />}
-                  onClick={handleSpawnNode}
-                  colorScheme="purple"
-                  isLoading={isProcessing}
-                  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
-                >
-                  Create Root Node
-                </Button>
+  leftIcon={<Plus size={16} />}
+  onClick={() => {
+    if (!selectedToken) {
+      toast({
+        title: "Error",
+        description: "Invalid root token selected",
+        status: "error",
+        duration: 5000,
+      });
+      return;
+    }
+    setShowSpawnModal(true);
+  }}
+  colorScheme="purple"
+  isLoading={isProcessing}
+  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
+>
+  Create Node
+</Button>
+
               </VStack>
             </Box>
           ) : (
             <Box pb={16}>
-    <SankeyChart
-      nodes={nodes}
-      selectedTokenColor={selectedTokenColor}
-      onNodeSelect={onNodeSelect}
-      nodeValues={nodeValues}
-      chainId={chainId}
-    />
+              <SankeyChart
+                nodes={nodes}
+                selectedTokenColor={selectedTokenColor}
+                onNodeSelect={onNodeSelect}
+                nodeValues={nodeValues}
+                chainId={chainId}
+              />
             </Box>
           )}
         </Box>
       </Flex>
+
+      <NodeOperations
+  nodeId={selectedToken}
+  chainId={chainId}
+  selectedTokenColor={selectedTokenColor}
+  userAddress={userAddress}
+  onSuccess={() => {
+    setShowSpawnModal(false);
+    if (onRefresh) onRefresh();
+  }}
+  initialTab={showSpawnModal ? 'spawn' : null}
+  showToolbar={false}
+/>
     </Flex>
   );
 };
@@ -9166,57 +11411,54 @@ import SignalForm from './Node/SignalForm/index';
 import NodeInfo from './Node/NodeInfo';
 import { SignalHistory } from './Node/SignalHistory';
 import { Movements } from './Node/Movements';
-import { ActivitySection } from './Node/Activity';
+import { ActivitySection } from './Node/ActivitySection';
 import { Chat } from './Node/Chat';
+import { MyEndpoint } from './Node/MyEndpoint';
+import { EndpointComponent } from './Node/EndpointComponent';
+import { MovementsErrorBoundary } from './Node/MovementsErrorBoundary';
+
 import { 
   Signal, 
   Activity,
   MessageCircle,
   ArrowUpDown,
   Plus,
-  PlusCircle,
-  Share2,
   ArrowRight,
-  Shuffle,
   GitBranch,
-  Shield,
-  UserPlus,
-  Trash,
-  RefreshCw,
+  Monitor,
 } from 'lucide-react';
+import { nodeIdToAddress } from '../utils/formatters';
 
 interface NodeDetailsProps {
   chainId: string;
   nodeId: string;
-  onNodeSelect?: (nodeId: string) => void;
   selectedTokenColor: string;
 }
 
 const NodeDetails: React.FC<NodeDetailsProps> = ({
   chainId,
   nodeId,
-  onNodeSelect,
   selectedTokenColor,
 }) => {
-  // 1. Context hooks
   const { user } = usePrivy();
   const { isOpen, onOpen, onClose } = useDisclosure();
   
-  // 2. State hooks
   const cleanChainId = chainId?.replace('eip155:', '') || '';
-  const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, nodeId);
+  const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, user?.wallet?.address, nodeId);
   
-  // 3. Color mode hooks  
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const permissionsBg = useColorModeValue('gray.50', 'gray.900');
-
-  // 4. Callbacks
+  
   const refetch = useCallback(() => {
     fetchNodeData();
   }, [fetchNodeData]);
 
-  // Loading state
+  console.log('NodeData:', nodeData);
+  // Add check for endpoint
+  const isEndpoint = nodeData?.basicInfo && 
+    nodeData.rootPath[0].slice(0, 12) !== nodeData.basicInfo[0].slice(0, 12); // root node id
+
   if (isLoading) {
     return (
       <VStack spacing={4} align="stretch" p={6}>
@@ -9227,7 +11469,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
-  // Error state
   if (error) {
     return (
       <Alert status="error">
@@ -9237,7 +11478,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     );
   }
 
-  // No data state
   if (!nodeData?.basicInfo) {
     return (
       <Alert status="warning">
@@ -9246,9 +11486,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       </Alert>
     );
   }
-
-  const tokenSymbol = Array.isArray(nodeData?.basicInfo) && nodeData.basicInfo.length > 1 ? nodeData.basicInfo[1] : '';
-
 
   return (
     <Box
@@ -9262,7 +11499,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       flexDirection="column"
       shadow="md"
     >
-      {/* Node Info Section with improved styling */}
       <Box 
         borderBottom="1px solid" 
         borderColor={borderColor}
@@ -9275,103 +11511,114 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         <NodeInfo 
           node={nodeData} 
           chainId={chainId}
-          onNodeSelect={onNodeSelect}
         />
       </Box>
 
-      {/* Operations Toolbar */}
-      <NodeOperations
-        nodeId={nodeId}
-        chainId={chainId}
-        selectedTokenColor={selectedTokenColor}
-        onSuccess={refetch}
-      />
+      {isEndpoint ? (
+        <EndpointComponent parentNodeId={nodeData.rootPath[nodeData.rootPath.length - 1]} chainId={chainId} nodeData={nodeData} userAddress={user?.wallet?.address} />
+      ) : (
+        <>
+          <NodeOperations
+            nodeId={nodeId}
+            chainId={chainId}
+            selectedTokenColor={selectedTokenColor}
+            userAddress={user?.wallet?.address}
+            onSuccess={refetch}
+            showToolbar={true}
+          />
 
-      {/* Main Content */}
-      <Box flex="1" overflow="auto">
-        <Tabs 
-          className="tabs"
-          sx={{
-            '.chakra-tabs__tab-panel': {
-              p: 0
-            }
-          }}
-        >
-          <TabList 
-            px={6} 
-            borderBottomColor={borderColor}
-            bg={useColorModeValue('gray.50', 'gray.900')}
-          >
-            <Tab><HStack spacing={2}><ArrowUpDown size={14} /><Text>Signals</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><ArrowRight size={14} /><Text>Movements</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><Activity size={14} /><Text>Activity</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><MessageCircle size={14} /><Text>Chat</Text></HStack></Tab>
-          </TabList>
+          <Box flex="1" overflow="auto">
+            <Tabs 
+              className="tabs"
+              sx={{
+                '.chakra-tabs__tab-panel': {
+                  p: 0
+                }
+              }}
+            >
+              <TabList 
+                px={6} 
+                borderBottomColor={borderColor}
+                bg={useColorModeValue('gray.50', 'gray.900')}
+              >
+                <Tab><HStack spacing={2}><ArrowUpDown size={14} /><Text>Signal</Text></HStack></Tab>
+                <Tab><HStack spacing={2}><ArrowRight size={14} /><Text>Moves</Text></HStack></Tab>
+                <Tab><HStack spacing={2}><Activity size={14} /><Text>Activity</Text></HStack></Tab>
+                <Tab><HStack spacing={2}><MessageCircle size={14} /><Text>Chat</Text></HStack></Tab>
+                <Tab><HStack spacing={2}><Monitor size={14} /><Text>Endpoint</Text></HStack></Tab>
+              </TabList>
 
-          <TabPanels>
-            <TabPanel p={6}>
-              <VStack align="stretch" spacing={8} maxW="900px" mx="auto">
-                {nodeData?.basicInfo && (
-                  <>
-                    <SignalForm
-                      chainId={cleanChainId}
-                      nodeId={nodeId}
-                      parentNodeData={nodeData}
-                      onSuccess={refetch}
-                    />
-                    {Array.isArray(nodeData.signals) && nodeData.signals.length > 0 && (
-                      <SignalHistory 
-                        signals={nodeData.signals} 
-                        selectedTokenColor={selectedTokenColor}
-                      />
+              <TabPanels>
+                <TabPanel p={6}>
+                  <VStack align="stretch" spacing={8} maxW="900px" mx="auto">
+                    {nodeData?.basicInfo && (
+                      <>
+                        <SignalForm
+                          chainId={cleanChainId}
+                          nodeId={nodeId}
+                          parentNodeData={nodeData}
+                          onSuccess={refetch}
+                        />
+                       
+                      </>
                     )}
-                  </>
-                )}
-              </VStack>
-            </TabPanel>
+                  </VStack>
+                </TabPanel>
 
-            <TabPanel p={6}>
-              <Box maxW="900px" mx="auto">
-                <Movements />
-              </Box>
-            </TabPanel>
+                <TabPanel p={6}>
+                  <Box maxW="900px" mx="auto">
+                    <MovementsErrorBoundary>
+                      <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} nodeData={nodeData} />
+                    </MovementsErrorBoundary>
+                  </Box>
+                </TabPanel>
 
-            <TabPanel p={6}>
-              <Box maxW="900px" mx="auto">
-                <ActivitySection />
-              </Box>
-            </TabPanel>
+                <TabPanel p={6}>
+                  <Box maxW="900px" mx="auto">
+                  <ActivitySection 
+                    signals={nodeData.signals} 
+                    selectedTokenColor={selectedTokenColor}
+                  />
+                  </Box>
+                </TabPanel>
 
-            <TabPanel p={6}>
-              <Box maxW="900px" mx="auto">
-                <Chat />
-              </Box>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
-      </Box>
+                <TabPanel p={6}>
+                  <Box maxW="900px" mx="auto">
+                    <Chat />
+                  </Box>
+                </TabPanel>
 
-      {/* Permissions Footer with improved styling */}
-      { user?.wallet?.address && (
-        <Box 
-          p={6} 
-          bg={permissionsBg}
-          borderTop="1px solid"
-          borderColor={borderColor}
-          position="sticky"
-          bottom={0}
-          zIndex={1}
-        >
-          <HStack justify="space-between" align="center">
-            <Text fontWeight="medium">Permissions</Text>
-            <HStack spacing={2} wrap="wrap">
-              <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Mint</Badge>
-              <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Burn</Badge>
-              <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Signal</Badge>
-              <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Redistribute</Badge>
-            </HStack>
-          </HStack>
-        </Box>
+                <TabPanel p={6}>
+                  <Box maxW="900px" mx="auto">
+                    <MyEndpoint nodeData={nodeData} chainId={chainId} onSuccess={refetch} />
+                  </Box>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+          </Box>
+
+          {user?.wallet?.address && (
+            <Box 
+              p={6} 
+              bg={permissionsBg}
+              borderTop="1px solid"
+              borderColor={borderColor}
+              position="sticky"
+              bottom={0}
+              zIndex={1}
+            >
+              <HStack justify="space-between" align="center">
+                <Text fontWeight="medium">Permissions</Text>
+                <HStack spacing={2} wrap="wrap">
+                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Mint</Badge>
+                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Burn</Badge>
+                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Signal</Badge>
+                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Redistribute</Badge>
+                </HStack>
+              </HStack>
+            </Box>
+          )}
+        </>
       )}
     </Box>
   );
@@ -10082,6 +12329,9 @@ export const getRPCUrl = (chainId: string): string => {
   let url;
   const cleanChainId = chainId.includes('eip') ? chainId.toString().replace('eip155:', '') : chainId
   switch (cleanChainId) {
+    case '1': // Mainnet
+      url = process.env.NEXT_PUBLIC_RPC_URL_MAINNET;
+      break;
     case '84532': // Base Sepolia
       url = process.env.NEXT_PUBLIC_RPC_URL_BASE_SEPOLIA;
       break;
@@ -10172,47 +12422,37 @@ import { Network } from 'alchemy-sdk';
 type Deployments = { [key: string]: { [key: string]: string } };
 type ABIKP = { [key: string]: InterfaceAbi };
 
-// Hekla
-// ###############################
-// Foundation Agent Safe at:  0xE9a6CaCD129732dc840051676e9cab2490dbE851
-// Will:  0x82Cb12995f4861D317a6C7C72917BE3C243222a6
-// Membrane:  0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac
-// Execution:  0x3d7A9839935333C7C373e1338C12B593F78318D3
-// WillWe:  0x88AB91578876A7fC13F9F4A9332083Ddfb062049
-// ###############################
-
-// OP sepolia
-// ###############################
-//   ###############################
-//   Foundation Agent Safe at:  0x0000000000000000000000000000000000000000
-//   Will:  0x99e612d393a89798dDDE4903040659a3ae9E5932
-//   Membrane:  0x3e0bb52B6440CEcAF9ecF8b0951D51F9A0B82F48
-//   Execution:  0x4b2487E6C275eE0bAF3F290EE0880530fb91708f
-//   WillWe:  0x91Ac0Fa9A36101362814d20C00873CF0d4680a5C
-//   ###############################
-
+  
+// === Final Deployment Addresses ===
+//   Will: 0x86545166F8B92294b62bD49F0d3134464548d5e9
+//   Membrane: 0xcDF21745a4f1f3222545399079eB8a3A6f0160Fc
+//   Execution: 0x0A25367D29bC3d30c4C2c7b30C04a3019eDfc08E
+//   WillWe: 0xbe69f14c4B5e90dD89F9B0Ed881d3BBA180a843D
+//   Kibern Director: 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0x534C773EA14342669FE05f7d9287a518830f8DE1 0x0000000000000000000000000000000000000000
+//   Will Price in ETH: 1000000000
 
 export const deployments: Deployments = {
-  "WillWe": {
-    "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-    "11155420": "0x91Ac0Fa9A36101362814d20C00873CF0d4680a5C",
-    "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
-  },
-  "Membrane": {
-    "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-    "11155420": "0x3e0bb52B6440CEcAF9ecF8b0951D51F9A0B82F48",
-    "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
-  },
-  "Execution": {
-    "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-    "11155420": "0x4b2487E6C275eE0bAF3F290EE0880530fb91708f",
-    "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
-  },
-  "RVI": {
-    "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-    "11155420": "0x99e612d393a89798dDDE4903040659a3ae9E5932",
-    "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
-  }
+    "RVI": {
+        "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
+        "11155420": "0x86545166F8B92294b62bD49F0d3134464548d5e9",
+        "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
+    },
+    "Membrane": {
+        "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
+        "11155420": "0xcDF21745a4f1f3222545399079eB8a3A6f0160Fc",
+        "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
+    },
+    "Execution": {
+        "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
+        "11155420": "0x0A25367D29bC3d30c4C2c7b30C04a3019eDfc08E",
+        "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
+    },
+    "WillWe": {
+        "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
+        "11155420": "0xbe69f14c4B5e90dD89F9B0Ed881d3BBA180a843D",
+        "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
+    }
 };
 
 /**
@@ -10269,7 +12509,7 @@ export function getAlchemyNetwork(chainId: number | string): Network {
 
 
 export const ABIs: ABIKP = {
-    "WillWe" :   [
+    "WillWe" : [
         {
             "type": "constructor",
             "inputs": [
@@ -10502,25 +12742,12 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "endpoint",
+                    "name": "",
                     "type": "address",
                     "internalType": "address"
                 }
             ],
             "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "entityCount",
-            "inputs": [],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -10577,8 +12804,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[9]",
-                            "internalType": "string[9]"
+                            "type": "string[11]",
+                            "internalType": "string[11]"
                         },
                         {
                             "name": "membraneMeta",
@@ -10594,6 +12821,11 @@ export const ABIs: ABIKP = {
                             "name": "childrenNodes",
                             "type": "string[]",
                             "internalType": "string[]"
+                        },
+                        {
+                            "name": "movementEndpoints",
+                            "type": "address[]",
+                            "internalType": "address[]"
                         },
                         {
                             "name": "rootPath",
@@ -10618,30 +12850,6 @@ export const ABIs: ABIKP = {
                             ]
                         }
                     ]
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getChildParentEligibilityPerSec",
-            "inputs": [
-                {
-                    "name": "childId_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "parentId_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "uint256",
-                    "internalType": "uint256"
                 }
             ],
             "stateMutability": "view"
@@ -10711,69 +12919,6 @@ export const ABIs: ABIKP = {
                     "name": "nodeId",
                     "type": "uint256",
                     "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "NodeData",
-                    "type": "tuple",
-                    "internalType": "struct NodeState",
-                    "components": [
-                        {
-                            "name": "basicInfo",
-                            "type": "string[9]",
-                            "internalType": "string[9]"
-                        },
-                        {
-                            "name": "membraneMeta",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "membersOfNode",
-                            "type": "address[]",
-                            "internalType": "address[]"
-                        },
-                        {
-                            "name": "childrenNodes",
-                            "type": "string[]",
-                            "internalType": "string[]"
-                        },
-                        {
-                            "name": "rootPath",
-                            "type": "string[]",
-                            "internalType": "string[]"
-                        },
-                        {
-                            "name": "signals",
-                            "type": "tuple[]",
-                            "internalType": "struct UserSignal[]",
-                            "components": [
-                                {
-                                    "name": "MembraneInflation",
-                                    "type": "string[2][]",
-                                    "internalType": "string[2][]"
-                                },
-                                {
-                                    "name": "lastRedistSignal",
-                                    "type": "string[]",
-                                    "internalType": "string[]"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getNodeDataWithUserSignals",
-            "inputs": [
-                {
-                    "name": "nodeId",
-                    "type": "uint256",
-                    "internalType": "uint256"
                 },
                 {
                     "name": "user",
@@ -10789,8 +12934,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[9]",
-                            "internalType": "string[9]"
+                            "type": "string[11]",
+                            "internalType": "string[11]"
                         },
                         {
                             "name": "membraneMeta",
@@ -10806,6 +12951,11 @@ export const ABIs: ABIKP = {
                             "name": "childrenNodes",
                             "type": "string[]",
                             "internalType": "string[]"
+                        },
+                        {
+                            "name": "movementEndpoints",
+                            "type": "address[]",
+                            "internalType": "address[]"
                         },
                         {
                             "name": "rootPath",
@@ -10852,8 +13002,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[9]",
-                            "internalType": "string[9]"
+                            "type": "string[11]",
+                            "internalType": "string[11]"
                         },
                         {
                             "name": "membraneMeta",
@@ -10869,6 +13019,11 @@ export const ABIs: ABIKP = {
                             "name": "childrenNodes",
                             "type": "string[]",
                             "internalType": "string[]"
+                        },
+                        {
+                            "name": "movementEndpoints",
+                            "type": "address[]",
+                            "internalType": "address[]"
                         },
                         {
                             "name": "rootPath",
@@ -10968,9 +13123,9 @@ export const ABIs: ABIKP = {
                                     "internalType": "uint256"
                                 },
                                 {
-                                    "name": "descriptionHash",
-                                    "type": "bytes32",
-                                    "internalType": "bytes32"
+                                    "name": "description",
+                                    "type": "string",
+                                    "internalType": "string"
                                 },
                                 {
                                     "name": "executedPayload",
@@ -11072,7 +13227,7 @@ export const ABIs: ABIKP = {
             "inputs": [],
             "outputs": [
                 {
-                    "name": "controlingAgent",
+                    "name": "",
                     "type": "address",
                     "internalType": "address"
                 }
@@ -11185,7 +13340,7 @@ export const ABIs: ABIKP = {
                     "internalType": "uint256"
                 },
                 {
-                    "name": "endpointOwner_",
+                    "name": "owner_",
                     "type": "address",
                     "internalType": "address"
                 }
@@ -11313,6 +13468,30 @@ export const ABIs: ABIKP = {
                     "name": "",
                     "type": "string",
                     "internalType": "string"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "options",
+            "inputs": [
+                {
+                    "name": "NodeXUserXValue",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "valueAtTime",
+                    "type": "uint256",
+                    "internalType": "uint256"
                 }
             ],
             "stateMutability": "view"
@@ -11540,7 +13719,22 @@ export const ABIs: ABIKP = {
                     "internalType": "uint256"
                 },
                 {
-                    "name": "membraneID_",
+                    "name": "tokens_",
+                    "type": "address[]",
+                    "internalType": "address[]"
+                },
+                {
+                    "name": "balances_",
+                    "type": "uint256[]",
+                    "internalType": "uint256[]"
+                },
+                {
+                    "name": "meta_",
+                    "type": "string",
+                    "internalType": "string"
+                },
+                {
+                    "name": "inflationRate_",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
@@ -11598,9 +13792,9 @@ export const ABIs: ABIKP = {
                     "internalType": "address"
                 },
                 {
-                    "name": "descriptionHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
+                    "name": "description",
+                    "type": "string",
+                    "internalType": "string"
                 },
                 {
                     "name": "data",
@@ -11793,31 +13987,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "BranchSpawned",
-            "inputs": [
-                {
-                    "name": "parentId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "newBranchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "creator",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
             "name": "ConfigSignal",
             "inputs": [
                 {
@@ -11965,10 +14134,10 @@ export const ABIs: ABIKP = {
                     "internalType": "bytes32"
                 },
                 {
-                    "name": "descriptionHash",
-                    "type": "bytes32",
+                    "name": "description",
+                    "type": "string",
                     "indexed": false,
-                    "internalType": "bytes32"
+                    "internalType": "string"
                 }
             ],
             "anonymous": false
@@ -12001,31 +14170,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "SignalSent",
-            "inputs": [
-                {
-                    "name": "branchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "sender",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "signals",
-                    "type": "uint256[]",
-                    "indexed": false,
-                    "internalType": "uint256[]"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
             "name": "Signaled",
             "inputs": [
                 {
@@ -12045,56 +14189,6 @@ export const ABIs: ABIKP = {
                     "type": "address",
                     "indexed": false,
                     "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
-            "name": "TokensBurned",
-            "inputs": [
-                {
-                    "name": "branchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "burner",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
-            "name": "TokensMinted",
-            "inputs": [
-                {
-                    "name": "branchId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "minter",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
                 }
             ],
             "anonymous": false
@@ -12239,17 +14333,17 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "CoreGasTransferFailed",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "Disabled",
             "inputs": []
         },
         {
             "type": "error",
             "name": "EOA",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "Endpoint",
             "inputs": []
         },
         {
@@ -12270,11 +14364,6 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "InsufficientBalance",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "InsufficientRootBalance",
             "inputs": []
         },
         {
@@ -12300,11 +14389,6 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "NoControl",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "NoMembership",
             "inputs": []
         },
         {
@@ -12339,7 +14423,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "PathTooShort",
+            "name": "Overreach",
             "inputs": []
         },
         {
@@ -12354,17 +14438,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "RootNodeOrNone",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "SignalOverflow",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "StableRoot",
             "inputs": []
         },
         {
@@ -12389,11 +14463,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "UniniMembrane",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "Unqualified",
             "inputs": []
         },
@@ -12413,7 +14482,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Execution" : [
+    "Execution" :  [
         {
             "type": "constructor",
             "inputs": [
@@ -12516,6 +14585,25 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "createInitWillWeEndpoint",
+            "inputs": [
+                {
+                    "name": "nodeId_",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "endpoint",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
             "name": "endpointOwner",
             "inputs": [
                 {
@@ -12551,6 +14639,138 @@ export const ABIs: ABIKP = {
                 }
             ],
             "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "getLatentMovements",
+            "inputs": [
+                {
+                    "name": "nodeId",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "latentMovements",
+                    "type": "tuple[]",
+                    "internalType": "struct LatentMovement[]",
+                    "components": [
+                        {
+                            "name": "movement",
+                            "type": "tuple",
+                            "internalType": "struct Movement",
+                            "components": [
+                                {
+                                    "name": "category",
+                                    "type": "uint8",
+                                    "internalType": "enum MovementType"
+                                },
+                                {
+                                    "name": "initiatior",
+                                    "type": "address",
+                                    "internalType": "address"
+                                },
+                                {
+                                    "name": "exeAccount",
+                                    "type": "address",
+                                    "internalType": "address"
+                                },
+                                {
+                                    "name": "viaNode",
+                                    "type": "uint256",
+                                    "internalType": "uint256"
+                                },
+                                {
+                                    "name": "expiresAt",
+                                    "type": "uint256",
+                                    "internalType": "uint256"
+                                },
+                                {
+                                    "name": "description",
+                                    "type": "string",
+                                    "internalType": "string"
+                                },
+                                {
+                                    "name": "executedPayload",
+                                    "type": "bytes",
+                                    "internalType": "bytes"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "signatureQueue",
+                            "type": "tuple",
+                            "internalType": "struct SignatureQueue",
+                            "components": [
+                                {
+                                    "name": "state",
+                                    "type": "uint8",
+                                    "internalType": "enum SQState"
+                                },
+                                {
+                                    "name": "Action",
+                                    "type": "tuple",
+                                    "internalType": "struct Movement",
+                                    "components": [
+                                        {
+                                            "name": "category",
+                                            "type": "uint8",
+                                            "internalType": "enum MovementType"
+                                        },
+                                        {
+                                            "name": "initiatior",
+                                            "type": "address",
+                                            "internalType": "address"
+                                        },
+                                        {
+                                            "name": "exeAccount",
+                                            "type": "address",
+                                            "internalType": "address"
+                                        },
+                                        {
+                                            "name": "viaNode",
+                                            "type": "uint256",
+                                            "internalType": "uint256"
+                                        },
+                                        {
+                                            "name": "expiresAt",
+                                            "type": "uint256",
+                                            "internalType": "uint256"
+                                        },
+                                        {
+                                            "name": "description",
+                                            "type": "string",
+                                            "internalType": "string"
+                                        },
+                                        {
+                                            "name": "executedPayload",
+                                            "type": "bytes",
+                                            "internalType": "bytes"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "Signers",
+                                    "type": "address[]",
+                                    "internalType": "address[]"
+                                },
+                                {
+                                    "name": "Sigs",
+                                    "type": "bytes[]",
+                                    "internalType": "bytes[]"
+                                },
+                                {
+                                    "name": "exeSig",
+                                    "type": "bytes32",
+                                    "internalType": "bytes32"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -12604,9 +14824,9 @@ export const ABIs: ABIKP = {
                                     "internalType": "uint256"
                                 },
                                 {
-                                    "name": "descriptionHash",
-                                    "type": "bytes32",
-                                    "internalType": "bytes32"
+                                    "name": "description",
+                                    "type": "string",
+                                    "internalType": "string"
                                 },
                                 {
                                     "name": "executedPayload",
@@ -12716,9 +14936,9 @@ export const ABIs: ABIKP = {
                             "internalType": "uint256"
                         },
                         {
-                            "name": "descriptionHash",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
+                            "name": "description",
+                            "type": "string",
+                            "internalType": "string"
                         },
                         {
                             "name": "executedPayload",
@@ -12772,9 +14992,9 @@ export const ABIs: ABIKP = {
                             "internalType": "uint256"
                         },
                         {
-                            "name": "descriptionHash",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
+                            "name": "description",
+                            "type": "string",
+                            "internalType": "string"
                         },
                         {
                             "name": "executedPayload",
@@ -12832,6 +15052,19 @@ export const ABIs: ABIKP = {
                     "name": "",
                     "type": "bytes4",
                     "internalType": "bytes4"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "lastSalt",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
                 }
             ],
             "stateMutability": "view"
@@ -12920,9 +15153,9 @@ export const ABIs: ABIKP = {
                     "internalType": "address"
                 },
                 {
-                    "name": "descriptionHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
+                    "name": "description",
+                    "type": "string",
+                    "internalType": "string"
                 },
                 {
                     "name": "data",
@@ -12997,9 +15230,9 @@ export const ABIs: ABIKP = {
                             "internalType": "uint256"
                         },
                         {
-                            "name": "descriptionHash",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
+                            "name": "description",
+                            "type": "string",
+                            "internalType": "string"
                         },
                         {
                             "name": "executedPayload",
@@ -13304,7 +15537,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "OnlyFun",
+            "name": "OnlyWillWe",
             "inputs": []
         },
         {
@@ -13402,6 +15635,11 @@ export const ABIs: ABIKP = {
                             "name": "meta",
                             "type": "string",
                             "internalType": "string"
+                        },
+                        {
+                            "name": "createdAt",
+                            "type": "uint256",
+                            "internalType": "uint256"
                         }
                     ]
                 }
@@ -13481,16 +15719,6 @@ export const ABIs: ABIKP = {
             "type": "constructor",
             "inputs": [
                 {
-                    "name": "price_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "pps_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
                     "name": "initMintAddrs_",
                     "type": "address[]",
                     "internalType": "address[]"
@@ -13504,12 +15732,21 @@ export const ABIs: ABIKP = {
             "stateMutability": "nonpayable"
         },
         {
-            "type": "fallback",
+            "type": "receive",
             "stateMutability": "payable"
         },
         {
-            "type": "receive",
-            "stateMutability": "payable"
+            "type": "function",
+            "name": "DOMAIN_SEPARATOR",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -13528,7 +15765,7 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "",
+                    "name": "result",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
@@ -13564,14 +15801,14 @@ export const ABIs: ABIKP = {
             "name": "balanceOf",
             "inputs": [
                 {
-                    "name": "account",
+                    "name": "owner",
                     "type": "address",
                     "internalType": "address"
                 }
             ],
             "outputs": [
                 {
-                    "name": "",
+                    "name": "result",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
@@ -13642,6 +15879,42 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "crosschainBurn",
+            "inputs": [
+                {
+                    "name": "_from",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "_amount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "crosschainMint",
+            "inputs": [
+                {
+                    "name": "_to",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "_amount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
             "name": "currentPrice",
             "inputs": [],
             "outputs": [
@@ -13692,55 +15965,33 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "decreaseAllowance",
-            "inputs": [
+            "name": "lastBlockSupply",
+            "inputs": [],
+            "outputs": [
                 {
-                    "name": "spender",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "subtractedValue",
+                    "name": "",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
             ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bool",
-                    "internalType": "bool"
-                }
-            ],
-            "stateMutability": "nonpayable"
+            "stateMutability": "view"
         },
         {
             "type": "function",
-            "name": "increaseAllowance",
-            "inputs": [
+            "name": "lastPrice",
+            "inputs": [],
+            "outputs": [
                 {
-                    "name": "spender",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "addedValue",
+                    "name": "",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
             ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bool",
-                    "internalType": "bool"
-                }
-            ],
-            "stateMutability": "nonpayable"
+            "stateMutability": "view"
         },
         {
             "type": "function",
-            "name": "initTime",
+            "name": "lastPriceBlock",
             "inputs": [],
             "outputs": [
                 {
@@ -13807,85 +16058,88 @@ export const ABIs: ABIKP = {
                     "internalType": "string"
                 }
             ],
+            "stateMutability": "pure"
+        },
+        {
+            "type": "function",
+            "name": "nonces",
+            "inputs": [
+                {
+                    "name": "owner",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "result",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
             "stateMutability": "view"
         },
         {
             "type": "function",
-            "name": "pps",
-            "inputs": [],
+            "name": "permit",
+            "inputs": [
+                {
+                    "name": "owner",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "spender",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "value",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "deadline",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "v",
+                    "type": "uint8",
+                    "internalType": "uint8"
+                },
+                {
+                    "name": "r",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "s",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "supportsInterface",
+            "inputs": [
+                {
+                    "name": "_interfaceId",
+                    "type": "bytes4",
+                    "internalType": "bytes4"
+                }
+            ],
             "outputs": [
                 {
                     "name": "",
-                    "type": "uint256",
-                    "internalType": "uint256"
+                    "type": "bool",
+                    "internalType": "bool"
                 }
             ],
             "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "relayERC20",
-            "inputs": [
-                {
-                    "name": "_from",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "_to",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "_amount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "sendERC20",
-            "inputs": [
-                {
-                    "name": "_to",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "_amount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "_chainId",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "simpleBurn",
-            "inputs": [
-                {
-                    "name": "amountToBurn_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "amtValReturned",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "stateMutability": "nonpayable"
         },
         {
             "type": "function",
@@ -13898,7 +16152,7 @@ export const ABIs: ABIKP = {
                     "internalType": "string"
                 }
             ],
-            "stateMutability": "view"
+            "stateMutability": "pure"
         },
         {
             "type": "function",
@@ -13906,7 +16160,7 @@ export const ABIs: ABIKP = {
             "inputs": [],
             "outputs": [
                 {
-                    "name": "",
+                    "name": "result",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
@@ -13967,6 +16221,19 @@ export const ABIs: ABIKP = {
             "stateMutability": "nonpayable"
         },
         {
+            "type": "function",
+            "name": "version",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "string",
+                    "internalType": "string"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
             "type": "event",
             "name": "Approval",
             "inputs": [
@@ -13983,7 +16250,7 @@ export const ABIs: ABIKP = {
                     "internalType": "address"
                 },
                 {
-                    "name": "value",
+                    "name": "amount",
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
@@ -13993,7 +16260,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "RelayERC20",
+            "name": "CrosschainBurn",
             "inputs": [
                 {
                     "name": "from",
@@ -14001,6 +16268,25 @@ export const ABIs: ABIKP = {
                     "indexed": true,
                     "internalType": "address"
                 },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "sender",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "CrosschainMint",
+            "inputs": [
                 {
                     "name": "to",
                     "type": "address",
@@ -14014,38 +16300,20 @@ export const ABIs: ABIKP = {
                     "internalType": "uint256"
                 },
                 {
-                    "name": "source",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
+                    "name": "sender",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
                 }
             ],
             "anonymous": false
         },
         {
             "type": "event",
-            "name": "SendERC20",
+            "name": "PriceUpdated",
             "inputs": [
                 {
-                    "name": "from",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "to",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "destination",
+                    "name": "newPrice",
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
@@ -14070,7 +16338,82 @@ export const ABIs: ABIKP = {
                     "internalType": "address"
                 },
                 {
-                    "name": "value",
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "WillBurned",
+            "inputs": [
+                {
+                    "name": "from",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "ethReturned",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "WillDeconstructBurned",
+            "inputs": [
+                {
+                    "name": "from",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "willAmount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "ethAmount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "WillMinted",
+            "inputs": [
+                {
+                    "name": "to",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "ethValue",
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
@@ -14080,7 +16423,12 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "ATransferFailed",
+            "name": "AllowanceOverflow",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "AllowanceUnderflow",
             "inputs": []
         },
         {
@@ -14090,32 +16438,38 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "CallerNotL2ToL2CrossDomainMessenger",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "DelegateCallFailed",
-            "inputs": []
-        },
-        {
-            "type": "error",
             "name": "InsufficentBalance",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "InvalidCalldata",
+            "name": "InsufficientAllowance",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "InvalidCrossDomainSender",
+            "name": "InsufficientBalance",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "OnlyFun",
+            "name": "InsufficientValue",
+            "inputs": [
+                {
+                    "name": "required",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "provided",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ]
+        },
+        {
+            "type": "error",
+            "name": "InvalidPermit",
             "inputs": []
         },
         {
@@ -14125,7 +16479,12 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "PingF",
+            "name": "Permit2AllowanceIsFixedAtInfinity",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "PermitExpired",
             "inputs": []
         },
         {
@@ -14135,17 +16494,28 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "UnqualifiedCall",
+            "name": "TotalSupplyOverflow",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "TransferFailedFor",
+            "inputs": [
+                {
+                    "name": "failingToken",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ]
+        },
+        {
+            "type": "error",
+            "name": "Unauthorized",
             "inputs": []
         },
         {
             "type": "error",
             "name": "ValueMismatch",
-            "inputs": []
-        },
-        {
-            "type": "error",
-            "name": "ZeroAddress",
             "inputs": []
         }
     ],
@@ -14380,6 +16750,11 @@ export const ABIs: ABIKP = {
                     "name": "proxyOwner_",
                     "type": "address",
                     "internalType": "address"
+                },
+                {
+                    "name": "consensusType_",
+                    "type": "uint8",
+                    "internalType": "uint8"
                 }
             ],
             "stateMutability": "nonpayable"
@@ -14391,6 +16766,19 @@ export const ABIs: ABIKP = {
         {
             "type": "receive",
             "stateMutability": "payable"
+        },
+        {
+            "type": "function",
+            "name": "allowedAuthType",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "uint8",
+                    "internalType": "uint8"
+                }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -14428,45 +16816,6 @@ export const ABIs: ABIKP = {
                 }
             ],
             "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "onERC1155Received",
-            "inputs": [
-                {
-                    "name": "operator",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "from",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "id",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "value",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "data",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bytes4",
-                    "internalType": "bytes4"
-                }
-            ],
-            "stateMutability": "pure"
         },
         {
             "type": "function",
@@ -14543,6 +16892,11 @@ export const ABIs: ABIKP = {
                             "name": "callData",
                             "type": "bytes",
                             "internalType": "bytes"
+                        },
+                        {
+                            "name": "value",
+                            "type": "uint256",
+                            "internalType": "uint256"
                         }
                     ]
                 }
@@ -14615,6 +16969,120 @@ export const getRPCUrl = (chainId: string): string => {
     }
     return url;
   };
+
+
+
+// File: ./config/endpointActions.ts
+import { ethers } from 'ethers';
+import { ABIs } from './contracts';
+
+interface ActionField {
+  name: string;
+  label: string;
+  type: 'text' | 'number';
+  placeholder: string;
+  required?: boolean;
+}
+
+export interface EndpointActionConfig {
+  id: string;
+  label: string;
+  description: string;
+  fields: ActionField[];
+  getCallData: (params: Record<string, any>, rootTokenAddress: string) => {
+    target: string;
+    callData: string;
+    value: string;
+  };
+}
+
+export const getEndpointActions = (rootTokenAddress: string, tokenSymbol: string): EndpointActionConfig[] => [
+  {
+    id: 'tokenTransfer',
+    label: `Transfer ${tokenSymbol}`,
+    description: `Transfer ${tokenSymbol} tokens to another address`,
+    fields: [
+      {
+        name: 'to',
+        label: 'Recipient Address',
+        type: 'text',
+        placeholder: '0x...',
+        required: true
+      },
+      {
+        name: 'amount',
+        label: 'Amount',
+        type: 'number',
+        placeholder: '0.0',
+        required: true
+      }
+    ],
+    getCallData: (params) => {
+      // If we don't have both required params, or if rootTokenAddress is invalid, return empty calldata
+      if (!params.to || !params.amount || !rootTokenAddress?.startsWith('0x')) {
+        return {
+          target: rootTokenAddress,
+          callData: '0x',
+          value: '0'
+        };
+      }
+
+      try {
+        const contract = new ethers.Contract(rootTokenAddress, ABIs.IERC20);
+        // Handle empty amount as 0
+        const amount = params.amount?.trim() ? ethers.parseEther(params.amount) : BigInt(0);
+        
+        return {
+          target: rootTokenAddress,
+          callData: contract.interface.encodeFunctionData('transfer', [params.to, amount]),
+          value: '0'
+        };
+      } catch (error) {
+        console.error('Error generating token transfer calldata:', error);
+        return {
+          target: rootTokenAddress,
+          callData: '0x',
+          value: '0'
+        };
+      }
+    }
+  },
+  {
+    id: 'customCall',
+    label: 'Custom Call',
+    description: 'Execute a custom contract call',
+    fields: [
+      {
+        name: 'target',
+        label: 'Target Contract',
+        type: 'text',
+        placeholder: '0x...',
+        required: true
+      },
+      {
+        name: 'calldata',
+        label: 'Call Data',
+        type: 'text',
+        placeholder: '0x...',
+        required: true
+      },
+      {
+        name: 'value',
+        label: 'ETH Value',
+        type: 'number',
+        placeholder: '0.0'
+      }
+    ],
+    getCallData: (params) => {
+      const value = params.value || '0';
+      return {
+        target: params.target || ethers.ZeroAddress,
+        callData: params.calldata && params.calldata.length >= 10 ? params.calldata : '0x',
+        value: value
+      };
+    }
+  }
+];
 
 
 
@@ -14861,6 +17329,165 @@ export function formatBalance(balance: string | bigint): string {
   
   return `${wholePart}.${decimalPart.padEnd(18, '0')}`;
 }
+
+
+
+// File: ./hooks/useMovementForm.ts
+import { useState, useCallback, useMemo } from 'react';
+import { ethers } from 'ethers';
+import { FormState, MovementFormValidation, DEFAULT_FORM_STATE } from '../types/movements';
+import { getEndpointActions } from '../config/endpointActions';
+
+interface UseMovementFormResult {
+  formData: FormState;
+  validation: MovementFormValidation;
+  isSubmitting: boolean;
+  handleInputChange: (field: keyof FormState, value: string) => void;
+  handleEndpointChange: (endpoint: string, authType: number) => void;
+  handleActionChange: (actionId: string, params?: Record<string, any>) => void;
+  handleSubmit: (onSubmit: (data: FormState) => Promise<void>) => Promise<void>;
+  getActionFields: () => any[];
+  isValid: boolean;
+}
+
+export const useMovementForm = (rootTokenAddress: string, tokenSymbol: string): UseMovementFormResult => {
+  const [formData, setFormData] = useState<FormState>(DEFAULT_FORM_STATE);
+  const [validation, setValidation] = useState<MovementFormValidation>({
+    target: true,
+    calldata: true,
+    description: true
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const validateField = useCallback((name: keyof FormState, value: string): boolean => {
+    switch (name) {
+      case 'target':
+        return ethers.isAddress(value);
+      case 'calldata':
+        return value.startsWith('0x') && value.length >= 10;
+      case 'description':
+        return value.length >= 10;
+      default:
+        return true;
+    }
+  }, []);
+
+  const handleInputChange = useCallback((field: keyof FormState, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setValidation(prev => ({
+      ...prev,
+      [field]: validateField(field, value)
+    }));
+  }, [validateField]);
+
+  const handleEndpointChange = useCallback((endpoint: string, authType: number) => {
+    setFormData(prev => ({
+      ...prev,
+      endpoint,
+      type: authType
+    }));
+  }, []);
+
+  const actionOptions = useMemo(() => 
+    getEndpointActions(rootTokenAddress, tokenSymbol),
+    [rootTokenAddress, tokenSymbol]
+  );
+
+  const handleActionChange = useCallback((actionId: string, params?: Record<string, any>) => {
+    const action = actionOptions.find(a => a.id === actionId);
+    if (!action) return;
+
+    const callData = action.getCallData(params || {}, rootTokenAddress);
+    setFormData(prev => ({
+      ...prev,
+      actionType: actionId,
+      target: callData.target,
+      calldata: callData.callData,
+      value: callData.value,
+      params
+    }));
+  }, [actionOptions, rootTokenAddress]);
+
+  const getActionFields = useCallback(() => {
+    const action = actionOptions.find(a => a.id === formData.actionType);
+    return action ? action.fields : [];
+  }, [actionOptions, formData.actionType]);
+
+  const handleSubmit = async (onSubmit: (data: FormState) => Promise<void>) => {
+    const newValidation = {
+      target: validateField('target', formData.target),
+      calldata: validateField('calldata', formData.calldata),
+      description: validateField('description', formData.description)
+    };
+    setValidation(newValidation);
+
+    if (!Object.values(newValidation).every(Boolean)) {
+      throw new Error('Please check the form for errors');
+    }
+
+    setIsSubmitting(true);
+    try {
+      // First upload description to IPFS
+    
+        const metadata = {
+          title: formData.description,
+          description: formData.description,
+        };
+
+
+
+        const response = await fetch('/api/upload-to-ipfs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: metadata }),
+        });
+
+  
+        if (!response.ok) throw new Error('Failed to upload metadata');
+        const { cid } = await response.json();
+        console.log("uploadDescription, cid:", cid);
+
+
+      
+      // Get call data from selected action
+      const action = actionOptions.find(a => a.id === formData.actionType);
+      if (!action) throw new Error('Invalid action type');
+      
+      const callData = action.getCallData(formData.params || {}, rootTokenAddress);
+
+      // Submit with processed data
+      await onSubmit({
+        ...formData,
+        ...callData,
+        cid
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isValid = useMemo(() => 
+    Object.values(validation).every(Boolean) && 
+    formData.description.length >= 10 &&
+    (formData.actionType === 'customCall' ? 
+      (ethers.isAddress(formData.target) && formData.calldata.startsWith('0x')) : 
+      Object.values(formData.params || {}).every(Boolean)
+    ),
+    [validation, formData]
+  );
+
+  return {
+    formData,
+    validation,
+    isSubmitting,
+    handleInputChange,
+    handleEndpointChange,
+    handleActionChange,
+    handleSubmit,
+    getActionFields,
+    isValid
+  };
+};
 
 
 
@@ -15503,6 +18130,81 @@ export default useChainId;
 
 
 
+// File: ./hooks/useEndpoints.ts
+import { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
+import { getRPCUrl } from '../config/contracts';
+import { MovementType } from '../types/chainData';
+
+interface EndpointData {
+  address: string;
+  authType: MovementType;
+  balance: string;
+  isActive: boolean;
+}
+
+interface UseEndpointsState {
+  endpoints: Record<string, EndpointData>;
+  isLoading: boolean;
+  error: string | null;
+}
+
+export const useEndpoints = (nodeData: any, chainId: string) => {
+  const [state, setState] = useState<UseEndpointsState>({
+    endpoints: {},
+    isLoading: true,
+    error: null
+  });
+
+  useEffect(() => {
+    const fetchEndpointData = async () => {
+      if (!nodeData?.movementEndpoints?.length) {
+        setState(prev => ({ ...prev, isLoading: false }));
+        return;
+      }
+
+      try {
+        const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+        const endpointData: Record<string, EndpointData> = {};
+
+        await Promise.all(
+          nodeData.movementEndpoints.map(async (endpoint: string) => {
+            const code = await provider.getCode(endpoint);
+            const balance = await provider.getBalance(endpoint);
+            
+            endpointData[endpoint] = {
+              address: endpoint,
+              authType: nodeData.childrenNodes.includes(endpoint) ? 
+                MovementType.AgentMajority : 
+                MovementType.EnergeticMajority,
+              balance: balance.toString(),
+              isActive: code !== '0x'
+            };
+          })
+        );
+
+        setState({
+          endpoints: endpointData,
+          isLoading: false,
+          error: null
+        });
+      } catch (error) {
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to load endpoint data'
+        }));
+      }
+    };
+
+    fetchEndpointData();
+  }, [nodeData?.movementEndpoints, nodeData?.childrenNodes, chainId]);
+
+  return state;
+};
+
+
+
 // File: ./hooks/useNodeTransactions.tsx
 import { useCallback } from 'react';
 import { ethers } from 'ethers';
@@ -15820,13 +18522,8 @@ export default useNodeOperations;
 // File: ./hooks/useNodeData.ts
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { 
-  NodeState, 
-  TransformedNodeData, 
-  isValidNodeState, 
-  transformNodeData 
-} from '../types/chainData';
 import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+import { NodeState } from '../types/chainData';
 
 interface UseNodeDataResult {
   data: NodeState | null;
@@ -15835,27 +18532,11 @@ interface UseNodeDataResult {
   refetch: () => Promise<void>;
 }
 
-// Convert address to uint256 ID format
-const addressToUint256 = (address: string): string => {
-  try {
-    // Ensure address is properly formatted
-    const formattedAddress = address.toLowerCase().startsWith('0x') 
-      ? address.toLowerCase()
-      : `0x${address.toLowerCase()}`;
-
-    // Remove '0x' prefix and convert to decimal string
-    const withoutPrefix = formattedAddress.slice(2);
-    return BigInt(`0x${withoutPrefix}`).toString();
-  } catch (error) {
-    console.error('Error converting address to uint256:', error);
-    throw error;
-  }
-};
-
 export function useNodeData(
-  chainId: string | undefined, 
+  chainId: string | undefined,
+  userAddress: string | undefined, 
   nodeIdOrAddress: string | undefined,
-  isRootNode: boolean = false // Add flag to indicate if this is a root node
+  isRootNode: boolean = false
 ): UseNodeDataResult {
   const [data, setData] = useState<NodeState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -15867,6 +18548,9 @@ export function useNodeData(
       setIsLoading(false);
       return;
     }
+
+    // If we don't have a userAddress, use zero address instead of returning early
+    const addressToUse = userAddress || ethers.ZeroAddress;
 
     try {
       setIsLoading(true);
@@ -15882,33 +18566,31 @@ export function useNodeData(
       const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       const contract = new ethers.Contract(contractAddress, ABIs.WillWe, provider);
 
-      // Convert input to appropriate format based on whether it's a root node
       let formattedId: string;
       if (isRootNode) {
-        // For root nodes, we need to convert the token address to uint256
-        formattedId = addressToUint256(nodeIdOrAddress);
+        formattedId = ethers.toBigInt(nodeIdOrAddress).toString();
       } else {
-        // For regular nodes, use the nodeId directly
-        formattedId = BigInt(nodeIdOrAddress).toString();
+        formattedId = nodeIdOrAddress;
       }
 
       console.log('Fetching node data:', {
         chainId: cleanChainId,
         nodeIdOrAddress,
         formattedId,
+        userAddress: addressToUse,
         isRootNode,
         contractAddress
       });
 
-      // Get node data using the formatted ID
-      const nodeData = await contract.getNodeData(formattedId);
+      const nodeData = await contract.getNodeData(formattedId, addressToUse);
 
-      // Validate the received data
+      console.log('Node data received:', nodeData);
+
       if (!nodeData?.basicInfo) {
         throw new Error('Invalid node data received');
       }
 
-      // Transform data to ensure all BigInt values are converted to strings
+      // Transform data
       const transformedData: NodeState = {
         basicInfo: nodeData.basicInfo.map((item: any) => item.toString()),
         membraneMeta: nodeData.membraneMeta || '',
@@ -15928,8 +18610,6 @@ export function useNodeData(
       setData(transformedData);
       setError(null);
 
-      console.log('Node data fetched successfully:', transformedData);
-
     } catch (err) {
       console.error('Error fetching node data:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch node data'));
@@ -15937,17 +18617,19 @@ export function useNodeData(
     } finally {
       setIsLoading(false);
     }
-  }, [chainId, nodeIdOrAddress, isRootNode]);
+  }, [chainId, nodeIdOrAddress, userAddress, isRootNode]);
 
+  // Fetch on mount and when dependencies change
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // Refetch when userAddress becomes available
   useEffect(() => {
-    setData(null);
-    setError(null);
-    setIsLoading(true);
-  }, [chainId, nodeIdOrAddress, isRootNode]);
+    if (userAddress) {
+      fetchData();
+    }
+  }, [userAddress, fetchData]);
 
   return {
     data,
@@ -15957,8 +18639,394 @@ export function useNodeData(
   };
 }
 
-
 export default useNodeData;
+
+
+
+// File: ./hooks/useMovements.ts
+import { useState, useEffect, useCallback } from 'react';
+import { ethers } from 'ethers';
+import { usePrivy } from '@privy-io/react-auth';
+import { useTransaction } from '../contexts/TransactionContext';
+import { deployments, ABIs, getRPCUrl } from '../config/contracts';
+import { MovementType, SignatureQueueState, LatentMovement } from '../types/chainData';
+
+interface UseMovementsProps {
+  nodeId: string;
+  chainId: string;
+}
+
+interface UseMovementsState {
+  movements: LatentMovement[];
+  descriptions: Record<string, string>;
+  signatures: Record<string, { current: number; required: number }>;
+  endpointAuthTypes: Record<string, number>;
+  isLoading: boolean;
+}
+
+const EIP712_DOMAIN_TYPE = [
+  { name: 'name', type: 'string' },
+  { name: 'version', type: 'string' },
+  { name: 'chainId', type: 'uint256' },
+  { name: 'verifyingContract', type: 'address' }
+];
+
+const MOVEMENT_TYPE = [
+  { name: 'category', type: 'uint8' },
+  { name: 'initiatior', type: 'address' },
+  { name: 'exeAccount', type: 'address' },
+  { name: 'viaNode', type: 'uint256' },
+  { name: 'expiresAt', type: 'uint256' },
+  { name: 'descriptionHash', type: 'bytes32' },
+  { name: 'executedPayload', type: 'bytes' }
+];
+
+// Add utility function to convert CID to bytes32
+const cidToBytes32 = (cid: string): string => {
+  // Convert CID to bytes32 format
+  const bytes = ethers.toUtf8Bytes(cid);
+  const hash = ethers.keccak256(bytes);
+  return hash;
+};
+
+export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
+  const [state, setState] = useState<UseMovementsState>({
+    movements: [],
+    descriptions: {},
+    signatures: {},
+    endpointAuthTypes: {},
+    isLoading: true
+  });
+
+  const { getEthersProvider } = usePrivy();
+  const { executeTransaction } = useTransaction();
+  const cleanChainId = chainId.replace('eip155:', '');
+
+  // Fetch all data in parallel
+  const fetchMovementData = useCallback(async () => {
+    if (!nodeId || !chainId) return;
+    
+    try {
+      setState(prev => ({ ...prev, isLoading: true }));
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+      const executionContract = new ethers.Contract(
+        deployments.Execution[cleanChainId],
+        ABIs.Execution,
+        provider
+      );
+
+      // Fetch movements
+      const rawMovements = await executionContract.getLatentMovements(nodeId);
+      const processedMovements = rawMovements
+        .map(processMovementData)
+        .filter(m => m.signatureQueue.state !== SignatureQueueState.Stale);
+
+      // Fetch descriptions and signatures in parallel
+      const [descriptions, signatureDetails] = await Promise.all([
+        // Get descriptions
+        Promise.all(processedMovements.map(async (movement) => {
+          try {
+            const description = await fetchMovementDescription(movement.movement.descriptionHash);
+            return { hash: movement.movement.descriptionHash, description };
+          } catch (error) {
+            console.error('Error fetching description:', error);
+            return { hash: movement.movement.descriptionHash, description: 'Failed to load description' };
+          }
+        })),
+        // Get signature counts
+        Promise.all(processedMovements.map(async (movement) => {
+          try {
+            const willWeContract = new ethers.Contract(
+              deployments.WillWe[cleanChainId],
+              ABIs.WillWe,
+              provider
+            );
+
+            let currentPower = 0;
+            let requiredPower = 0;
+
+            // Calculate current power based on movement type
+            for (const signer of movement.signatureQueue.Signers) {
+              if (signer === ethers.ZeroAddress) continue;
+
+              if (movement.movement.category === MovementType.EnergeticMajority) {
+                const balance = await willWeContract.balanceOf(signer, movement.movement.viaNode);
+                currentPower += Number(balance);
+              } else {
+                currentPower += 1;
+              }
+            }
+
+            // Calculate required power
+            if (movement.movement.category === MovementType.EnergeticMajority) {
+              const totalSupply = await willWeContract.totalSupply(movement.movement.viaNode);
+              requiredPower = Math.floor(Number(totalSupply) / 2) + 1;
+            } else {
+              const members = await willWeContract.allMembersOf(movement.movement.viaNode);
+              requiredPower = Math.floor(members.length / 2) + 1;
+            }
+
+            return { 
+              hash: movement.movementHash,
+              signatures: { current: currentPower, required: requiredPower }
+            };
+          } catch (error) {
+            console.error('Error calculating signatures:', error);
+            return { 
+              hash: movement.movementHash,
+              signatures: { current: 0, required: 0 }
+            };
+          }
+        }))
+      ]);
+
+      // Build state updates
+      const descriptionMap: Record<string, string> = {};
+      descriptions.forEach(({ hash, description }) => {
+        descriptionMap[hash] = description;
+      });
+
+      const signatureMap: Record<string, { current: number; required: number }> = {};
+      signatureDetails.forEach(({ hash, signatures }) => {
+        signatureMap[hash] = signatures;
+      });
+
+      setState(prev => ({
+        ...prev,
+        movements: processedMovements,
+        descriptions: descriptionMap,
+        signatures: signatureMap,
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error fetching movement data:', error);
+      setState(prev => ({ ...prev, isLoading: false }));
+    }
+  }, [nodeId, chainId, cleanChainId]);
+
+  // Effect for initial fetch and cleanup
+  useEffect(() => {
+    let mounted = true;
+    
+    if (mounted) {
+      fetchMovementData();
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [fetchMovementData]);
+
+  // Create movement with proper EIP-712 typing
+  const createMovement = async (formData: any) => {
+    try {
+      // Upload description to IPFS via Filebase
+      const descriptionMetadata = {
+        description: formData.description,
+        timestamp: Date.now()
+      };
+
+      const response = await fetch('/api/upload-to-ipfs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: descriptionMetadata }),
+      });
+
+      if (!response.ok) throw new Error('Failed to upload metadata');
+      const { cid } = await response.json();
+
+      console.log("uploadDescription, descriptionHash:", { cid });
+
+      // Convert CID to bytes32
+      const descriptionHash = cidToBytes32(cid);
+
+      // Create the Call struct array for executedPayload
+      const calls = [{
+        target: formData.target,
+        callData: formData.calldata,
+        value: ethers.parseEther(formData.value || '0')
+      }];
+
+      // Encode the calls array according to the contract's Call struct
+      const executedPayload = ethers.AbiCoder.defaultAbiCoder().encode(
+        [{
+          type: 'tuple[]',
+          components: [
+            { name: 'target', type: 'address' },
+            { name: 'callData', type: 'bytes' },
+            { name: 'value', type: 'uint256' }
+          ]
+        }],
+        [calls]
+      );
+
+      return await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            deployments.WillWe[cleanChainId],
+            ABIs.WillWe,
+            // @ts-ignore
+            signer
+          );
+          
+          return contract.startMovement(
+            formData.type,
+            nodeId,
+            formData.expiryDays,
+            formData.endpoint === 'new' ? ethers.ZeroAddress : formData.endpoint,
+            descriptionHash, // Now using bytes32 hash
+            executedPayload
+          );
+        },
+        {
+          successMessage: 'Movement created successfully',
+          onSuccess: fetchMovementData
+        }
+      );
+    } catch (error) {
+      console.error('Error creating movement:', error);
+      throw error;
+    }
+  };
+
+  // Sign movement with EIP-712
+  const signMovement = async (movement: LatentMovement) => {
+    const provider = await getEthersProvider();
+    const signer = await provider.getSigner();
+    const address = await signer.getAddress();
+
+    // EIP-712 domain
+    const domain = {
+      name: 'WillWe',
+      version: '1',
+      chainId: Number(cleanChainId),
+      verifyingContract: deployments.Execution[cleanChainId]
+    };
+
+    // Prepare the data to be signed
+    const message = {
+      category: movement.movement.category,
+      initiatior: movement.movement.initiatior,
+      exeAccount: movement.movement.exeAccount,
+      viaNode: movement.movement.viaNode,
+      expiresAt: movement.movement.expiresAt,
+      descriptionHash: movement.movement.descriptionHash,
+      executedPayload: movement.movement.executedPayload
+    };
+
+    // Sign using EIP-712
+    const signature = await signer.signTypedData(domain, { Movement: MOVEMENT_TYPE }, message);
+
+    return await executeTransaction(
+      chainId,
+      async () => {
+        const contract = new ethers.Contract(
+          deployments.WillWe[cleanChainId],
+          ABIs.WillWe,
+          signer
+        );
+
+        return contract.submitSignatures(
+          movement.movementHash,
+          [address],
+          [signature]
+        );
+      },
+      {
+        successMessage: 'Movement signed successfully',
+        onSuccess: fetchMovementData
+      }
+    );
+  };
+
+  const executeMovement = async (movement: LatentMovement) => {
+    return await executeTransaction(
+      chainId,
+      async () => {
+        const provider = await getEthersProvider();
+        const signer = await provider.getSigner();
+        const contract = new ethers.Contract(
+          deployments.WillWe[cleanChainId],
+          ABIs.WillWe,
+          signer
+        );
+
+        return contract.executeQueue(movement.movementHash);
+      },
+      {
+        successMessage: 'Movement executed successfully',
+        onSuccess: fetchMovementData
+      }
+    );
+  };
+
+  // Process movement data with proper EIP-712 hashing
+  const processMovementData = (rawMovement: any): LatentMovement => {
+    const movement = {
+      category: Number(rawMovement.movement.category),
+      initiatior: rawMovement.movement.initiatior.toString(),
+      exeAccount: rawMovement.movement.exeAccount.toString(),
+      viaNode: rawMovement.movement.viaNode.toString(),
+      expiresAt: rawMovement.movement.expiresAt.toString(),
+      descriptionHash: rawMovement.movement.descriptionHash.toString(),
+      executedPayload: rawMovement.movement.executedPayload.toString()
+    };
+
+    const domain = {
+      name: 'WillWe',
+      version: '1',
+      chainId: Number(cleanChainId),
+      verifyingContract: deployments.Execution[cleanChainId]
+    };
+
+    // Calculate EIP-712 hash using ethers v6 syntax
+    const movementHash = ethers.TypedDataEncoder.hash(
+      domain,
+      { Movement: MOVEMENT_TYPE },
+      movement
+    );
+
+    return {
+      movement,
+      movementHash,
+      signatureQueue: {
+        state: Number(rawMovement.signatureQueue.state),
+        Action: rawMovement.signatureQueue.Action,
+        Signers: Array.isArray(rawMovement.signatureQueue.Signers) 
+          ? rawMovement.signatureQueue.Signers.map((s: any) => s.toString())
+          : [],
+        Sigs: Array.isArray(rawMovement.signatureQueue.Sigs)
+          ? rawMovement.signatureQueue.Sigs.map((s: any) => s.toString())
+          : []
+      }
+    };
+  };
+
+  // Also update the fetchMovementDescription function (if it exists) to handle bytes32
+  const fetchMovementDescription = async (descriptionHash: string): Promise<string> => {
+    try {
+      // Implement your logic to fetch the description from IPFS using the hash
+      const response = await fetch(`/api/get-ipfs-data?hash=${descriptionHash}`);
+      if (!response.ok) throw new Error('Failed to fetch description');
+      const data = await response.json();
+      return data.description;
+    } catch (error) {
+      console.error('Error fetching description:', error);
+      return 'Failed to load description';
+    }
+  };
+
+  return {
+    ...state,
+    createMovement,
+    signMovement,
+    executeMovement,
+    refreshMovements: fetchMovementData
+  };
+};
 
 
 
@@ -16070,6 +19138,44 @@ export const useAlchemyBalances = (
 };
 
 export default useAlchemyBalances;
+
+
+
+// File: ./hooks/useTransaction.ts
+import { useState } from 'react';
+import { Contract } from 'ethers';
+
+interface TransactionParams {
+  contract: Contract;
+  method: string;
+  args: any[];
+  onSuccess?: () => void;
+}
+
+export const useTransaction = () => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const executeTransaction = async ({ 
+    contract, 
+    method, 
+    args, 
+    onSuccess 
+  }: TransactionParams) => {
+    setIsLoading(true);
+    try {
+      const tx = await contract[method](...args);
+      await tx.wait();
+      onSuccess?.();
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { executeTransaction, isLoading };
+};
 
 
 
@@ -16405,10 +19511,6 @@ import { getRPCUrl } from '../config/contracts';
 
 interface WillWeContract extends ethers.BaseContract {
   totalSupply: (nodeId: string) => Promise<bigint>;
-  getChildParentEligibilityPerSec: (
-    childId: string,
-    parentId: string
-  ) => Promise<bigint>;
   calculateUserTargetedPreferenceAmount: (
     childId: string,
     parentId: string,
@@ -16643,11 +19745,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     async (
       chainId: string,
       transactionFn: () => Promise<ethers.ContractTransaction>,
-      options?: {
-        successMessage?: string;
-        errorMessage?: string;
-        onSuccess?: () => void;
-      }
+      options?: TransactionOptions
     ) => {
       if (!authenticated) {
         await login();
@@ -16661,23 +19759,47 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       setIsTransacting(true);
       setCurrentHash(null);
       setError(null);
+
+      let toastId: string | number | undefined;
+
       try {
         const provider = await getEthersProvider();
         if (!provider) {
           throw new Error('Provider not available');
         }
 
-        // Get network after provider is ready
-        const network = await provider.getNetwork();
-        const targetChainId = parseInt(chainId.replace('eip155:', ''));
-        
-        // Execute the transaction
+        // Show pending toast
+        toastId = toast({
+          title: 'Confirm Transaction',
+          description: 'Please confirm the transaction in your wallet',
+          status: 'info',
+          duration: null,
+          isClosable: false,
+        });
+
+        // Execute transaction
         const tx = await transactionFn();
-        // Wait for 1 confirmation
-        // @ts-ignore
+        setCurrentHash(tx.hash);
+
+        // Update toast to processing
+        if (toastId) {
+          toast.update(toastId, {
+            title: 'Processing',
+            description: 'Transaction is being processed',
+            status: 'loading',
+          });
+        }
+
+        // Wait for confirmation
         const receipt = await provider.waitForTransaction(tx.hash, 1);
 
+        // Close pending toast
+        if (toastId) {
+          toast.close(toastId);
+        }
+
         if (receipt && receipt.status === 1) {
+          // Success
           if (options?.successMessage) {
             toast({
               title: 'Success',
@@ -16695,38 +19817,38 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
           throw new Error('Transaction failed');
         }
       } catch (error) {
+        // Close pending toast if exists
+        if (toastId) {
+          toast.close(toastId);
+        }
+
         console.error('Transaction error:', error);
         let errorMessage = 'Transaction failed';
         
         if (error instanceof Error) {
           if (error.message.includes('rejected')) {
             errorMessage = 'Transaction rejected by user';
+          } else if (error.message.includes('insufficient funds')) {
+            errorMessage = 'Insufficient funds for transaction';
+          } else if (error.message.includes('gas required exceeds allowance')) {
+            errorMessage = 'Transaction would exceed gas limit';
           } else {
             errorMessage = error.message;
           }
         }
+
+        setError(error instanceof Error ? error : new Error(errorMessage));
         
-        if (options?.errorMessage) {
-          toast({
-            title: 'Error',
-            description: options.errorMessage,
-            status: 'error',
-            duration: 5000,
-            isClosable: true,
-          });
-        } else {
-          toast({
-            title: 'Error',
-            description: errorMessage,
-            status: 'error',
-            duration: 5000,
-            isClosable: true,
-          });
-        }
+        toast({
+          title: 'Error',
+          description: options?.errorMessage || errorMessage,
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
       } finally {
         setIsTransacting(false);
         setCurrentHash(null);
-        setError(null);
       }
     },
     [authenticated, login, getEthersProvider, ready, user, toast]
@@ -17016,6 +20138,9 @@ export const nodeIdToAddress = (nodeId: string | number | bigint): string => {
  */
 export const addressToNodeId = (address: string): string => {
   try {
+    if (!address || address === ethers.ZeroAddress) {
+      throw new Error('Empty or zero address');
+    }
     if (!isHexString(address)) {
       throw new Error('Invalid address format');
     }
@@ -17024,7 +20149,7 @@ export const addressToNodeId = (address: string): string => {
     return nodeId;
   } catch (error) {
     console.error('Error converting address to node ID:', error);
-    throw new Error('Invalid address format');
+    throw error; // Propagate the specific error
   }
 };
 
@@ -17050,26 +20175,142 @@ export const formatPercentage = (value: number): string => {
 
 
 
-// File: ./types/chainData.ts
-// File: ./types/chainData.ts
+// File: ./types/movements.ts
+import { MovementType } from './chainData';
+import { ethers } from 'ethers';
 
-// Reflects the smart contract's basic info array structure
-export interface NodeBasicInfo {
-  nodeId: string;              // basicInfo[0]
-  inflation: string;           // basicInfo[1]
-  balanceAnchor: string;      // basicInfo[2] - balance in parent reserve
-  balanceBudget: string;      // basicInfo[3] - budget
-  value: string;              // basicInfo[4] - valuation denominated in root token
-  membraneId: string;         // basicInfo[5] - membrane id
-  balanceOfUser: string;      // basicInfo[6] - balance of current user in this node
-  eligibilityPerSec: string;  // basicInfo[7] - redistribution eligibility from parent per sec
-  lastRedistribution: string; // basicInfo[8] - last redistribution timestamp
+interface CIDObject {
+  cid: string;
 }
 
-// Matches the smart contract's UserSignal struct
+export interface FormState {
+  type: MovementType;
+  description: string | CIDObject;
+  expiryDays: number;
+  endpoint: string;
+  target: string;
+  calldata: string;
+  value: string;
+  actionType?: string;
+  params?: {
+    [key: string]: string | number | { cid: string };
+  };
+}
+
+export interface EndpointOption {
+  value: string;
+  label: string;
+  authType: MovementType;
+  balance?: string;
+  isDisabled?: boolean;
+}
+
+export interface MovementFormValidation {
+  target: boolean;
+  calldata: boolean;
+  description: boolean;
+  [key: string]: boolean; // Allow dynamic field validation
+}
+
+export interface MovementFormProps {
+  nodeData: any;
+  onSubmit: (data: FormState) => Promise<void>;
+  onClose: () => void;
+  initialData?: Partial<FormState>;
+}
+
+export const DEFAULT_FORM_STATE: FormState = {
+  type: MovementType.AgentMajority,
+  description: '', // Will be updated to CID object when uploaded
+  expiryDays: 7,
+  endpoint: 'new',
+  target: '',  // Leave empty initially
+  calldata: '0x',
+  value: '0',
+  actionType: 'customCall',
+  params: {
+    to: '',    // Initialize empty recipient for token transfers
+    amount: '0', // Initialize zero amount for token transfers
+    target: '', // Initialize empty target for custom calls
+    calldata: '0x', // Initialize empty calldata for custom calls
+    value: '0'  // Initialize zero value for custom calls
+  }
+};
+
+
+
+export const validateFormField = (name: keyof FormState | string, value: string): boolean => {
+  // Handle empty values appropriately
+  if (!value) {
+    if (name === 'value' || name === 'amount') return true; // These default to 0
+    return true; // Allow empty during editing
+  }
+
+  // Basic validations for common fields
+  switch (name) {
+    case 'target':
+    case 'to':
+      return /^0x[a-fA-F0-9]{40}$/.test(value);
+    case 'calldata':
+      return /^0x([a-fA-F0-9]{8,})?$/.test(value); // Allow empty or valid calldata
+    case 'value':
+    case 'amount':
+      return !isNaN(Number(value));
+    case 'description':
+      return value.length >= 10;
+    default:
+      return true;
+  }
+};
+
+export const validateFormForSubmission = (formData: FormState): Record<string, boolean> => {
+  const baseValidation = {
+    description: typeof formData.description === 'string' && formData.description.length >= 10,
+    value: true // Always valid as it defaults to '0'
+  };
+
+  if (formData.actionType === 'tokenTransfer') {
+    return {
+      ...baseValidation,
+      target: true, // Token transfer target is always valid (root token)
+      calldata: true, // Calldata is generated automatically
+      to: formData.params?.to ? /^0x[a-fA-F0-9]{40}$/.test(formData.params.to) : false
+    };
+  }
+
+  // Custom call validation
+  return {
+    ...baseValidation,
+    target: /^0x[a-fA-F0-9]{40}$/.test(formData.target),
+    calldata: /^0x([a-fA-F0-9]{8,})?$/.test(formData.calldata)
+  };
+};
+
+// Add hex string validation helper
+export const isHexString = (value: string): boolean => {
+  return /^0x[0-9a-fA-F]*$/.test(value);
+};
+
+
+
+// File: ./types/chainData.ts
+export interface NodeBasicInfo {
+  nodeId: string;                    
+  inflation: string;                 
+  balanceAnchor: string;            
+  balanceBudget: string;            
+  rootValuationBudget: string;      
+  rootValuationReserve: string;     
+  membraneId: string;               
+  eligibilityPerSec: string;        
+  lastRedistribution: string;       
+  balanceOfUser: string;            
+  endpointOfUserForNode: string;    
+}
+
 export interface UserSignal {
-  MembraneInflation: [string, string][]; // Array of [membraneId, inflationRate] pairs
-  lastRedistSignal: string[];            // Array of timestamps
+  MembraneInflation: [string, string][];
+  lastRedistSignal: string[];           
 }
 
 export interface MembraneMetadata {
@@ -17081,39 +20322,138 @@ export interface MembraneMetadata {
     tokenAddress: string;
     requiredBalance: string;
   }[];
+  createdAt: string;
 }
-
-
-// struct NodeState {
-//   string[10] basicInfo;        // [nodeId, inflation, reserve, budget, rootValuationBudget, rootValuationReserve, membraneId, eligibilityPerSec, lastRedistributionTime, balanceOfUser [0 default]
-//   string membraneMeta;        // Membrane Metadata CID
-//   address[] membersOfNode;    // Array of member addresses
-//   string[] childrenNodes;     // Array of children node IDs
-//   string[] rootPath;          // Path from root to current node
-//   UserSignal[] signals;       // Array of signals
-// } new struct version. 10 01
 
 export interface NodeState {
   basicInfo: [
-    nodeId: string,           // basicInfo[0]
-    inflation: string,        // basicInfo[1]
-    balanceAnchor: string,   // basicInfo[2] - balance in parent reserve
-    balanceBudget: string,   // basicInfo[3] - budget
-    value: string,           // basicInfo[4] - valuation denominated in root token
-    membraneId: string,      // basicInfo[5] - membrane id
-    balanceOfUser: string,   // basicInfo[6] - balance of current user in this node
-    eligibilityPerSec: string, // basicInfo[7] - redistribution eligibility from parent per sec
-    lastRedistribution: string // basicInfo[8] - last redistribution timestamp
+    nodeId: string,
+    inflation: string,
+    reserve: string, 
+    budget: string,
+    rootValuationBudget: string,
+    rootValuationReserve: string,
+    membraneId: string,
+    eligibilityPerSec: string,
+    lastRedistributionTime: string,
+    balanceOfUser: string,
+    endpointOfUserForNode: string
   ];
-  membraneMeta: string;      // IPFS hash or metadata string
-  membersOfNode: string[];   // Array of ethereum addresses
-  childrenNodes: string[];   // Array of node IDs
-  rootPath: string[];        // Array of node IDs from root to this node
-  signals: UserSignal[];     // Array of UserSignal structs
-  ancestors: string[];       // Array of ancestor node IDs
+  membraneMeta: string;          
+  membersOfNode: string[];       
+  childrenNodes: string[];
+  movementEndpoints: string[];       
+  rootPath: string[];            
+  signals: UserSignal[];         
 }
 
-// For membrane-related data
+//  /// @notice returns a node's data given its identifier
+//     /// @notice basicInfo: [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, (balance of user), balanceOfUser, childParentEligibilityPerSec, lastParentRedistribution]
+//     /// @param nodeId node identifier
+//     /// @dev for eth_call
+//     function getNodeData(uint256 nodeId) private view returns (NodeState memory NodeData) {
+//       /// Node identifier
+//       NodeData.basicInfo[0] = nodeId.toString();
+//       /// Current inflation rate per second
+//       NodeData.basicInfo[1] = inflSec[nodeId][0].toString();
+//       /// Reserve balance - amount of tokens held in parent's reserve
+//       NodeData.basicInfo[2] = balanceOf(toAddress(nodeId), parentOf[nodeId]).toString();
+//       /// Budget balance - amount of tokens held in node's own account
+//       NodeData.basicInfo[3] = balanceOf(toAddress(nodeId), nodeId).toString();
+//       /// Root valuation of node's budget (denominated in root token)
+//       NodeData.basicInfo[4] = (asRootValuation(nodeId, balanceOf(toAddress(nodeId), nodeId))).toString();
+//       /// Root valuation of node's reserve (denominated in root token)
+//       NodeData.basicInfo[5] = (asRootValuation(nodeId, balanceOf(toAddress(nodeId), parentOf[nodeId]))).toString();
+//       /// Active membrane identifier
+//       NodeData.basicInfo[6] = (inUseMembraneId[nodeId][0]).toString();
+//       /// Redistribution eligibility rate from parent per second in root valuation
+//       NodeData.basicInfo[7] = (
+//           asRootValuation(options[keccak256(abi.encodePacked(nodeId, parentOf[nodeId]))][0], parentOf[nodeId])
+//       ).toString();
+
+//       /// Timestamp of last redistribution
+//       NodeData.basicInfo[8] = inflSec[nodeId][2].toString();
+//       /// Balance of user
+//       /// basicInfo[9];
+//       /// Endpoint of user for node if any
+//       /// basicInfo[10];
+
+//       /// Membrane Metadata CID
+//       NodeData.membraneMeta = M.getMembraneById(inUseMembraneId[nodeId][0]).meta;
+//       /// Array of member addresses
+//       NodeData.membersOfNode = members[nodeId];
+
+//       NodeData.movementEndpoints = members[toID(executionAddress) + nodeId];
+//       /// Array of direct children node IDs
+//       NodeData.childrenNodes = uintArrayToStringArray(childrenOf[nodeId]);
+//       /// Path from root token to node ID (ancestors)
+//       NodeData.rootPath = uintArrayToStringArray(getFidPath(nodeId));
+//   }
+
+//   function getNodes(uint256[] memory nodeIds) external view returns (NodeState[] memory nodes) {
+//       nodes = new NodeState[](nodeIds.length);
+//       for (uint256 i = 0; i < nodeIds.length; i++) {
+//           nodes[i] = getNodeData(nodeIds[i]);
+//       }
+//   }
+
+//   ///
+//   function getAllNodesForRoot(address rootAddress, address userIfAny)
+//       external
+//       view
+//       returns (NodeState[] memory nodes)
+//   {
+//       uint256 rootId = toID(rootAddress);
+//       nodes = new NodeState[](members[rootId].length);
+//       for (uint256 i = 0; i < members[rootId].length; i++) {
+//           nodes[i] = getNodeData(toID(members[rootId][i]), userIfAny);
+//       }
+//   }
+
+//   /// @notice Returns the array containing signal info for each child node in given originator and parent context
+//   /// @param signalOrigin address of originator
+//   /// @param parentNodeId node id for which originator has expressed
+//   function getUserNodeSignals(address signalOrigin, uint256 parentNodeId)
+//       external
+//       view
+//       returns (uint256[2][] memory UserNodeSignals)
+//   {
+//       uint256[] memory childNodes = childrenOf[parentNodeId];
+//       UserNodeSignals = new uint256[2][](childNodes.length);
+
+//       for (uint256 i = 0; i < childNodes.length; i++) {
+//           // Include the signalOrigin (user's address) in the signalKey
+//           bytes32 userTargetedPreference = keccak256(abi.encodePacked(signalOrigin, parentNodeId, childNodes[i]));
+
+//           // Store the signal value and the timestamp (assuming options[userKey] structure)
+//           UserNodeSignals[i][0] = options[userTargetedPreference][0]; // Signal value
+//           UserNodeSignals[i][1] = options[userTargetedPreference][1]; // Last updated timestamp
+//       }
+
+//       return UserNodeSignals;
+//   }
+
+//   function getNodeData(uint256 nodeId, address user) public view returns (NodeState memory nodeData) {
+//       nodeData = getNodeData(nodeId);
+//       if (user == address(0)) return nodeData;
+//       nodeData.basicInfo[9] = balanceOf(user, nodeId).toString();
+//       uint256 userEndpointId = toID(user) + nodeId;
+//       if (members[userEndpointId].length > 0) {
+//           nodeData.basicInfo[10] = Strings.toHexString(members[userEndpointId][0]);
+//       }
+//       nodeData.signals = new UserSignal[](1);
+//       nodeData.signals[0].MembraneInflation = new string[2][](childrenOf[nodeId].length);
+//       nodeData.signals[0].lastRedistSignal = new string[](childrenOf[nodeId].length);
+
+//       for (uint256 i = 0; i < childrenOf[nodeId].length; i++) {
+//           nodeData.signals[0].MembraneInflation[i][1] = inflSec[nodeId][0].toString();
+
+//           bytes32 userKey = keccak256(abi.encodePacked(user, nodeId, childrenOf[nodeId][i]));
+//           nodeData.signals[0].lastRedistSignal[i] = options[userKey][0].toString();
+//       }
+//   }
+
+
 export interface MembraneRequirement {
   tokenAddress: string;
   symbol: string;
@@ -17126,15 +20466,6 @@ export interface MembraneCharacteristic {
   link?: string;
 }
 
-  name: string;
-  characteristics: MembraneCharacteristic[];
-  membershipConditions: {
-    tokenAddress: string;
-    requiredBalance: string;
-  }[];
-}
-
-// For the processed node data used in the UI
 export interface TransformedNodeData {
   basicInfo: NodeBasicInfo;
   membraneMeta: string;
@@ -17145,7 +20476,6 @@ export interface TransformedNodeData {
   ancestors: string[];
 }
 
-// For computed statistics
 export interface NodeStats {
   totalValue: string;
   dailyGrowth: string;
@@ -17154,14 +20484,13 @@ export interface NodeStats {
   pathDepth: number;
 }
 
-// For membrane state from contract
 export interface MembraneState {
   tokens: string[];
   balances: string[];
   meta: string;
+  createdAt: string;
 }
 
-// For query responses
 export interface NodeQueryResponse {
   data: NodeState;
   isLoading: boolean;
@@ -17169,7 +20498,6 @@ export interface NodeQueryResponse {
   refetch: () => Promise<void>;
 }
 
-// For operation parameters
 export interface NodeOperationParams {
   nodeId: string;
   chainId: string;
@@ -17179,7 +20507,6 @@ export interface NodeOperationParams {
   };
 }
 
-// For signal data
 export interface SignalData {
   membrane: string;
   inflation: string;
@@ -17187,15 +20514,14 @@ export interface SignalData {
   value: string;
 }
 
-// Movement types (if needed for governance)
+// Movement and governance types
 export enum MovementType {
   Revert = 0,
   AgentMajority = 1,
   EnergeticMajority = 2
 }
 
-// Queue states (if needed for governance)
-export enum SQState {
+export enum SignatureQueueState {
   None = 0,
   Initialized = 1,
   Valid = 2,
@@ -17203,21 +20529,64 @@ export enum SQState {
   Stale = 4
 }
 
+export interface Call {
+  target: string;
+  callData: string;
+  value: string;
+}
+
+export interface Movement {
+  category: MovementType;
+  initiatior: string;
+  exeAccount: string;
+  viaNode: string;
+  expiresAt: string;
+  descriptionHash: string;
+  executedPayload: string;
+}
+
+export interface SignatureQueue {
+  state: SignatureQueueState;
+  Action: Movement;
+  Signers: string[];
+  Sigs: string[];
+  exeSig: string;
+}
+
+export interface LatentMovement {
+  movement: Movement;
+  movementHash: string; // This is derived from the movement data
+  signatureQueue: SignatureQueue;
+}
+
+export interface IPFSMetadata {
+  description: string;
+  timestamp: number;
+}
+
+export interface MovementDescription {
+  description: string;
+  timestamp: number;
+}
+
+export interface MovementSignatureStatus {
+  current: number;
+  required: number;
+  hasUserSigned: boolean;
+}
+
+///////////////////////////////////////////
 // Type guard functions
+///////////////////////////////////////////
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 9 &&
+    data.basicInfo.length === 11 &&
     typeof data.membraneMeta === 'string' &&
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
     Array.isArray(data.rootPath) &&
-    Array.isArray(data.ancestors) &&
-    Array.isArray(data.signals) &&
-    data.signals.every((signal: any) =>
-      Array.isArray(signal.MembraneInflation) &&
-      Array.isArray(signal.lastRedistSignal)
-    )
+    Array.isArray(data.signals)
   );
 };
 
@@ -17234,25 +20603,19 @@ export const isValidUserSignal = (data: any): data is UserSignal => {
   );
 };
 
-export const transformNodeData = (nodeData: NodeState): TransformedNodeData => {
+export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
   return {
-    basicInfo: {
-      nodeId: nodeData.basicInfo[0],
-      inflation: nodeData.basicInfo[1],
-      balanceAnchor: nodeData.basicInfo[2],
-      balanceBudget: nodeData.basicInfo[3],
-      value: nodeData.basicInfo[4],
-      membraneId: nodeData.basicInfo[5],
-      balanceOfUser: nodeData.basicInfo[6],
-      eligibilityPerSec: nodeData.basicInfo[7],
-      lastRedistribution: nodeData.basicInfo[8]
-    },
-    membraneMeta: nodeData.membraneMeta,
-    membersOfNode: nodeData.membersOfNode,
-    childrenNodes: nodeData.childrenNodes,
-    rootPath: nodeData.rootPath,
-    signals: nodeData.signals,
-    ancestors: nodeData.ancestors
+    nodeId: nodeData.basicInfo[0],
+    inflation: nodeData.basicInfo[1],
+    balanceAnchor: nodeData.basicInfo[2],
+    balanceBudget: nodeData.basicInfo[3],
+    rootValuationBudget: nodeData.basicInfo[4],
+    rootValuationReserve: nodeData.basicInfo[5],
+    membraneId: nodeData.basicInfo[6],
+    eligibilityPerSec: nodeData.basicInfo[7],
+    lastRedistribution: nodeData.basicInfo[8],
+    balanceOfUser: nodeData.basicInfo[9],
+    endpointOfUserForNode: nodeData.basicInfo[10]
   };
 };
 
@@ -22093,6 +25456,9 @@ export const nodeIdToAddress = (nodeId: string | number | bigint): string => {
 export const addressToNodeId = (address: string): string => {
 export const addressToNodeId = (address: string): string => {
   try {
+    if (!address || address === ethers.ZeroAddress) {
+      throw new Error('Empty or zero address');
+    }
     if (!isHexString(address)) {
       throw new Error('Invalid address format');
     }
@@ -22101,7 +25467,7 @@ export const addressToNodeId = (address: string): string => {
     return nodeId;
   } catch (error) {
     console.error('Error converting address to node ID:', error);
-    throw new Error('Invalid address format');
+    throw error; // Propagate the specific error
   }
 };
 
@@ -22121,23 +25487,138 @@ export const formatPercentage = (value: number): string => {
   return (Math.round(value * 100) / 100).toFixed(2) + '%';
 };
 
+export interface FormState {
+export interface FormState {
+  type: MovementType;
+  description: string | CIDObject;
+  expiryDays: number;
+  endpoint: string;
+  target: string;
+  calldata: string;
+  value: string;
+  actionType?: string;
+  params?: {
+    [key: string]: string | number | { cid: string };
+  };
+}
+
+export interface EndpointOption {
+export interface EndpointOption {
+  value: string;
+  label: string;
+  authType: MovementType;
+  balance?: string;
+  isDisabled?: boolean;
+}
+
+export interface MovementFormValidation {
+export interface MovementFormValidation {
+  target: boolean;
+  calldata: boolean;
+  description: boolean;
+  [key: string]: boolean; // Allow dynamic field validation
+}
+
+export interface MovementFormProps {
+export interface MovementFormProps {
+  nodeData: any;
+  onSubmit: (data: FormState) => Promise<void>;
+  onClose: () => void;
+  initialData?: Partial<FormState>;
+}
+
+export const DEFAULT_FORM_STATE: FormState = {
+export const DEFAULT_FORM_STATE: FormState = {
+  type: MovementType.AgentMajority,
+  description: '', // Will be updated to CID object when uploaded
+  expiryDays: 7,
+  endpoint: 'new',
+  target: '',  // Leave empty initially
+  calldata: '0x',
+  value: '0',
+  actionType: 'customCall',
+  params: {
+    to: '',    // Initialize empty recipient for token transfers
+    amount: '0', // Initialize zero amount for token transfers
+    target: '', // Initialize empty target for custom calls
+    calldata: '0x', // Initialize empty calldata for custom calls
+    value: '0'  // Initialize zero value for custom calls
+  }
+};
+
+export const validateFormField = (name: keyof FormState | string, value: string): boolean => {
+export const validateFormField = (name: keyof FormState | string, value: string): boolean => {
+  // Handle empty values appropriately
+  if (!value) {
+    if (name === 'value' || name === 'amount') return true; // These default to 0
+    return true; // Allow empty during editing
+  }
+
+  // Basic validations for common fields
+  switch (name) {
+    case 'target':
+    case 'to':
+      return /^0x[a-fA-F0-9]{40}$/.test(value);
+    case 'calldata':
+      return /^0x([a-fA-F0-9]{8,})?$/.test(value); // Allow empty or valid calldata
+    case 'value':
+    case 'amount':
+      return !isNaN(Number(value));
+    case 'description':
+      return value.length >= 10;
+    default:
+      return true;
+  }
+};
+
+export const validateFormForSubmission = (formData: FormState): Record<string, boolean> => {
+export const validateFormForSubmission = (formData: FormState): Record<string, boolean> => {
+  const baseValidation = {
+    description: typeof formData.description === 'string' && formData.description.length >= 10,
+    value: true // Always valid as it defaults to '0'
+  };
+
+  if (formData.actionType === 'tokenTransfer') {
+    return {
+      ...baseValidation,
+      target: true, // Token transfer target is always valid (root token)
+      calldata: true, // Calldata is generated automatically
+      to: formData.params?.to ? /^0x[a-fA-F0-9]{40}$/.test(formData.params.to) : false
+    };
+  }
+
+  // Custom call validation
+  return {
+    ...baseValidation,
+    target: /^0x[a-fA-F0-9]{40}$/.test(formData.target),
+    calldata: /^0x([a-fA-F0-9]{8,})?$/.test(formData.calldata)
+  };
+};
+
+export const isHexString = (value: string): boolean => {
+export const isHexString = (value: string): boolean => {
+  return /^0x[0-9a-fA-F]*$/.test(value);
+};
+
 export interface NodeBasicInfo {
 export interface NodeBasicInfo {
-  nodeId: string;              // basicInfo[0]
-  inflation: string;           // basicInfo[1]
-  balanceAnchor: string;      // basicInfo[2] - balance in parent reserve
-  balanceBudget: string;      // basicInfo[3] - budget
-  value: string;              // basicInfo[4] - valuation denominated in root token
-  membraneId: string;         // basicInfo[5] - membrane id
-  balanceOfUser: string;      // basicInfo[6] - balance of current user in this node
-  eligibilityPerSec: string;  // basicInfo[7] - redistribution eligibility from parent per sec
-  lastRedistribution: string; // basicInfo[8] - last redistribution timestamp
+  nodeId: string;                    
+  inflation: string;                 
+  balanceAnchor: string;            
+  balanceBudget: string;            
+  rootValuationBudget: string;      
+  rootValuationReserve: string;     
+  membraneId: string;               
+  eligibilityPerSec: string;        
+  lastRedistribution: string;       
+  balanceOfUser: string;            
+  endpointOfUserForNode: string;    
 }
 
 export interface UserSignal {
 export interface UserSignal {
-  MembraneInflation: [string, string][]; // Array of [membraneId, inflationRate] pairs
-  lastRedistSignal: string[];            // Array of timestamps
+  MembraneInflation: [string, string][];
+  lastRedistSignal: string[];           
 }
 
 export interface MembraneMetadata {
@@ -22150,27 +25631,30 @@ export interface MembraneMetadata {
     tokenAddress: string;
     requiredBalance: string;
   }[];
+  createdAt: string;
 }
 
 export interface NodeState {
 export interface NodeState {
   basicInfo: [
-    nodeId: string,           // basicInfo[0]
-    inflation: string,        // basicInfo[1]
-    balanceAnchor: string,   // basicInfo[2] - balance in parent reserve
-    balanceBudget: string,   // basicInfo[3] - budget
-    value: string,           // basicInfo[4] - valuation denominated in root token
-    membraneId: string,      // basicInfo[5] - membrane id
-    balanceOfUser: string,   // basicInfo[6] - balance of current user in this node
-    eligibilityPerSec: string, // basicInfo[7] - redistribution eligibility from parent per sec
-    lastRedistribution: string // basicInfo[8] - last redistribution timestamp
+    nodeId: string,
+    inflation: string,
+    reserve: string, 
+    budget: string,
+    rootValuationBudget: string,
+    rootValuationReserve: string,
+    membraneId: string,
+    eligibilityPerSec: string,
+    lastRedistributionTime: string,
+    balanceOfUser: string,
+    endpointOfUserForNode: string
   ];
-  membraneMeta: string;      // IPFS hash or metadata string
-  membersOfNode: string[];   // Array of ethereum addresses
-  childrenNodes: string[];   // Array of node IDs
-  rootPath: string[];        // Array of node IDs from root to this node
-  signals: UserSignal[];     // Array of UserSignal structs
-  ancestors: string[];       // Array of ancestor node IDs
+  membraneMeta: string;          
+  membersOfNode: string[];       
+  childrenNodes: string[];
+  movementEndpoints: string[];       
+  rootPath: string[];            
+  signals: UserSignal[];         
 }
 
 export interface MembraneRequirement {
@@ -22212,6 +25696,7 @@ export interface MembraneState {
   tokens: string[];
   balances: string[];
   meta: string;
+  createdAt: string;
 }
 
 export interface NodeQueryResponse {
@@ -22240,21 +25725,69 @@ export interface SignalData {
   value: string;
 }
 
+export interface Call {
+export interface Call {
+  target: string;
+  callData: string;
+  value: string;
+}
+
+export interface Movement {
+export interface Movement {
+  category: MovementType;
+  initiatior: string;
+  exeAccount: string;
+  viaNode: string;
+  expiresAt: string;
+  descriptionHash: string;
+  executedPayload: string;
+}
+
+export interface SignatureQueue {
+export interface SignatureQueue {
+  state: SignatureQueueState;
+  Action: Movement;
+  Signers: string[];
+  Sigs: string[];
+  exeSig: string;
+}
+
+export interface LatentMovement {
+export interface LatentMovement {
+  movement: Movement;
+  movementHash: string; // This is derived from the movement data
+  signatureQueue: SignatureQueue;
+}
+
+export interface IPFSMetadata {
+export interface IPFSMetadata {
+  description: string;
+  timestamp: number;
+}
+
+export interface MovementDescription {
+export interface MovementDescription {
+  description: string;
+  timestamp: number;
+}
+
+export interface MovementSignatureStatus {
+export interface MovementSignatureStatus {
+  current: number;
+  required: number;
+  hasUserSigned: boolean;
+}
+
 export const isValidNodeState = (data: any): data is NodeState => {
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 9 &&
+    data.basicInfo.length === 11 &&
     typeof data.membraneMeta === 'string' &&
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
     Array.isArray(data.rootPath) &&
-    Array.isArray(data.ancestors) &&
-    Array.isArray(data.signals) &&
-    data.signals.every((signal: any) =>
-      Array.isArray(signal.MembraneInflation) &&
-      Array.isArray(signal.lastRedistSignal)
-    )
+    Array.isArray(data.signals)
   );
 };
 
@@ -22272,26 +25805,20 @@ export const isValidUserSignal = (data: any): data is UserSignal => {
   );
 };
 
-export const transformNodeData = (nodeData: NodeState): TransformedNodeData => {
-export const transformNodeData = (nodeData: NodeState): TransformedNodeData => {
+export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
+export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
   return {
-    basicInfo: {
-      nodeId: nodeData.basicInfo[0],
-      inflation: nodeData.basicInfo[1],
-      balanceAnchor: nodeData.basicInfo[2],
-      balanceBudget: nodeData.basicInfo[3],
-      value: nodeData.basicInfo[4],
-      membraneId: nodeData.basicInfo[5],
-      balanceOfUser: nodeData.basicInfo[6],
-      eligibilityPerSec: nodeData.basicInfo[7],
-      lastRedistribution: nodeData.basicInfo[8]
-    },
-    membraneMeta: nodeData.membraneMeta,
-    membersOfNode: nodeData.membersOfNode,
-    childrenNodes: nodeData.childrenNodes,
-    rootPath: nodeData.rootPath,
-    signals: nodeData.signals,
-    ancestors: nodeData.ancestors
+    nodeId: nodeData.basicInfo[0],
+    inflation: nodeData.basicInfo[1],
+    balanceAnchor: nodeData.basicInfo[2],
+    balanceBudget: nodeData.basicInfo[3],
+    rootValuationBudget: nodeData.basicInfo[4],
+    rootValuationReserve: nodeData.basicInfo[5],
+    membraneId: nodeData.basicInfo[6],
+    eligibilityPerSec: nodeData.basicInfo[7],
+    lastRedistribution: nodeData.basicInfo[8],
+    balanceOfUser: nodeData.basicInfo[9],
+    endpointOfUserForNode: nodeData.basicInfo[10]
   };
 };
 </document_content>

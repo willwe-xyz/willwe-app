@@ -8,87 +8,69 @@ import { MovementType, SignatureQueueState, LatentMovement } from '../types/chai
 interface UseMovementsProps {
   nodeId: string;
   chainId: string;
+  userAddress?: string;
 }
 
 interface UseMovementsState {
   movements: LatentMovement[];
-  descriptions: Record<string, string>;
   signatures: Record<string, { current: number; required: number }>;
   endpointAuthTypes: Record<string, number>;
   isLoading: boolean;
 }
 
-const EIP712_DOMAIN_TYPE = [
-  { name: 'name', type: 'string' },
-  { name: 'version', type: 'string' },
-  { name: 'chainId', type: 'uint256' },
-  { name: 'verifyingContract', type: 'address' }
-];
-
-const MOVEMENT_TYPE = [
-  { name: 'category', type: 'uint8' },
-  { name: 'initiatior', type: 'address' },
-  { name: 'exeAccount', type: 'address' },
-  { name: 'viaNode', type: 'uint256' },
-  { name: 'expiresAt', type: 'uint256' },
-  { name: 'descriptionHash', type: 'bytes32' },
-  { name: 'executedPayload', type: 'bytes' }
-];
-
-// Add utility function to convert CID to bytes32
-const cidToBytes32 = (cid: string): string => {
-  // Convert CID to bytes32 format
-  const bytes = ethers.toUtf8Bytes(cid);
-  const hash = ethers.keccak256(bytes);
-  return hash;
-};
-
-export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
+export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps) => {
   const [state, setState] = useState<UseMovementsState>({
     movements: [],
-    descriptions: {},
     signatures: {},
     endpointAuthTypes: {},
     isLoading: true
   });
 
-  const { getEthersProvider } = usePrivy();
+  const { getEthersProvider, ready, authenticated } = usePrivy();
   const { executeTransaction } = useTransaction();
   const cleanChainId = chainId.replace('eip155:', '');
 
   // Fetch all data in parallel
   const fetchMovementData = useCallback(async () => {
-    if (!nodeId || !chainId) return;
+    if (!nodeId || !chainId || !ready || !authenticated) return;
     
     try {
       setState(prev => ({ ...prev, isLoading: true }));
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       const executionContract = new ethers.Contract(
         deployments.Execution[cleanChainId],
         ABIs.Execution,
         provider
       );
 
-      // Fetch movements
+      console.log('Fetching movements for node:', nodeId);
       const rawMovements = await executionContract.getLatentMovements(nodeId);
-      const processedMovements = rawMovements
-        .map(processMovementData)
-        .filter(m => m.signatureQueue.state !== SignatureQueueState.Stale);
+      console.log('Raw movements:', rawMovements);
 
-      // Fetch descriptions and signatures in parallel
-      const [descriptions, signatureDetails] = await Promise.all([
-        // Get descriptions
-        Promise.all(processedMovements.map(async (movement) => {
-          try {
-            const description = await fetchMovementDescription(movement.movement.descriptionHash);
-            return { hash: movement.movement.descriptionHash, description };
-          } catch (error) {
-            console.error('Error fetching description:', error);
-            return { hash: movement.movement.descriptionHash, description: 'Failed to load description' };
+      // Process only valid movements
+      const processedMovements = rawMovements
+        .filter(rm => {
+          if (!rm || !rm.movement || !rm.signatureQueue) {
+            console.warn('Invalid movement structure:', rm);
+            return false;
           }
-        })),
-        // Get signature counts
-        Promise.all(processedMovements.map(async (movement) => {
+          return true;
+        })
+        .map(rm => {
+          try {
+            return processMovementData(rm);
+          } catch (error) {
+            console.error('Error processing movement:', error, rm);
+            return null;
+          }
+        })
+        .filter(m => m !== null && m.signatureQueue.state !== SignatureQueueState.Stale);
+
+      console.log('Processed movements:', processedMovements);
+
+      // Calculate signature progress for each movement
+      const signatureDetails = await Promise.all(
+        processedMovements.map(async (movement) => {
           try {
             const willWeContract = new ethers.Contract(
               deployments.WillWe[cleanChainId],
@@ -99,7 +81,6 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
             let currentPower = 0;
             let requiredPower = 0;
 
-            // Calculate current power based on movement type
             for (const signer of movement.signatureQueue.Signers) {
               if (signer === ethers.ZeroAddress) continue;
 
@@ -111,7 +92,6 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
               }
             }
 
-            // Calculate required power
             if (movement.movement.category === MovementType.EnergeticMajority) {
               const totalSupply = await willWeContract.totalSupply(movement.movement.viaNode);
               requiredPower = Math.floor(Number(totalSupply) / 2) + 1;
@@ -121,34 +101,27 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
             }
 
             return { 
-              hash: movement.movementHash,
+              key: `${movement.movement.viaNode}-${movement.movement.expiresAt}`,
               signatures: { current: currentPower, required: requiredPower }
             };
           } catch (error) {
             console.error('Error calculating signatures:', error);
             return { 
-              hash: movement.movementHash,
+              key: `${movement.movement.viaNode}-${movement.movement.expiresAt}`,
               signatures: { current: 0, required: 0 }
             };
           }
-        }))
-      ]);
-
-      // Build state updates
-      const descriptionMap: Record<string, string> = {};
-      descriptions.forEach(({ hash, description }) => {
-        descriptionMap[hash] = description;
-      });
+        })
+      );
 
       const signatureMap: Record<string, { current: number; required: number }> = {};
-      signatureDetails.forEach(({ hash, signatures }) => {
-        signatureMap[hash] = signatures;
+      signatureDetails.forEach(({ key, signatures }) => {
+        signatureMap[key] = signatures;
       });
 
       setState(prev => ({
         ...prev,
         movements: processedMovements,
-        descriptions: descriptionMap,
         signatures: signatureMap,
         isLoading: false
       }));
@@ -156,52 +129,32 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
       console.error('Error fetching movement data:', error);
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [nodeId, chainId, cleanChainId]);
+  }, [nodeId, chainId, cleanChainId, ready, authenticated]);
 
-  // Effect for initial fetch and cleanup
   useEffect(() => {
     let mounted = true;
     
-    if (mounted) {
+    if (mounted && ready && authenticated) {
       fetchMovementData();
     }
 
     return () => {
       mounted = false;
     };
-  }, [fetchMovementData]);
+  }, [fetchMovementData, ready, authenticated]);
 
-  // Create movement with proper EIP-712 typing
   const createMovement = async (formData: any) => {
+    if (!ready || !authenticated) {
+      throw new Error('Wallet not connected');
+    }
+
     try {
-      // Upload description to IPFS via Filebase
-      const descriptionMetadata = {
-        description: formData.description,
-        timestamp: Date.now()
-      };
-
-      const response = await fetch('/api/upload-to-ipfs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: descriptionMetadata }),
-      });
-
-      if (!response.ok) throw new Error('Failed to upload metadata');
-      const { cid } = await response.json();
-
-      console.log("uploadDescription, descriptionHash:", { cid });
-
-      // Convert CID to bytes32
-      const descriptionHash = cidToBytes32(cid);
-
-      // Create the Call struct array for executedPayload
       const calls = [{
         target: formData.target,
         callData: formData.calldata,
         value: ethers.parseEther(formData.value || '0')
       }];
-
-      // Encode the calls array according to the contract's Call struct
+  
       const executedPayload = ethers.AbiCoder.defaultAbiCoder().encode(
         [{
           type: 'tuple[]',
@@ -213,7 +166,7 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
         }],
         [calls]
       );
-
+  
       return await executeTransaction(
         chainId,
         async () => {
@@ -222,7 +175,6 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
           const contract = new ethers.Contract(
             deployments.WillWe[cleanChainId],
             ABIs.WillWe,
-            // @ts-ignore
             signer
           );
           
@@ -231,7 +183,7 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
             nodeId,
             formData.expiryDays,
             formData.endpoint === 'new' ? ethers.ZeroAddress : formData.endpoint,
-            descriptionHash, // Now using bytes32 hash
+            formData.description,
             executedPayload
           );
         },
@@ -246,131 +198,180 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
     }
   };
 
-  // Sign movement with EIP-712
   const signMovement = async (movement: LatentMovement) => {
-    const provider = await getEthersProvider();
-    const signer = await provider.getSigner();
-    const address = await signer.getAddress();
+    if (!ready || !authenticated || !userAddress) {
+      throw new Error('Not ready to sign');
+    }
 
-    // EIP-712 domain
-    const domain = {
-      name: 'WillWe',
-      version: '1',
-      chainId: Number(cleanChainId),
-      verifyingContract: deployments.Execution[cleanChainId]
-    };
+    try {
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const signerAddress = await signer.getAddress();
+      
+      // Get the execution contract instance
+      const executionContract = new ethers.Contract(
+        deployments.Execution[cleanChainId],
+        ABIs.Execution,
+        provider
+      );
+      
+      // Get the domain separator from the contract
+      const domainSeparator = await executionContract.DOMAIN_SEPARATOR();
+      
+      // Define the EIP-712 domain and types
+      const domain = {
+        name: 'WillWe.xyz',
+        version: '1',
+        chainId: Number(cleanChainId),
+        verifyingContract: deployments.Execution[cleanChainId]
+      };
 
-    // Prepare the data to be signed
-    const message = {
-      category: movement.movement.category,
-      initiatior: movement.movement.initiatior,
-      exeAccount: movement.movement.exeAccount,
-      viaNode: movement.movement.viaNode,
-      expiresAt: movement.movement.expiresAt,
-      descriptionHash: movement.movement.descriptionHash,
-      executedPayload: movement.movement.executedPayload
-    };
+      const types = {
+        Movement: [
+          { name: 'category', type: 'uint8' },
+          { name: 'initiatior', type: 'address' },
+          { name: 'exeAccount', type: 'address' },
+          { name: 'viaNode', type: 'uint256' },
+          { name: 'expiresAt', type: 'uint256' },
+          { name: 'description', type: 'string' },
+          { name: 'executedPayload', type: 'bytes' }
+        ]
+      };
 
-    // Sign using EIP-712
-    const signature = await signer.signTypedData(domain, { Movement: MOVEMENT_TYPE }, message);
+      // The message to sign (matching the contract's Movement struct)
+      const messageValue = {
+        category: movement.movement.category,
+        initiatior: movement.movement.initiatior,
+        exeAccount: movement.movement.exeAccount,
+        viaNode: movement.movement.viaNode,
+        expiresAt: movement.movement.expiresAt,
+        description: movement.movement.description,
+        executedPayload: movement.movement.executedPayload
+      };
 
-    return await executeTransaction(
-      chainId,
-      async () => {
-        const contract = new ethers.Contract(
-          deployments.WillWe[cleanChainId],
-          ABIs.WillWe,
-          signer
-        );
-
-        return contract.submitSignatures(
-          movement.movementHash,
-          [address],
-          [signature]
-        );
-      },
-      {
-        successMessage: 'Movement signed successfully',
-        onSuccess: fetchMovementData
+      // Double check that our hash matches the one from the contract
+      const contractMovementHash = await executionContract.hashMessage(messageValue);
+      
+      console.log("Movement to sign:", messageValue);
+      console.log("Contract movement hash:", contractMovementHash);
+      console.log("Stored movement hash:", movement.movementHash);
+      
+      if (contractMovementHash !== movement.movementHash) {
+        console.warn("Hash mismatch - using contract hash instead");
       }
-    );
+
+      // Sign the typed data to get a proper EIP-712 signature
+      const signature = await signer._signTypedData(domain, types, messageValue);
+      
+      console.log("Generated signature:", signature);
+      console.log("Signing parameters:", {
+        domain,
+        types,
+        messageValue,
+        signerAddress
+      });
+
+      // Submit signature to contract using the verified hash
+      return await executeTransaction(
+        chainId,
+        async () => {
+          const contractWithSigner = new ethers.Contract(
+            deployments.WillWe[cleanChainId],
+            ABIs.WillWe,
+            signer
+          );
+
+          return contractWithSigner.submitSignatures(
+            contractMovementHash, // Use the hash from the contract for consistency
+            [signerAddress],
+            [signature]
+          );
+        },
+        {
+          successMessage: 'Movement signed successfully',
+          onSuccess: fetchMovementData
+        }
+      );
+    } catch (error) {
+      console.error('Error signing movement:', error);
+      throw error;
+    }
   };
 
   const executeMovement = async (movement: LatentMovement) => {
-    return await executeTransaction(
-      chainId,
-      async () => {
-        const provider = await getEthersProvider();
-        const signer = await provider.getSigner();
-        const contract = new ethers.Contract(
-          deployments.WillWe[cleanChainId],
-          ABIs.WillWe,
-          signer
-        );
+    if (!ready || !authenticated) {
+      throw new Error('Wallet not connected');
+    }
 
-        return contract.executeQueue(movement.movementHash);
-      },
-      {
-        successMessage: 'Movement executed successfully',
-        onSuccess: fetchMovementData
+    try {
+      // First, verify the movement hash from the contract to ensure consistency
+      const provider = await getEthersProvider();
+      const executionContract = new ethers.Contract(
+        deployments.Execution[cleanChainId],
+        ABIs.Execution,
+        provider
+      );
+      
+      const contractMovementHash = await executionContract.hashMessage(movement.movement);
+      
+      if (contractMovementHash !== movement.movementHash) {
+        console.warn(`Hash mismatch for execution. Using contract hash: ${contractMovementHash} instead of ${movement.movementHash}`);
       }
-    );
+      
+      return await executeTransaction(
+        chainId,
+        async () => {
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            deployments.WillWe[cleanChainId],
+            ABIs.WillWe,
+            signer
+          );
+
+          // Use the verified contract hash
+          return contract.executeQueue(contractMovementHash);
+        },
+        {
+          successMessage: 'Movement executed successfully',
+          onSuccess: fetchMovementData
+        }
+      );
+    } catch (error) {
+      console.error('Error executing movement:', error);
+      throw error;
+    }
   };
 
-  // Process movement data with proper EIP-712 hashing
   const processMovementData = (rawMovement: any): LatentMovement => {
+    console.log('Processing movement:', rawMovement);
+
+    // Extract movement data, ensuring all required fields are present
     const movement = {
-      category: Number(rawMovement.movement.category),
-      initiatior: rawMovement.movement.initiatior.toString(),
-      exeAccount: rawMovement.movement.exeAccount.toString(),
-      viaNode: rawMovement.movement.viaNode.toString(),
-      expiresAt: rawMovement.movement.expiresAt.toString(),
-      descriptionHash: rawMovement.movement.descriptionHash.toString(),
-      executedPayload: rawMovement.movement.executedPayload.toString()
+      category: Number(rawMovement.movement.category || 0),
+      initiatior: rawMovement.movement.initiatior?.toString() || ethers.ZeroAddress,
+      exeAccount: rawMovement.movement.exeAccount?.toString() || ethers.ZeroAddress,
+      viaNode: rawMovement.movement.viaNode?.toString() || '0',
+      expiresAt: rawMovement.movement.expiresAt?.toString() || '0',
+      description: rawMovement.movement.description || '',
+      executedPayload: rawMovement.movement.executedPayload?.toString() || '0x'
     };
 
-    const domain = {
-      name: 'WillWe',
-      version: '1',
-      chainId: Number(cleanChainId),
-      verifyingContract: deployments.Execution[cleanChainId]
-    };
-
-    // Calculate EIP-712 hash using ethers v6 syntax
-    const movementHash = ethers.TypedDataEncoder.hash(
-      domain,
-      { Movement: MOVEMENT_TYPE },
-      movement
-    );
-
-    return {
+    const processed: LatentMovement = {
       movement,
-      movementHash,
       signatureQueue: {
-        state: Number(rawMovement.signatureQueue.state),
-        Action: rawMovement.signatureQueue.Action,
-        Signers: Array.isArray(rawMovement.signatureQueue.Signers) 
-          ? rawMovement.signatureQueue.Signers.map((s: any) => s.toString())
+        state: Number(rawMovement.signatureQueue.state || 0),
+        Action: rawMovement.signatureQueue.Action || movement,
+        Signers: Array.isArray(rawMovement.signatureQueue.Signers)
+          ? rawMovement.signatureQueue.Signers.map(s => s?.toString() || ethers.ZeroAddress)
           : [],
         Sigs: Array.isArray(rawMovement.signatureQueue.Sigs)
-          ? rawMovement.signatureQueue.Sigs.map((s: any) => s.toString())
+          ? rawMovement.signatureQueue.Sigs.map(s => s?.toString() || '0x')
           : []
       }
     };
-  };
 
-  // Also update the fetchMovementDescription function (if it exists) to handle bytes32
-  const fetchMovementDescription = async (descriptionHash: string): Promise<string> => {
-    try {
-      // Implement your logic to fetch the description from IPFS using the hash
-      const response = await fetch(`/api/get-ipfs-data?hash=${descriptionHash}`);
-      if (!response.ok) throw new Error('Failed to fetch description');
-      const data = await response.json();
-      return data.description;
-    } catch (error) {
-      console.error('Error fetching description:', error);
-      return 'Failed to load description';
-    }
+    console.log('Processed movement result:', processed);
+    return processed;
   };
 
   return {
@@ -378,6 +379,7 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
     createMovement,
     signMovement,
     executeMovement,
-    refreshMovements: fetchMovementData
+    refreshMovements: fetchMovementData,
+    isReady: ready && authenticated
   };
 };

@@ -179,9 +179,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 </TabPanel>
 
                 <TabPanel p={6}>
-                  <Box maxW="900px" mx="auto">
+                  <Box  mx="auto">
                     <MovementsErrorBoundary>
-                      <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} nodeData={nodeData} />
+                      <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} nodeData={nodeData} userAddress={user?.wallet?.address} />
                     </MovementsErrorBoundary>
                   </Box>
                 </TabPanel>

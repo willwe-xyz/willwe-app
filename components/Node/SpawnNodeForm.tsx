@@ -70,7 +70,7 @@ const SpawnNodeForm = ({
   const [newTokenAddress, setNewTokenAddress] = useState('');
   const [newTokenBalance, setNewTokenBalance] = useState('');
   const [inflationRate, setInflationRate] = useState(1);
-  const [useMembrane, setUseMembrane] = useState(false);
+  const [useMembrane, setUseMembrane] = useState(true);
 
   // Transaction state
   const [isLoading, setIsLoading] = useState(false);
@@ -263,7 +263,7 @@ const SpawnNodeForm = ({
       <VStack spacing={6} align="stretch">
         <FormControl display="flex" alignItems="center">
           <FormLabel htmlFor="use-membrane" mb="0">
-            Define Node
+            Define
           </FormLabel>
           <Switch
             id="use-membrane"
