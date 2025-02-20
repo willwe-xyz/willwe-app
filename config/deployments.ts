@@ -8,33 +8,34 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-//   Will: 0x512427f2A5461F5C8a152aAa69b2ce92604C3C4A
-//   Membrane: 0xdd5C04AEe8eCeA49ca96826fdD926D504CF7EB43
-//   Execution: 0x7F3ab5e963F566cf71eA90053a9De1f8876e0760
-//   WillWe: 0xF8FD86d9E198CF4ef8684352D88920C274B1B02a
+//   Will: 0x2c77fDB59cA673e18b8188f43312e5dab244299e
+//   Membrane: 0x91181509CdF0065Be5ee4DFc733e23816AA4cC0a
+//   Execution: 0xD2b2677ab4c6DFDc42aEF66Dc19b612A76b928dA
+//   WillWe: 0x381ADaD5b4E3326f152CC0623b5d2Aafa8Fda90D
 //   Kibern Director: 0x0000000000000000000000000000000000000000
-//   Control [0,1]: 0x0A944445BA140A7f30B2DDd58B64657936E5316B 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0xA6c1d9be34018D6Ab985b69C76D168f5fe83fc85 0x0000000000000000000000000000000000000000
 //   Will Price in ETH: 1000000000
+
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x512427f2A5461F5C8a152aAa69b2ce92604C3C4A",
+        "11155420": "0x2c77fDB59cA673e18b8188f43312e5dab244299e",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0xdd5C04AEe8eCeA49ca96826fdD926D504CF7EB43",
+        "11155420": "0x91181509CdF0065Be5ee4DFc733e23816AA4cC0a",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0x7F3ab5e963F566cf71eA90053a9De1f8876e0760",
+        "11155420": "0xD2b2677ab4c6DFDc42aEF66Dc19b612A76b928dA",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0xF8FD86d9E198CF4ef8684352D88920C274B1B02a",
+        "11155420": "0x381ADaD5b4E3326f152CC0623b5d2Aafa8Fda90D",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -56,6 +57,8 @@ export function getChainById(chainId: string): Chain {
   }
   throw new Error(`Chain with id ${chainId} not found`); 
 }
+
+
 
 export function getAlchemyNetwork(chainId: number | string): Network {
     // Convert chainId to string for consistent comparison
@@ -2067,7 +2070,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Execution" : [
+    "Execution" :  [
         {
             "type": "constructor",
             "inputs": [
@@ -2237,6 +2240,81 @@ export const ABIs: ABIKP = {
                 }
             ],
             "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "getDigestToSign",
+            "inputs": [
+                {
+                    "name": "movement",
+                    "type": "tuple",
+                    "internalType": "struct Movement",
+                    "components": [
+                        {
+                            "name": "category",
+                            "type": "uint8",
+                            "internalType": "enum MovementType"
+                        },
+                        {
+                            "name": "initiatior",
+                            "type": "address",
+                            "internalType": "address"
+                        },
+                        {
+                            "name": "exeAccount",
+                            "type": "address",
+                            "internalType": "address"
+                        },
+                        {
+                            "name": "viaNode",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "expiresAt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "description",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "executedPayload",
+                            "type": "bytes",
+                            "internalType": "bytes"
+                        }
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getEIP712MessageHash",
+            "inputs": [
+                {
+                    "name": "movementHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -2445,7 +2523,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "hashMessage",
+            "name": "hashMovement",
             "inputs": [
                 {
                     "name": "movement",
@@ -2974,7 +3052,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Membrane" :   [
+    "Membrane" : [
         {
             "type": "function",
             "name": "createMembrane",

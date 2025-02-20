@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { ObjectManager } from "@filebase/sdk";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-console.log("uploadtoipfs, request:", req);
+
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }

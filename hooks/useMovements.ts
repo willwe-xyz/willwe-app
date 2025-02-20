@@ -202,30 +202,43 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
     if (!ready || !authenticated || !userAddress) {
       throw new Error('Not ready to sign');
     }
-
+  
     try {
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
       const signerAddress = await signer.getAddress();
       
-      // Get the execution contract instance
       const executionContract = new ethers.Contract(
         deployments.Execution[cleanChainId],
         ABIs.Execution,
         provider
       );
+  
+      // Format the movement
+      const formattedMovement = {
+        category: Number(movement.movement.category),
+        initiatior: movement.movement.initiatior,
+        exeAccount: movement.movement.exeAccount,
+        viaNode: BigInt(movement.movement.viaNode),
+        expiresAt: BigInt(movement.movement.expiresAt),
+        description: movement.movement.description,
+        executedPayload: movement.movement.executedPayload
+      };
       
-      // Get the domain separator from the contract
-      const domainSeparator = await executionContract.DOMAIN_SEPARATOR();
+      console.log('Formatted movement:', formattedMovement);
       
-      // Define the EIP-712 domain and types
+      // Get movement hash from contract for submission
+      const movementHash = await executionContract.hashMovement(formattedMovement);
+      console.log('Movement hash:', movementHash);
+      
+      // Define EIP-712 domain and types
       const domain = {
         name: 'WillWe.xyz',
         version: '1',
         chainId: Number(cleanChainId),
         verifyingContract: deployments.Execution[cleanChainId]
       };
-
+      
       const types = {
         Movement: [
           { name: 'category', type: 'uint8' },
@@ -237,59 +250,73 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           { name: 'executedPayload', type: 'bytes' }
         ]
       };
-
-      // The message to sign (matching the contract's Movement struct)
-      const messageValue = {
-        category: movement.movement.category,
-        initiatior: movement.movement.initiatior,
-        exeAccount: movement.movement.exeAccount,
-        viaNode: movement.movement.viaNode,
-        expiresAt: movement.movement.expiresAt,
-        description: movement.movement.description,
-        executedPayload: movement.movement.executedPayload
-      };
-
-      // Double check that our hash matches the one from the contract
-      const contractMovementHash = await executionContract.hashMessage(messageValue);
       
-      console.log("Movement to sign:", messageValue);
-      console.log("Contract movement hash:", contractMovementHash);
-      console.log("Stored movement hash:", movement.movementHash);
-      
-      if (contractMovementHash !== movement.movementHash) {
-        console.warn("Hash mismatch - using contract hash instead");
-      }
-
-      // Sign the typed data to get a proper EIP-712 signature
-      const signature = await signer._signTypedData(domain, types, messageValue);
-      
-      console.log("Generated signature:", signature);
-      console.log("Signing parameters:", {
+      // Sign using EIP-712
+      const signature = await signer._signTypedData(
         domain,
-        types,
-        messageValue,
-        signerAddress
+        { Movement: types.Movement },
+        formattedMovement
+      );
+      
+      console.log('EIP-712 signature:', signature);
+      
+      // Verify locally that the signature is correct
+      const recoveredAddress = ethers.verifyTypedData(
+        domain,
+        { Movement: types.Movement },
+        formattedMovement,
+        signature
+      );
+      
+      console.log('Local verification:', {
+        recoveredAddress,
+        expectedSigner: signerAddress,
+        match: recoveredAddress.toLowerCase() === signerAddress.toLowerCase()
       });
-
-      // Submit signature to contract using the verified hash
+      
+      // Submit the signature
       return await executeTransaction(
         chainId,
         async () => {
-          const contractWithSigner = new ethers.Contract(
+          const willWeContract = new ethers.Contract(
             deployments.WillWe[cleanChainId],
             ABIs.WillWe,
             signer
           );
-
-          return contractWithSigner.submitSignatures(
-            contractMovementHash, // Use the hash from the contract for consistency
+          
+          console.log('Submitting signature:', {
+            movementHash,
+            signer: signerAddress,
+            signature
+          });
+          
+          return willWeContract.submitSignatures(
+            movementHash,
             [signerAddress],
             [signature]
           );
         },
         {
           successMessage: 'Movement signed successfully',
-          onSuccess: fetchMovementData
+          onSuccess: async () => {
+            // Log queue status after submission
+            try {
+              const isValid = await executionContract.isQueueValid(movementHash);
+              console.log('Queue valid after submission:', isValid);
+              
+              // Get the updated queue
+              const queue = await executionContract.getSigQueue(movementHash);
+              console.log('Queue after submission:', {
+                state: Number(queue.state),
+                signersCount: queue.Signers.length,
+                signaturesCount: queue.Sigs.length
+              });
+            } catch (error) {
+              console.error('Error checking queue after submission:', error);
+            }
+            
+            fetchMovementData();
+          }
         }
       );
     } catch (error) {
@@ -297,14 +324,14 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
       throw error;
     }
   };
-
+  
   const executeMovement = async (movement: LatentMovement) => {
     if (!ready || !authenticated) {
       throw new Error('Wallet not connected');
     }
 
     try {
-      // First, verify the movement hash from the contract to ensure consistency
+      // Get the correct hash from the contract using hashMovement
       const provider = await getEthersProvider();
       const executionContract = new ethers.Contract(
         deployments.Execution[cleanChainId],
@@ -312,24 +339,20 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         provider
       );
       
-      const contractMovementHash = await executionContract.hashMessage(movement.movement);
-      
-      if (contractMovementHash !== movement.movementHash) {
-        console.warn(`Hash mismatch for execution. Using contract hash: ${contractMovementHash} instead of ${movement.movementHash}`);
-      }
+      const movementHash = await executionContract.hashMovement(movement.movement);
+      console.log('Using contract-computed hash for execution:', movementHash);
       
       return await executeTransaction(
         chainId,
         async () => {
           const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
+          const willWeContract = new ethers.Contract(
             deployments.WillWe[cleanChainId],
             ABIs.WillWe,
             signer
           );
 
-          // Use the verified contract hash
-          return contract.executeQueue(contractMovementHash);
+          return willWeContract.executeQueue(movementHash);
         },
         {
           successMessage: 'Movement executed successfully',
