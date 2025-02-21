@@ -13,14 +13,17 @@ import {
   IconButton,
   VStack,
   Link,
+  Collapse,
+  Code,
+  ButtonGroup,
 } from '@chakra-ui/react';
 import { ExternalLinkIcon } from '@chakra-ui/icons';
 import { Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { MovementType, SignatureQueueState, LatentMovement, NodeState } from '../../types/chainData';
-import { MovementDetails } from './MovementDetails';
 import { deployments, ABIs } from '../../config/deployments';
 import { ethers } from 'ethers';
-import { getRPCUrl } from '../../config/contracts';
+import { getExplorerLink, getRPCUrl } from '../../config/contracts';
+import { usePrivy } from '@privy-io/react-auth';
 
 interface MovementRowProps {
   movement: LatentMovement;
@@ -29,8 +32,20 @@ interface MovementRowProps {
   onSign: () => void;
   onExecute: () => void;
   onRemoveSignature: () => void;
-  userAddress: string;
 }
+
+const getMovementTypeLabel = (type: MovementType): string => {
+  switch (type) {
+    case MovementType.Revert:
+      return 'Revert';
+    case MovementType.AgentMajority:
+      return 'Agent Majority';
+    case MovementType.EnergeticMajority:
+      return 'Energetic Majority';
+    default:
+      return 'Unknown';
+  }
+};
 
 const MovementRow: React.FC<MovementRowProps> = ({ 
   movement,
@@ -39,11 +54,12 @@ const MovementRow: React.FC<MovementRowProps> = ({
   onSign, 
   onExecute,
   onRemoveSignature,
-  userAddress
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isQueueValid, setIsQueueValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { user } = usePrivy();
+  const userAddress = user?.wallet?.address;
 
   useEffect(() => {
     const checkQueueValidity = async () => {
@@ -92,23 +108,15 @@ const MovementRow: React.FC<MovementRowProps> = ({
       // Calculate 50% + 1 of total members
       return Math.floor(totalMembers / 2) + 1;
     } else {
-      // For Value Majority, we need to check token balances
+      // For Energetic Majority, we need to check token balances
       // This would ideally come from a contract call or be passed down
       // For now, we'll use the same logic as agent majority
       return Math.floor(totalMembers / 2) + 1;
     }
   };
 
-  const getExplorerUrl = (address: string) => {
-    // Base URLs for different networks
-    const explorerUrls: Record<string, string> = {
-      '84532': 'https://basegoerli.basescan.org',
-      '11155420': 'https://sepolia-optimism.etherscan.io',
-      '167009': 'https://testnet.taiko.xyz'
-    };
-
-    const baseUrl = explorerUrls[chainId.replace('eip155:', '')] || '';
-    return `${baseUrl}/address/${address}`;
+  const getExplorerUrl = (address: string, chainId: string) => {
+    return getExplorerLink(address, chainId);
   };
 
   const decodeTarget = (executedPayload: string) => {
@@ -170,137 +178,122 @@ const MovementRow: React.FC<MovementRowProps> = ({
     }
   };
 
-  const state = getStateDisplay(movement.signatureQueue.state);
-  const currentSignatures = movement.signatureQueue.Signers.length;
-  const requiredSignatures = calculateRequiredSignatures();
-
   const isUserSigner = userAddress && movement.signatureQueue.Signers.some(
     signer => signer.toLowerCase() === userAddress.toLowerCase()
   );
 
   return (
-    <>
-      <Tr>
-        <Td>
-          <HStack spacing={2}>
+    <Tr>
+      <Td>
+        <VStack align="start" spacing={2} width="100%">
+          <HStack width="100%" spacing={4}>
             <IconButton
-              aria-label="Toggle movement details"
+              aria-label="Toggle details"
               icon={isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-              size="sm"
-              variant="ghost"
               onClick={() => setIsExpanded(!isExpanded)}
+              variant="ghost"
+              size="sm"
             />
-            <VStack align="start" spacing={1}>
-              <Text>{movement.movement.description}</Text>
-              <Badge
-                colorScheme={getStateDisplay(movement.signatureQueue.state).color}
-                display="flex"
-                alignItems="center"
-                gap={1}
-              >
-                {getStateDisplay(movement.signatureQueue.state).icon}
-                {getStateDisplay(movement.signatureQueue.state).label}
-              </Badge>
-            </VStack>
-          </HStack>
-        </Td>
-        <Td>
-          <HStack spacing={2} justify="flex-end">
-            {movement.signatureQueue.state === SignatureQueueState.Valid && (
-              <Button
-                colorScheme="blue"
-                size="sm"
-                onClick={handleExecute}
-                isLoading={isLoading}
-              >
-                Execute
-              </Button>
-            )}
-            {movement.signatureQueue.state === SignatureQueueState.Initialized && (
-              isUserSigner ? (
-                <Button
-                  colorScheme="red"
-                  size="sm"
-                  onClick={handleRemoveSignature}
-                  isLoading={isLoading}
-                >
-                  Remove Signature
-                </Button>
-              ) : (
-                <Button
-                  colorScheme="green"
-                  size="sm"
-                  onClick={handleSign}
-                  isLoading={isLoading}
-                >
-                  Sign
-                </Button>
-              )
-            )}
-          </HStack>
-        </Td>
-      </Tr>
-      {isExpanded && (
-        <Tr>
-          <Td colSpan={2} pb={4}>
-            <Box pl={10} pr={4}>
-              <VStack align="start" spacing={4} width="100%">
-                <Text whiteSpace="pre-wrap">
-                  {movement.movement.description}
-                </Text>
-                
-                <Box borderTop="1px" borderColor="gray.200" pt={4} width="100%">
-                  <VStack align="start" spacing={2}>
-                    <Text fontWeight="bold">Movement Details:</Text>
-                    
-                    <HStack>
-                      <Text color="gray.600">Executing Endpoint:</Text>
-                      <Link
-                        href={getExplorerUrl(movement.movement.exeAccount)}
-                        isExternal
-                        color="blue.500"
-                        textDecoration="underline"
-                      >
-                        {movement.movement.exeAccount}
-                        <ExternalLinkIcon mx="2px" />
-                      </Link>
-                    </HStack>
-
-                    {decodeTarget(movement.movement.executedPayload) && (
-                      <HStack>
-                        <Text color="gray.600">Target:</Text>
-                        <Link
-                          href={getExplorerUrl(decodeTarget(movement.movement.executedPayload)!)}
-                          isExternal
-                          color="blue.500"
-                          textDecoration="underline"
-                        >
-                          {decodeTarget(movement.movement.executedPayload)}
-                          <ExternalLinkIcon mx="2px" />
-                        </Link>
-                      </HStack>
-                    )}
-
-                    <Box pl={4} width="100%">
-                      <HStack alignItems="start">
-                        <Text color="gray.600">Call Data:</Text>
-                        <Text 
-                          fontSize="sm" 
-                          fontFamily="monospace"
-                          wordBreak="break-all"
-                        >
-                          {movement.movement.executedPayload}
-                        </Text>
-                      </HStack>
-                    </Box>
-                  </VStack>
-                </Box>
-              </VStack>
+            <Box flex="1">
+              <Text fontWeight="bold" mb={1}>{movement.movement.description}</Text>
+              <HStack spacing={2}>
+                <Badge colorScheme="purple">
+                  {getMovementTypeLabel(movement.movement.category)}
+                </Badge>
+                <Badge colorScheme="blue">
+                  {movement.signatureQueue.Signers.length} / {calculateRequiredSignatures()} signatures
+                </Badge>
+              </HStack>
             </Box>
-          </Td>
-        </Tr>
-      )}
-    </>
+          </HStack>
+
+          <Collapse in={isExpanded}>
+            <VStack align="start" spacing={3} pl={10} width="100%">
+              <Box>
+                <Text fontWeight="semibold" fontSize="sm">Movement Hash:</Text>
+                <Code fontSize="sm" p={2}>{movement.movementHash}</Code>
+              </Box>
+              
+              <Box>
+                <Text fontWeight="semibold" fontSize="sm">Endpoint Address:</Text>
+                <Link 
+                  href={getExplorerUrl(movement.movement.exeAccount, chainId)} 
+                  isExternal
+                  color="blue.500"
+                >
+                  <Code fontSize="sm" p={2}>
+                    {movement.movement.exeAccount}
+                    <ExternalLinkIcon mx="2px" />
+                  </Code>
+                </Link>
+              </Box>
+
+              <Box>
+                <Text fontWeight="semibold" fontSize="sm">Signers:</Text>
+                <VStack align="start" spacing={1}>
+                  {movement.signatureQueue.Signers.map((signer, index) => (
+                    <Code key={index} fontSize="sm" p={1}>
+                      {signer}
+                    </Code>
+                  ))}
+                </VStack>
+              </Box>
+
+              {movement.movement.executedPayload && (
+                <Box>
+                  <Text fontWeight="semibold" fontSize="sm">Call Data:</Text>
+                  <Code 
+                    display="block" 
+                    whiteSpace="pre-wrap" 
+                    fontSize="sm" 
+                    p={2} 
+                    maxWidth="600px" 
+                    overflowX="auto"
+                  >
+                    {movement.movement.executedPayload}
+                  </Code>
+                </Box>
+              )}
+            </VStack>
+          </Collapse>
+        </VStack>
+      </Td>
+      <Td isNumeric>
+        <ButtonGroup>
+          {!isUserSigner && (
+            <Button
+              size="sm"
+              colorScheme="blue"
+              onClick={handleSign}
+              isLoading={isLoading}
+            >
+              Sign
+            </Button>
+          )}
+          {isUserSigner && (
+            <Button
+              size="sm"
+              colorScheme="red"
+              variant="outline"
+              onClick={handleRemoveSignature}
+              isLoading={isLoading}
+            >
+              Remove Signature
+            </Button>
+          )}
+          {isQueueValid && (
+            <Button
+              size="sm"
+              colorScheme="green"
+              onClick={handleExecute}
+              isLoading={isLoading}
+            >
+              Execute
+            </Button>
+          )}
+        </ButtonGroup>
+      </Td>
+    </Tr>
   );
 };
 

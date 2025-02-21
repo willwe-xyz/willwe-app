@@ -28,7 +28,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
 
   const { getEthersProvider, ready, authenticated } = usePrivy();
   const { executeTransaction } = useTransaction();
-  const cleanChainId = chainId.replace('eip155:', '');
 
   // Fetch all data in parallel
   const fetchMovementData = useCallback(async () => {
@@ -36,9 +35,9 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
     
     try {
       setState(prev => ({ ...prev, isLoading: true }));
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
       const executionContract = new ethers.Contract(
-        deployments.Execution[cleanChainId],
+        deployments.Execution[chainId],
         ABIs.Execution,
         provider
       );
@@ -73,7 +72,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         processedMovements.map(async (movement) => {
           try {
             const willWeContract = new ethers.Contract(
-              deployments.WillWe[cleanChainId],
+              deployments.WillWe[chainId],
               ABIs.WillWe,
               provider
             );
@@ -129,7 +128,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
       console.error('Error fetching movement data:', error);
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [nodeId, chainId, cleanChainId, ready, authenticated]);
+  }, [nodeId, chainId, chainId, ready, authenticated]);
 
   useEffect(() => {
     let mounted = true;
@@ -156,7 +155,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
           const contract = new ethers.Contract(
-            deployments.WillWe[cleanChainId],
+            deployments.WillWe[chainId],
             ABIs.WillWe,
             signer
           );
@@ -208,8 +207,8 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
       const domain = {
         name: 'WillWe.xyz',
         version: '1',
-        chainId: Number(cleanChainId),
-        verifyingContract: deployments.Execution[cleanChainId]
+        chainId: Number(chainId),
+        verifyingContract: deployments.Execution[chainId]
       };
       
       const types = {
@@ -251,7 +250,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         chainId,
         async () => {
           const willWeContract = new ethers.Contract(
-            deployments.WillWe[cleanChainId],
+            deployments.WillWe[chainId],
             ABIs.WillWe,
             signer
           );
@@ -308,13 +307,16 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
             throw new Error('Your signature was not found');
           }
 
-          const willWeContract = new ethers.Contract(
-            deployments.WillWe[cleanChainId],
-            ABIs.WillWe,
+          const executionContract = new ethers.Contract(
+            deployments.Execution[chainId],
+            ABIs.Execution,
             signer
           );
+
+          console.log('Removing signature for movement:', movement, signerIndex,signerAddress);
+
           
-          return willWeContract.removeSignature(
+          return executionContract.removeSignature(
             movement.movementHash,
             signerIndex,
             signerAddress
@@ -353,8 +355,8 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
           const contract = new ethers.Contract(
-            deployments.WillWe[chainId],
-            ABIs.WillWe,
+            deployments.Execution[chainId],
+            ABIs.Execution,
             signer
           );
           

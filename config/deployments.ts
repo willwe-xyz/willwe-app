@@ -8,34 +8,34 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-// Will: 0x635657198f3ca6076AEC6467e9c4f3a37e155877
-// Membrane: 0x9Cb70063B9608266BC0FEdf046d154311239E2A4
-// Execution: 0xC0dff11587246f56b712C24Ae1072e08c5fC6E78
-// WillWe: 0x28f4D24ea5813a2B327cCf9Dd30DfD92DCa30762
-// Kibern Director: 0x0000000000000000000000000000000000000000
-// Control [0,1]: 0x9ca2250Bf821BD56d0D6D74a8f48930cF031E4e9 0x0000000000000000000000000000000000000000
-// Will Price in ETH: 1000000000
+//   Will: 0xbf5Cc9Be4c580FCc0EAA1aEfF5716f164448999d
+//   Membrane: 0x004d288f33328167FB54785C99b50A150200e4Ee
+//   Execution: 0xA91990697543762fFD68a55d318794430755377b
+//   WillWe: 0xd2DC2ba89c30d723A0235d97B204d2A4890b5d9a
+//   Kibern Director: 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0x6da4f8587feb9e36F604173960C52289e7c1A3BE 0x0000000000000000000000000000000000000000
+//   Will Price in ETH: 1000000000
 
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x635657198f3ca6076AEC6467e9c4f3a37e155877",
+        "11155420": "0xbf5Cc9Be4c580FCc0EAA1aEfF5716f164448999d",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0x9Cb70063B9608266BC0FEdf046d154311239E2A4",
+        "11155420": "0x004d288f33328167FB54785C99b50A150200e4Ee",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0xC0dff11587246f56b712C24Ae1072e08c5fC6E78",
+        "11155420": "0xA91990697543762fFD68a55d318794430755377b",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0x28f4D24ea5813a2B327cCf9Dd30DfD92DCa30762",
+        "11155420": "0xd2DC2ba89c30d723A0235d97B204d2A4890b5d9a",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -329,28 +329,9 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "",
+                    "name": "endpointAddress",
                     "type": "address",
                     "internalType": "address"
-                }
-            ],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "executeQueue",
-            "inputs": [
-                {
-                    "name": "SignatureQueueHash_",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "s",
-                    "type": "bool",
-                    "internalType": "bool"
                 }
             ],
             "stateMutability": "nonpayable"
@@ -1118,24 +1099,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "removeSignature",
-            "inputs": [
-                {
-                    "name": "sigHash_",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "index_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
             "name": "resignal",
             "inputs": [
                 {
@@ -1351,73 +1314,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "startMovement",
-            "inputs": [
-                {
-                    "name": "typeOfMovement",
-                    "type": "uint8",
-                    "internalType": "uint8"
-                },
-                {
-                    "name": "node",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "expiresInDays",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "executingAccount",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "description",
-                    "type": "string",
-                    "internalType": "string"
-                },
-                {
-                    "name": "data",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "movementHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "submitSignatures",
-            "inputs": [
-                {
-                    "name": "sigHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "signers",
-                    "type": "address[]",
-                    "internalType": "address[]"
-                },
-                {
-                    "name": "signatures",
-                    "type": "bytes[]",
-                    "internalType": "bytes[]"
-                }
-            ],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
             "name": "supportsInterface",
             "inputs": [
                 {
@@ -1588,6 +1484,31 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
+            "name": "CreatedEndpoint",
+            "inputs": [
+                {
+                    "name": "endpoint",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "owner",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "nodeId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
             "name": "InflationMinted",
             "inputs": [
                 {
@@ -1695,37 +1616,6 @@ export const ABIs: ABIKP = {
                     "type": "address",
                     "indexed": true,
                     "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
-            "name": "NewMovement",
-            "inputs": [
-                {
-                    "name": "nodeId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "initiator",
-                    "type": "address",
-                    "indexed": false,
-                    "internalType": "address"
-                },
-                {
-                    "name": "movementHash",
-                    "type": "bytes32",
-                    "indexed": false,
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "description",
-                    "type": "string",
-                    "indexed": false,
-                    "internalType": "string"
                 }
             ],
             "anonymous": false
@@ -2002,6 +1892,11 @@ export const ABIs: ABIKP = {
         {
             "type": "error",
             "name": "NotMember",
+            "inputs": []
+        },
+        {
+            "type": "error",
+            "name": "NotNodeMember",
             "inputs": []
         },
         {
@@ -2710,11 +2605,6 @@ export const ABIs: ABIKP = {
             "name": "startMovement",
             "inputs": [
                 {
-                    "name": "origin",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
                     "name": "typeOfMovement",
                     "type": "uint8",
                     "internalType": "uint8"
@@ -2779,31 +2669,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "EndpointCreatedForAgent",
-            "inputs": [
-                {
-                    "name": "nodeId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "endpoint",
-                    "type": "address",
-                    "indexed": false,
-                    "internalType": "address"
-                },
-                {
-                    "name": "agent",
-                    "type": "address",
-                    "indexed": false,
-                    "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
             "name": "LatentActionRemoved",
             "inputs": [
                 {
@@ -2832,16 +2697,28 @@ export const ABIs: ABIKP = {
             "name": "NewMovementCreated",
             "inputs": [
                 {
-                    "name": "movementHash",
-                    "type": "bytes32",
-                    "indexed": true,
-                    "internalType": "bytes32"
-                },
-                {
                     "name": "nodeId",
                     "type": "uint256",
                     "indexed": true,
                     "internalType": "uint256"
+                },
+                {
+                    "name": "initiator",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                },
+                {
+                    "name": "movementHash",
+                    "type": "bytes32",
+                    "indexed": false,
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "description",
+                    "type": "string",
+                    "indexed": false,
+                    "internalType": "string"
                 }
             ],
             "anonymous": false
@@ -2918,142 +2795,142 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "error",
-            "name": "AlreadyHasEndpoint",
+            "name": "EXE_A0sig",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "AlreadyInit",
+            "name": "EXE_ActionIndexMismatch",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "AlreadyInitialized",
+            "name": "EXE_AlreadyHasEndpoint",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "AlreadySigned",
+            "name": "EXE_AlreadyInit",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_A0sig",
+            "name": "EXE_AlreadyInitialized",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_ActionIndexMismatch",
+            "name": "EXE_AlreadySigned",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_BadOwnerOrAuthType",
+            "name": "EXE_BadOwnerOrAuthType",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_InProgress",
+            "name": "EXE_EmptyUnallowed",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_NoDescription",
+            "name": "EXE_ExpiredMovement",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_NoType",
+            "name": "EXE_ExpiredQueue",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_OnlyMore",
+            "name": "EXE_InProgress",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_OnlySigner",
+            "name": "EXE_InvalidQueue",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_SQInvalid",
+            "name": "EXE_LenErr",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_ZeroLen",
+            "name": "EXE_NoDescription",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EXEC_exeQFail",
+            "name": "EXE_NoMembersForNode",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "EmptyUnallowed",
+            "name": "EXE_NoMovementType",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "ExpiredMovement",
+            "name": "EXE_NoSignatures",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "ExpiredQueue",
+            "name": "EXE_NoType",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "InvalidQueue",
+            "name": "EXE_NotExeAccOwner",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "LenErr",
+            "name": "EXE_NotNodeMember",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "NoMembersForNode",
+            "name": "EXE_OnlyMore",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "NoMovementType",
+            "name": "EXE_OnlySigner",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "NoSignatures",
+            "name": "EXE_OnlyWillWe",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "NotExeAccOwner",
+            "name": "EXE_SQInvalid",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "NotNodeMember",
+            "name": "EXE_UnavailableState",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "OnlyWillWe",
+            "name": "EXE_UninitQueue",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "UnavailableState",
+            "name": "EXE_ZeroLen",
             "inputs": []
         },
         {
             "type": "error",
-            "name": "UninitQueue",
+            "name": "EXE_exeQFail",
             "inputs": []
         }
     ],
