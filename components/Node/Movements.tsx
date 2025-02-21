@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useMemo, Suspense, lazy, useEffect } from 'react';
 import { ethers } from 'ethers';
 import {
   Box,
@@ -23,14 +23,19 @@ import {
   Thead,
   Tbody,
   Tr,
-  Th
+  Th,
+  TableContainer
 } from '@chakra-ui/react';
 import { Plus } from 'lucide-react';
 import { MovementType, NodeState } from '../../types/chainData';
 import { useMovements } from '../../hooks/useMovements';
 import { useEndpoints } from '../../hooks/useEndpoints';
+import { useNetwork } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { LazyLoadWrapper } from '../shared/LazyLoadWrapper';
 import { ErrorBoundary } from '../shared/ErrorBoundary';
+import { getRPCUrl } from '../../config/deployments';
+import { deployments, ABIs } from '../../config/deployments';
 
 // Lazy load components
 const MovementRow = lazy(() => import('./MovementRow'));
@@ -38,23 +43,24 @@ const CreateMovementForm = lazy(() => import('./CreateMovementForm'));
 
 interface MovementsProps {
   nodeId: string;
-  chainId: string;
   nodeData: NodeState;
-  userAddress?: string;
 }
 
-export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData, userAddress }) => {
+export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData }) => {
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   
+  const { chainId } = useNetwork();
+  const { address: userAddress } = useAccount();
+
   const {
     movements = [],
-    signatures = {},
     isLoading,
     createMovement,
     signMovement,
+    removeSignature,
     executeMovement
-  } = useMovements({ nodeId, chainId, userAddress }) || {};
+  } = useMovements({ nodeId, chainId: chainId?.toString() || '', userAddress: userAddress?.toString() }) || {};
 
   // Add error state
   const [error, setError] = useState<Error | null>(null);
@@ -77,6 +83,66 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData,
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to create movement',
+        status: 'error',
+        duration: 5000
+      });
+    }
+  };
+
+  const handleSign = async (movement: any) => {
+    try {
+      await signMovement?.(movement);
+      toast({
+        title: 'Success',
+        description: 'Movement signed successfully',
+        status: 'success',
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('Movement sign error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to sign movement',
+        status: 'error',
+        duration: 5000
+      });
+    }
+  };
+
+  const handleRemoveSignature = async (movement: any) => {
+    try {
+      await removeSignature?.(movement);
+      toast({
+        title: 'Success',
+        description: 'Signature removed successfully',
+        status: 'success',
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('Movement remove signature error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to remove signature',
+        status: 'error',
+        duration: 5000
+      });
+    }
+  };
+
+  const handleExecute = async (movement: any) => {
+    try {
+      await executeMovement?.(movement);
+      toast({
+        title: 'Success',
+        description: 'Movement executed successfully',
+        status: 'success',
+        duration: 3000
+      });
+    } catch (error) {
+      console.error('Movement execute error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to execute movement',
         status: 'error',
         duration: 5000
       });
@@ -118,32 +184,30 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData,
           <Text>No active movements found</Text>
         </Alert>
       ) : (
-        <Table variant="simple" width="100%">
-          <Thead>
-            <Tr>
-              <Th width="15%">Type</Th>
-              <Th width="30%">Description</Th>
-              <Th width="15%">Expiry</Th>
-              <Th width="15%">Status</Th>
-              <Th width="10%">Signatures</Th>
-              <Th width="15%">Actions</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {movements?.map((movement, index) => (
-              movement && (
-                <LazyLoadWrapper key={index} height="80px" isTableRow colSpan={6}>
-                  <MovementRow
-                    movement={movement}
-                    signatures={signatures?.[movement?.movementHash] || { current: 0, required: 0 }}
-                    onSign={() => signMovement?.(movement)}
-                    onExecute={() => executeMovement?.(movement)}
-                  />
-                </LazyLoadWrapper>
-              )
-            ))}
-          </Tbody>
-        </Table>
+        <TableContainer>
+          <Table variant="simple">
+            <Thead>
+              <Tr>
+                <Th>Description</Th>
+                <Th textAlign="right">Actions</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {movements?.map((movement) => (
+                <MovementRow
+                  key={movement.movementHash}
+                  movement={movement}
+                  nodeData={nodeData}
+                  chainId={chainId?.toString() || ''}
+                  userAddress={userAddress?.toString()}
+                  onSign={() => handleSign(movement)}
+                  onRemoveSignature={() => handleRemoveSignature(movement)}
+                  onExecute={() => handleExecute(movement)}
+                />
+              ))}
+            </Tbody>
+          </Table>
+        </TableContainer>
       )}
 
       <Modal

@@ -8,34 +8,34 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-//   Will: 0x2c77fDB59cA673e18b8188f43312e5dab244299e
-//   Membrane: 0x91181509CdF0065Be5ee4DFc733e23816AA4cC0a
-//   Execution: 0xD2b2677ab4c6DFDc42aEF66Dc19b612A76b928dA
-//   WillWe: 0x381ADaD5b4E3326f152CC0623b5d2Aafa8Fda90D
-//   Kibern Director: 0x0000000000000000000000000000000000000000
-//   Control [0,1]: 0xA6c1d9be34018D6Ab985b69C76D168f5fe83fc85 0x0000000000000000000000000000000000000000
-//   Will Price in ETH: 1000000000
+// Will: 0x635657198f3ca6076AEC6467e9c4f3a37e155877
+// Membrane: 0x9Cb70063B9608266BC0FEdf046d154311239E2A4
+// Execution: 0xC0dff11587246f56b712C24Ae1072e08c5fC6E78
+// WillWe: 0x28f4D24ea5813a2B327cCf9Dd30DfD92DCa30762
+// Kibern Director: 0x0000000000000000000000000000000000000000
+// Control [0,1]: 0x9ca2250Bf821BD56d0D6D74a8f48930cF031E4e9 0x0000000000000000000000000000000000000000
+// Will Price in ETH: 1000000000
 
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x2c77fDB59cA673e18b8188f43312e5dab244299e",
+        "11155420": "0x635657198f3ca6076AEC6467e9c4f3a37e155877",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0x91181509CdF0065Be5ee4DFc733e23816AA4cC0a",
+        "11155420": "0x9Cb70063B9608266BC0FEdf046d154311239E2A4",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0xD2b2677ab4c6DFDc42aEF66Dc19b612A76b928dA",
+        "11155420": "0xC0dff11587246f56b712C24Ae1072e08c5fC6E78",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0x381ADaD5b4E3326f152CC0623b5d2Aafa8Fda90D",
+        "11155420": "0x28f4D24ea5813a2B327cCf9Dd30DfD92DCa30762",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -2070,7 +2070,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Execution" :  [
+    "Execution" : [
         {
             "type": "constructor",
             "inputs": [
@@ -2437,6 +2437,11 @@ export const ABIs: ABIKP = {
                                     "internalType": "bytes[]"
                                 }
                             ]
+                        },
+                        {
+                            "name": "movementHash",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
                         }
                     ]
                 }

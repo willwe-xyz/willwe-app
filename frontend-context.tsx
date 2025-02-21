@@ -724,7 +724,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { ObjectManager } from "@filebase/sdk";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-console.log("uploadtoipfs, request:", req);
+
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
@@ -3276,7 +3276,7 @@ const SpawnNodeForm = ({
   const [newTokenAddress, setNewTokenAddress] = useState('');
   const [newTokenBalance, setNewTokenBalance] = useState('');
   const [inflationRate, setInflationRate] = useState(1);
-  const [useMembrane, setUseMembrane] = useState(false);
+  const [useMembrane, setUseMembrane] = useState(true);
 
   // Transaction state
   const [isLoading, setIsLoading] = useState(false);
@@ -3469,7 +3469,7 @@ const SpawnNodeForm = ({
       <VStack spacing={6} align="stretch">
         <FormControl display="flex" alignItems="center">
           <FormLabel htmlFor="use-membrane" mb="0">
-            Define Node
+            Define
           </FormLabel>
           <Switch
             id="use-membrane"
@@ -3800,6 +3800,8 @@ export default EndpointComponent;
 
 
 // File: ./components/Node/MovementRow.tsx
+'use client';
+
 import React, { useState } from 'react';
 import {
   Tr,
@@ -3809,7 +3811,6 @@ import {
   Button,
   Text,
   Tooltip,
-  Collapse,
   Box,
   IconButton
 } from '@chakra-ui/react';
@@ -3819,7 +3820,6 @@ import { MovementDetails } from './MovementDetails';
 
 interface MovementRowProps {
   movement: LatentMovement;
-  description: string;
   signatures: { current: number; required: number };
   onSign: () => void;
   onExecute: () => void;
@@ -3827,7 +3827,6 @@ interface MovementRowProps {
 
 const MovementRow: React.FC<MovementRowProps> = ({ 
   movement, 
-  description, 
   signatures, 
   onSign, 
   onExecute 
@@ -3850,25 +3849,17 @@ const MovementRow: React.FC<MovementRowProps> = ({
   };
 
   const state = getStateDisplay(movement.signatureQueue.state);
-
   return (
     <>
-      <Tr 
-        cursor="pointer" 
-        onClick={() => setIsExpanded(!isExpanded)}
-        _hover={{ bg: 'gray.50' }}
-      >
-        <Td>
+      <Tr>
+        <Td width="15%">
           <HStack>
             <IconButton
               aria-label="Toggle details"
               icon={isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               size="xs"
               variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsExpanded(!isExpanded);
-              }}
+              onClick={() => setIsExpanded(!isExpanded)}
             />
             <Badge>
               {movement.movement.category === MovementType.AgentMajority 
@@ -3877,14 +3868,16 @@ const MovementRow: React.FC<MovementRowProps> = ({
             </Badge>
           </HStack>
         </Td>
-        <Td>
-          <Tooltip label={movement.movement.descriptionHash}>
-            <Text isTruncated maxW="200px">
-              {description || 'Loading description...'}
-            </Text>
-          </Tooltip>
+        <Td width="30%">
+          <Text 
+            noOfLines={isExpanded ? undefined : 1}
+            cursor="pointer"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {movement.movement.description || 'Loading description...'}
+          </Text>
         </Td>
-        <Td>
+        <Td width="15%">
           <HStack>
             <Clock size={14} />
             <Text>
@@ -3892,7 +3885,7 @@ const MovementRow: React.FC<MovementRowProps> = ({
             </Text>
           </HStack>
         </Td>
-        <Td>
+        <Td width="15%">
           <HStack>
             {state.icon}
             <Badge colorScheme={state.color}>
@@ -3900,15 +3893,15 @@ const MovementRow: React.FC<MovementRowProps> = ({
             </Badge>
           </HStack>
         </Td>
-        <Td>
+        <Td width="10%">
           <Tooltip label={`${signatures.current} / ${signatures.required} ${movement.movement.category === MovementType.AgentMajority ? 'signatures' : 'voting power'}`}>
             <Text>
               {signatures.current} / {signatures.required}
             </Text>
           </Tooltip>
         </Td>
-        <Td>
-          <HStack>
+        <Td width="15%">
+          <HStack spacing={2}>
             <Button
               size="sm"
               onClick={(e) => {
@@ -3933,19 +3926,17 @@ const MovementRow: React.FC<MovementRowProps> = ({
           </HStack>
         </Td>
       </Tr>
-      <Tr>
-        <Td colSpan={6} p={0}>
-          <Collapse in={isExpanded}>
-            <Box p={4}>
-              <MovementDetails
-                movement={movement}
-                signatures={signatures}
-                description={description}
-              />
+      {isExpanded && (
+        <Tr>
+          <Td colSpan={6} pb={4}>
+            <Box pl={10} pr={4}>
+              <Text whiteSpace="pre-wrap">
+                {movement.movement.description}
+              </Text>
             </Box>
-          </Collapse>
-        </Td>
-      </Tr>
+          </Td>
+        </Tr>
+      )}
     </>
   );
 };
@@ -4489,8 +4480,8 @@ interface NodeInfoProps {
 }
 
 interface NodeMetrics {
-  inflation: string;
-  budget: string;
+  dailyUnlock: string;
+  TVL: string;
   totalValue: string;
   availableShares: string;
   inflow: string;
@@ -4508,16 +4499,15 @@ interface MemberData {
 
 const calculateMetrics = (node: NodeState): NodeMetrics => {
   // Per-second rates in gwei, multiply by seconds in a day
-  const inflationPerSec = BigInt(node.basicInfo[1] || '0');
-  const dailyInflation = inflationPerSec * BigInt(86400);
-  
+  const dailyUnlockedValue =  BigInt(Number(node.basicInfo[1]) * 86400);
+  console.log('childParentEligibilityinRoot:', node);
   return {
-    inflation: ethers.formatUnits(dailyInflation, 'gwei'),
-    budget: ethers.formatUnits(node.basicInfo[4] || '0', 'gwei'),
-    totalValue: ethers.formatUnits(node.basicInfo[5] || '0', 'gwei'),
-    availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'gwei'),
-    inflow: ethers.formatUnits(inflationPerSec, 'gwei'), // Keep this as per-second rate
-    value: ethers.formatUnits(node.basicInfo[4] || '0', 'gwei'),
+    dailyUnlock: ethers.formatUnits(dailyUnlockedValue, 'ether'),
+    TVL: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
+    totalValue: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
+    availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'ether'),
+    inflow: ethers.formatUnits(node.basicInfo[7], 'ether'), // Keep this as per-second rate
+    value: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
     memberCount: node.membersOfNode.length,
     membersList: node.membersOfNode,
     userOwnedShares: ethers.formatUnits(node.basicInfo[9] || '0', 'gwei')
@@ -4680,15 +4670,15 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
           >
             <HStack justify="space-between">
               <Tooltip label="Daily token creation rate for this node" fontSize="sm">
-                <Text fontSize="sm" color={mutedColor} cursor="help">Inflation</Text>
+                <Text fontSize="sm" color={mutedColor} cursor="help">Daily Unlock</Text>
               </Tooltip>
-              <Text fontWeight="medium">{formatCurrency(metrics.inflation)} PSC/day</Text>
+              <Text fontWeight="medium">{formatCurrency(metrics.dailyUnlock)} PSC/day</Text>
             </HStack>
             <HStack justify="space-between">
               <Tooltip label="Amount of tokens held in node's own account" fontSize="sm">
-                <Text fontSize="sm" color={mutedColor} cursor="help">Budget</Text>
+                <Text fontSize="sm" color={mutedColor} cursor="help">Total Node Value</Text>
               </Tooltip>
-              <Text fontWeight="medium">{formatCurrency(metrics.budget)} PSC</Text>
+              <Text fontWeight="medium">{formatCurrency(metrics.TVL)} PSC</Text>
             </HStack>
             <HStack justify="space-between">
               <Tooltip label="Current per-second inflation rate" fontSize="sm">
@@ -4879,6 +4869,8 @@ export const MembersList: React.FC<MembersListProps> = ({
 
 
 // File: ./components/Node/Movements.tsx
+'use client';
+
 import React, { useState, useMemo, Suspense, lazy } from 'react';
 import { ethers } from 'ethers';
 import {
@@ -4919,24 +4911,27 @@ interface MovementsProps {
   nodeId: string;
   chainId: string;
   nodeData: NodeState;
+  userAddress?: string;
 }
 
-export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData }) => {
+export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData, userAddress }) => {
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   
   const {
-    movements,
-    descriptions,
-    signatures,
+    movements = [],
+    signatures = {},
     isLoading,
     createMovement,
     signMovement,
     executeMovement
-  } = useMovements({ nodeId, chainId });
-  
-  // Load endpoint data in parallel
-  const { endpoints, isLoading: isLoadingEndpoints } = useEndpoints(nodeData, chainId);
+  } = useMovements({ nodeId, chainId, userAddress }) || {};
+
+  // Add error state
+  const [error, setError] = useState<Error | null>(null);
+
+  // Load endpoint data in parallel with error handling
+  const { endpoints, isLoading: isLoadingEndpoints, error: endpointsError } = useEndpoints(nodeData, chainId);
 
   const handleCreateMovement = async (formData: any) => {
     try {
@@ -4959,10 +4954,18 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData 
     }
   };
 
+  if (error || endpointsError) {
+    return (
+      <Alert status="error">
+        <AlertIcon />
+        <Text>{error?.message || endpointsError || 'An error occurred loading movements'}</Text>
+      </Alert>
+    );
+  }
+
   return (
     <Box>
-      <HStack justify="space-between" mb={6}>
-        <Text fontSize="lg" fontWeight="bold">Movements</Text>
+      <HStack justify="space-between" mb={6} mt={4} ml={2} mr={2}>
         <Button
           leftIcon={<Plus size={16} />}
           onClick={onOpen}
@@ -4980,34 +4983,35 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, chainId, nodeData 
           <Skeleton height="50px" width="100%" />
           <Skeleton height="50px" width="100%" />
         </VStack>
-      ) : movements.length === 0 ? (
+      ) : movements?.length === 0 ? (
         <Alert status="info">
           <AlertIcon />
           <Text>No active movements found</Text>
         </Alert>
       ) : (
-        <Table variant="simple">
+        <Table variant="simple" width="100%">
           <Thead>
             <Tr>
-              <Th>Type</Th>
-              <Th>Description</Th>
-              <Th>Expiry</Th>
-              <Th>Status</Th>
-              <Th>Signatures</Th>
-              <Th>Actions</Th>
+              <Th width="15%">Type</Th>
+              <Th width="30%">Description</Th>
+              <Th width="15%">Expiry</Th>
+              <Th width="15%">Status</Th>
+              <Th width="10%">Signatures</Th>
+              <Th width="15%">Actions</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {movements.map((movement) => (
-              <LazyLoadWrapper key={movement.movementHash} height="80px">
-                <MovementRow
-                  movement={movement}
-                  description={descriptions[movement.movement.descriptionHash] || ''}
-                  signatures={signatures[movement.movementHash] || { current: 0, required: 0 }}
-                  onSign={() => signMovement(movement)}
-                  onExecute={() => executeMovement(movement)}
-                />
-              </LazyLoadWrapper>
+            {movements?.map((movement, index) => (
+              movement && (
+                <LazyLoadWrapper key={index} height="80px" isTableRow colSpan={6}>
+                  <MovementRow
+                    movement={movement}
+                    signatures={signatures?.[movement?.movementHash] || { current: 0, required: 0 }}
+                    onSign={() => signMovement?.(movement)}
+                    onExecute={() => executeMovement?.(movement)}
+                  />
+                </LazyLoadWrapper>
+              )
             ))}
           </Tbody>
         </Table>
@@ -8786,28 +8790,42 @@ export const OperationForm: React.FC<OperationFormProps> = ({
 
 
 // File: ./components/shared/LazyLoadWrapper.tsx
-import React from 'react';
-import { Box, Skeleton, VStack } from '@chakra-ui/react';
+'use client';
+
+import React, { Suspense } from 'react';
+import { Box, Tr, Td, Skeleton } from '@chakra-ui/react';
 
 interface LazyLoadWrapperProps {
-  height?: string | number;
   children: React.ReactNode;
+  height?: string | number;
+  isTableRow?: boolean;
+  colSpan?: number;
 }
 
-export const LazyLoadWrapper: React.FC<LazyLoadWrapperProps> = ({ 
-  height = '400px',
-  children 
-}) => (
-  <React.Suspense
-    fallback={
-      <VStack spacing={4}>
-        <Skeleton height={height} width="100%" borderRadius="md" />
-      </VStack>
-    }
-  >
-    {children}
-  </React.Suspense>
-);
+export const LazyLoadWrapper: React.FC<LazyLoadWrapperProps> = ({
+  children,
+  height = '100px',
+  isTableRow = false,
+  colSpan = 6
+}) => {
+  const LoadingSkeleton = isTableRow ? (
+    <Tr>
+      <Td colSpan={colSpan}>
+        <Skeleton height={height} />
+      </Td>
+    </Tr>
+  ) : (
+    <Box height={height} display="flex" alignItems="center" justifyContent="center">
+      <Skeleton height={height} width="100%" />
+    </Box>
+  );
+
+  return (
+    <Suspense fallback={LoadingSkeleton}>
+      {children}
+    </Suspense>
+  );
+};
 
 
 
@@ -11566,9 +11584,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 </TabPanel>
 
                 <TabPanel p={6}>
-                  <Box maxW="900px" mx="auto">
+                  <Box  mx="auto">
                     <MovementsErrorBoundary>
-                      <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} nodeData={nodeData} />
+                      <Movements nodeId={nodeData.basicInfo[0]} chainId={chainId} nodeData={nodeData} userAddress={user?.wallet?.address} />
                     </MovementsErrorBoundary>
                   </Box>
                 </TabPanel>
@@ -12424,33 +12442,34 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-//   Will: 0x86545166F8B92294b62bD49F0d3134464548d5e9
-//   Membrane: 0xcDF21745a4f1f3222545399079eB8a3A6f0160Fc
-//   Execution: 0x0A25367D29bC3d30c4C2c7b30C04a3019eDfc08E
-//   WillWe: 0xbe69f14c4B5e90dD89F9B0Ed881d3BBA180a843D
+//   Will: 0x2c77fDB59cA673e18b8188f43312e5dab244299e
+//   Membrane: 0x91181509CdF0065Be5ee4DFc733e23816AA4cC0a
+//   Execution: 0xD2b2677ab4c6DFDc42aEF66Dc19b612A76b928dA
+//   WillWe: 0x381ADaD5b4E3326f152CC0623b5d2Aafa8Fda90D
 //   Kibern Director: 0x0000000000000000000000000000000000000000
-//   Control [0,1]: 0x534C773EA14342669FE05f7d9287a518830f8DE1 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0xA6c1d9be34018D6Ab985b69C76D168f5fe83fc85 0x0000000000000000000000000000000000000000
 //   Will Price in ETH: 1000000000
+
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x86545166F8B92294b62bD49F0d3134464548d5e9",
+        "11155420": "0x2c77fDB59cA673e18b8188f43312e5dab244299e",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0xcDF21745a4f1f3222545399079eB8a3A6f0160Fc",
+        "11155420": "0x91181509CdF0065Be5ee4DFc733e23816AA4cC0a",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0x0A25367D29bC3d30c4C2c7b30C04a3019eDfc08E",
+        "11155420": "0xD2b2677ab4c6DFDc42aEF66Dc19b612A76b928dA",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0xbe69f14c4B5e90dD89F9B0Ed881d3BBA180a843D",
+        "11155420": "0x381ADaD5b4E3326f152CC0623b5d2Aafa8Fda90D",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -12472,6 +12491,8 @@ export function getChainById(chainId: string): Chain {
   }
   throw new Error(`Chain with id ${chainId} not found`); 
 }
+
+
 
 export function getAlchemyNetwork(chainId: number | string): Network {
     // Convert chainId to string for consistent comparison
@@ -12575,7 +12596,7 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "rAmt",
+                    "name": "",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
@@ -12804,8 +12825,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[11]",
-                            "internalType": "string[11]"
+                            "type": "string[12]",
+                            "internalType": "string[12]"
                         },
                         {
                             "name": "membraneMeta",
@@ -12934,8 +12955,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[11]",
-                            "internalType": "string[11]"
+                            "type": "string[12]",
+                            "internalType": "string[12]"
                         },
                         {
                             "name": "membraneMeta",
@@ -13002,8 +13023,8 @@ export const ABIs: ABIKP = {
                     "components": [
                         {
                             "name": "basicInfo",
-                            "type": "string[11]",
-                            "internalType": "string[11]"
+                            "type": "string[12]",
+                            "internalType": "string[12]"
                         },
                         {
                             "name": "membraneMeta",
@@ -13143,11 +13164,6 @@ export const ABIs: ABIKP = {
                             "name": "Sigs",
                             "type": "bytes[]",
                             "internalType": "bytes[]"
-                        },
-                        {
-                            "name": "exeSig",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
                         }
                     ]
                 }
@@ -14128,6 +14144,12 @@ export const ABIs: ABIKP = {
                     "internalType": "uint256"
                 },
                 {
+                    "name": "initiator",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                },
+                {
                     "name": "movementHash",
                     "type": "bytes32",
                     "indexed": false,
@@ -14504,6 +14526,19 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "DOMAIN_SEPARATOR",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
             "name": "EIP712_DOMAIN_TYPEHASH",
             "inputs": [],
             "outputs": [
@@ -14642,6 +14677,81 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
+            "name": "getDigestToSign",
+            "inputs": [
+                {
+                    "name": "movement",
+                    "type": "tuple",
+                    "internalType": "struct Movement",
+                    "components": [
+                        {
+                            "name": "category",
+                            "type": "uint8",
+                            "internalType": "enum MovementType"
+                        },
+                        {
+                            "name": "initiatior",
+                            "type": "address",
+                            "internalType": "address"
+                        },
+                        {
+                            "name": "exeAccount",
+                            "type": "address",
+                            "internalType": "address"
+                        },
+                        {
+                            "name": "viaNode",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "expiresAt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "description",
+                            "type": "string",
+                            "internalType": "string"
+                        },
+                        {
+                            "name": "executedPayload",
+                            "type": "bytes",
+                            "internalType": "bytes"
+                        }
+                    ]
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getEIP712MessageHash",
+            "inputs": [
+                {
+                    "name": "movementHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
             "name": "getLatentMovements",
             "inputs": [
                 {
@@ -14759,11 +14869,6 @@ export const ABIs: ABIKP = {
                                     "name": "Sigs",
                                     "type": "bytes[]",
                                     "internalType": "bytes[]"
-                                },
-                                {
-                                    "name": "exeSig",
-                                    "type": "bytes32",
-                                    "internalType": "bytes32"
                                 }
                             ]
                         }
@@ -14844,118 +14949,11 @@ export const ABIs: ABIKP = {
                             "name": "Sigs",
                             "type": "bytes[]",
                             "internalType": "bytes[]"
-                        },
-                        {
-                            "name": "exeSig",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
                         }
                     ]
                 }
             ],
             "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "hashDomain",
-            "inputs": [
-                {
-                    "name": "domain",
-                    "type": "tuple",
-                    "internalType": "struct EIP712Domain",
-                    "components": [
-                        {
-                            "name": "name",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "version",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "chainId",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "verifyingContract",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "salt",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        }
-                    ]
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "stateMutability": "pure"
-        },
-        {
-            "type": "function",
-            "name": "hashMessage",
-            "inputs": [
-                {
-                    "name": "movement",
-                    "type": "tuple",
-                    "internalType": "struct Movement",
-                    "components": [
-                        {
-                            "name": "category",
-                            "type": "uint8",
-                            "internalType": "enum MovementType"
-                        },
-                        {
-                            "name": "initiatior",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "exeAccount",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "viaNode",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "expiresAt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "description",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "executedPayload",
-                            "type": "bytes",
-                            "internalType": "bytes"
-                        }
-                    ]
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "stateMutability": "pure"
         },
         {
             "type": "function",
@@ -15059,6 +15057,19 @@ export const ABIs: ABIKP = {
         {
             "type": "function",
             "name": "lastSalt",
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "nextSalt",
             "inputs": [],
             "outputs": [
                 {
@@ -15194,82 +15205,6 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [],
             "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "verifyMessage",
-            "inputs": [
-                {
-                    "name": "movement",
-                    "type": "tuple",
-                    "internalType": "struct Movement",
-                    "components": [
-                        {
-                            "name": "category",
-                            "type": "uint8",
-                            "internalType": "enum MovementType"
-                        },
-                        {
-                            "name": "initiatior",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "exeAccount",
-                            "type": "address",
-                            "internalType": "address"
-                        },
-                        {
-                            "name": "viaNode",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "expiresAt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "description",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "executedPayload",
-                            "type": "bytes",
-                            "internalType": "bytes"
-                        }
-                    ]
-                },
-                {
-                    "name": "v",
-                    "type": "uint8",
-                    "internalType": "uint8"
-                },
-                {
-                    "name": "r",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "s",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "expectedAddress",
-                    "type": "address",
-                    "internalType": "address"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bool",
-                    "internalType": "bool"
-                }
-            ],
-            "stateMutability": "view"
         },
         {
             "type": "event",
@@ -15551,7 +15486,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Membrane" :   [
+    "Membrane" : [
         {
             "type": "function",
             "name": "createMembrane",
@@ -15671,9 +15606,15 @@ export const ABIs: ABIKP = {
             "name": "MembraneCreated",
             "inputs": [
                 {
+                    "name": "creator",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                },
+                {
                     "name": "membraneId",
                     "type": "uint256",
-                    "indexed": true,
+                    "indexed": false,
                     "internalType": "uint256"
                 },
                 {
@@ -18654,87 +18595,69 @@ import { MovementType, SignatureQueueState, LatentMovement } from '../types/chai
 interface UseMovementsProps {
   nodeId: string;
   chainId: string;
+  userAddress?: string;
 }
 
 interface UseMovementsState {
   movements: LatentMovement[];
-  descriptions: Record<string, string>;
   signatures: Record<string, { current: number; required: number }>;
   endpointAuthTypes: Record<string, number>;
   isLoading: boolean;
 }
 
-const EIP712_DOMAIN_TYPE = [
-  { name: 'name', type: 'string' },
-  { name: 'version', type: 'string' },
-  { name: 'chainId', type: 'uint256' },
-  { name: 'verifyingContract', type: 'address' }
-];
-
-const MOVEMENT_TYPE = [
-  { name: 'category', type: 'uint8' },
-  { name: 'initiatior', type: 'address' },
-  { name: 'exeAccount', type: 'address' },
-  { name: 'viaNode', type: 'uint256' },
-  { name: 'expiresAt', type: 'uint256' },
-  { name: 'descriptionHash', type: 'bytes32' },
-  { name: 'executedPayload', type: 'bytes' }
-];
-
-// Add utility function to convert CID to bytes32
-const cidToBytes32 = (cid: string): string => {
-  // Convert CID to bytes32 format
-  const bytes = ethers.toUtf8Bytes(cid);
-  const hash = ethers.keccak256(bytes);
-  return hash;
-};
-
-export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
+export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps) => {
   const [state, setState] = useState<UseMovementsState>({
     movements: [],
-    descriptions: {},
     signatures: {},
     endpointAuthTypes: {},
     isLoading: true
   });
 
-  const { getEthersProvider } = usePrivy();
+  const { getEthersProvider, ready, authenticated } = usePrivy();
   const { executeTransaction } = useTransaction();
   const cleanChainId = chainId.replace('eip155:', '');
 
   // Fetch all data in parallel
   const fetchMovementData = useCallback(async () => {
-    if (!nodeId || !chainId) return;
+    if (!nodeId || !chainId || !ready || !authenticated) return;
     
     try {
       setState(prev => ({ ...prev, isLoading: true }));
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       const executionContract = new ethers.Contract(
         deployments.Execution[cleanChainId],
         ABIs.Execution,
         provider
       );
 
-      // Fetch movements
+      console.log('Fetching movements for node:', nodeId);
       const rawMovements = await executionContract.getLatentMovements(nodeId);
-      const processedMovements = rawMovements
-        .map(processMovementData)
-        .filter(m => m.signatureQueue.state !== SignatureQueueState.Stale);
+      console.log('Raw movements:', rawMovements);
 
-      // Fetch descriptions and signatures in parallel
-      const [descriptions, signatureDetails] = await Promise.all([
-        // Get descriptions
-        Promise.all(processedMovements.map(async (movement) => {
-          try {
-            const description = await fetchMovementDescription(movement.movement.descriptionHash);
-            return { hash: movement.movement.descriptionHash, description };
-          } catch (error) {
-            console.error('Error fetching description:', error);
-            return { hash: movement.movement.descriptionHash, description: 'Failed to load description' };
+      // Process only valid movements
+      const processedMovements = rawMovements
+        .filter(rm => {
+          if (!rm || !rm.movement || !rm.signatureQueue) {
+            console.warn('Invalid movement structure:', rm);
+            return false;
           }
-        })),
-        // Get signature counts
-        Promise.all(processedMovements.map(async (movement) => {
+          return true;
+        })
+        .map(rm => {
+          try {
+            return processMovementData(rm);
+          } catch (error) {
+            console.error('Error processing movement:', error, rm);
+            return null;
+          }
+        })
+        .filter(m => m !== null && m.signatureQueue.state !== SignatureQueueState.Stale);
+
+      console.log('Processed movements:', processedMovements);
+
+      // Calculate signature progress for each movement
+      const signatureDetails = await Promise.all(
+        processedMovements.map(async (movement) => {
           try {
             const willWeContract = new ethers.Contract(
               deployments.WillWe[cleanChainId],
@@ -18745,7 +18668,6 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
             let currentPower = 0;
             let requiredPower = 0;
 
-            // Calculate current power based on movement type
             for (const signer of movement.signatureQueue.Signers) {
               if (signer === ethers.ZeroAddress) continue;
 
@@ -18757,7 +18679,6 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
               }
             }
 
-            // Calculate required power
             if (movement.movement.category === MovementType.EnergeticMajority) {
               const totalSupply = await willWeContract.totalSupply(movement.movement.viaNode);
               requiredPower = Math.floor(Number(totalSupply) / 2) + 1;
@@ -18767,34 +18688,27 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
             }
 
             return { 
-              hash: movement.movementHash,
+              key: `${movement.movement.viaNode}-${movement.movement.expiresAt}`,
               signatures: { current: currentPower, required: requiredPower }
             };
           } catch (error) {
             console.error('Error calculating signatures:', error);
             return { 
-              hash: movement.movementHash,
+              key: `${movement.movement.viaNode}-${movement.movement.expiresAt}`,
               signatures: { current: 0, required: 0 }
             };
           }
-        }))
-      ]);
-
-      // Build state updates
-      const descriptionMap: Record<string, string> = {};
-      descriptions.forEach(({ hash, description }) => {
-        descriptionMap[hash] = description;
-      });
+        })
+      );
 
       const signatureMap: Record<string, { current: number; required: number }> = {};
-      signatureDetails.forEach(({ hash, signatures }) => {
-        signatureMap[hash] = signatures;
+      signatureDetails.forEach(({ key, signatures }) => {
+        signatureMap[key] = signatures;
       });
 
       setState(prev => ({
         ...prev,
         movements: processedMovements,
-        descriptions: descriptionMap,
         signatures: signatureMap,
         isLoading: false
       }));
@@ -18802,52 +18716,32 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
       console.error('Error fetching movement data:', error);
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [nodeId, chainId, cleanChainId]);
+  }, [nodeId, chainId, cleanChainId, ready, authenticated]);
 
-  // Effect for initial fetch and cleanup
   useEffect(() => {
     let mounted = true;
     
-    if (mounted) {
+    if (mounted && ready && authenticated) {
       fetchMovementData();
     }
 
     return () => {
       mounted = false;
     };
-  }, [fetchMovementData]);
+  }, [fetchMovementData, ready, authenticated]);
 
-  // Create movement with proper EIP-712 typing
   const createMovement = async (formData: any) => {
+    if (!ready || !authenticated) {
+      throw new Error('Wallet not connected');
+    }
+
     try {
-      // Upload description to IPFS via Filebase
-      const descriptionMetadata = {
-        description: formData.description,
-        timestamp: Date.now()
-      };
-
-      const response = await fetch('/api/upload-to-ipfs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: descriptionMetadata }),
-      });
-
-      if (!response.ok) throw new Error('Failed to upload metadata');
-      const { cid } = await response.json();
-
-      console.log("uploadDescription, descriptionHash:", { cid });
-
-      // Convert CID to bytes32
-      const descriptionHash = cidToBytes32(cid);
-
-      // Create the Call struct array for executedPayload
       const calls = [{
         target: formData.target,
         callData: formData.calldata,
         value: ethers.parseEther(formData.value || '0')
       }];
-
-      // Encode the calls array according to the contract's Call struct
+  
       const executedPayload = ethers.AbiCoder.defaultAbiCoder().encode(
         [{
           type: 'tuple[]',
@@ -18859,7 +18753,7 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
         }],
         [calls]
       );
-
+  
       return await executeTransaction(
         chainId,
         async () => {
@@ -18868,7 +18762,6 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
           const contract = new ethers.Contract(
             deployments.WillWe[cleanChainId],
             ABIs.WillWe,
-            // @ts-ignore
             signer
           );
           
@@ -18877,7 +18770,7 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
             nodeId,
             formData.expiryDays,
             formData.endpoint === 'new' ? ethers.ZeroAddress : formData.endpoint,
-            descriptionHash, // Now using bytes32 hash
+            formData.description,
             executedPayload
           );
         },
@@ -18892,131 +18785,203 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
     }
   };
 
-  // Sign movement with EIP-712
   const signMovement = async (movement: LatentMovement) => {
-    const provider = await getEthersProvider();
-    const signer = await provider.getSigner();
-    const address = await signer.getAddress();
-
-    // EIP-712 domain
-    const domain = {
-      name: 'WillWe',
-      version: '1',
-      chainId: Number(cleanChainId),
-      verifyingContract: deployments.Execution[cleanChainId]
-    };
-
-    // Prepare the data to be signed
-    const message = {
-      category: movement.movement.category,
-      initiatior: movement.movement.initiatior,
-      exeAccount: movement.movement.exeAccount,
-      viaNode: movement.movement.viaNode,
-      expiresAt: movement.movement.expiresAt,
-      descriptionHash: movement.movement.descriptionHash,
-      executedPayload: movement.movement.executedPayload
-    };
-
-    // Sign using EIP-712
-    const signature = await signer.signTypedData(domain, { Movement: MOVEMENT_TYPE }, message);
-
-    return await executeTransaction(
-      chainId,
-      async () => {
-        const contract = new ethers.Contract(
-          deployments.WillWe[cleanChainId],
-          ABIs.WillWe,
-          signer
-        );
-
-        return contract.submitSignatures(
-          movement.movementHash,
-          [address],
-          [signature]
-        );
-      },
-      {
-        successMessage: 'Movement signed successfully',
-        onSuccess: fetchMovementData
-      }
-    );
+    if (!ready || !authenticated || !userAddress) {
+      throw new Error('Not ready to sign');
+    }
+  
+    try {
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const signerAddress = await signer.getAddress();
+      
+      const executionContract = new ethers.Contract(
+        deployments.Execution[cleanChainId],
+        ABIs.Execution,
+        provider
+      );
+  
+      // Format the movement
+      const formattedMovement = {
+        category: Number(movement.movement.category),
+        initiatior: movement.movement.initiatior,
+        exeAccount: movement.movement.exeAccount,
+        viaNode: BigInt(movement.movement.viaNode),
+        expiresAt: BigInt(movement.movement.expiresAt),
+        description: movement.movement.description,
+        executedPayload: movement.movement.executedPayload
+      };
+      
+      console.log('Formatted movement:', formattedMovement);
+      
+      // Get movement hash from contract for submission
+      const movementHash = await executionContract.hashMovement(formattedMovement);
+      console.log('Movement hash:', movementHash);
+      
+      // Define EIP-712 domain and types
+      const domain = {
+        name: 'WillWe.xyz',
+        version: '1',
+        chainId: Number(cleanChainId),
+        verifyingContract: deployments.Execution[cleanChainId]
+      };
+      
+      const types = {
+        Movement: [
+          { name: 'category', type: 'uint8' },
+          { name: 'initiatior', type: 'address' },
+          { name: 'exeAccount', type: 'address' },
+          { name: 'viaNode', type: 'uint256' },
+          { name: 'expiresAt', type: 'uint256' },
+          { name: 'description', type: 'string' },
+          { name: 'executedPayload', type: 'bytes' }
+        ]
+      };
+      
+      // Sign using EIP-712
+      const signature = await signer._signTypedData(
+        domain,
+        { Movement: types.Movement },
+        formattedMovement
+      );
+      
+      console.log('EIP-712 signature:', signature);
+      
+      // Verify locally that the signature is correct
+      const recoveredAddress = ethers.verifyTypedData(
+        domain,
+        { Movement: types.Movement },
+        formattedMovement,
+        signature
+      );
+      
+      console.log('Local verification:', {
+        recoveredAddress,
+        expectedSigner: signerAddress,
+        match: recoveredAddress.toLowerCase() === signerAddress.toLowerCase()
+      });
+      
+      // Submit the signature
+      return await executeTransaction(
+        chainId,
+        async () => {
+          const willWeContract = new ethers.Contract(
+            deployments.WillWe[cleanChainId],
+            ABIs.WillWe,
+            signer
+          );
+          
+          console.log('Submitting signature:', {
+            movementHash,
+            signer: signerAddress,
+            signature
+          });
+          
+          return willWeContract.submitSignatures(
+            movementHash,
+            [signerAddress],
+            [signature]
+          );
+        },
+        {
+          successMessage: 'Movement signed successfully',
+          onSuccess: async () => {
+            // Log queue status after submission
+            try {
+              const isValid = await executionContract.isQueueValid(movementHash);
+              console.log('Queue valid after submission:', isValid);
+              
+              // Get the updated queue
+              const queue = await executionContract.getSigQueue(movementHash);
+              console.log('Queue after submission:', {
+                state: Number(queue.state),
+                signersCount: queue.Signers.length,
+                signaturesCount: queue.Sigs.length
+              });
+            } catch (error) {
+              console.error('Error checking queue after submission:', error);
+            }
+            
+            fetchMovementData();
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error signing movement:', error);
+      throw error;
+    }
   };
-
+  
   const executeMovement = async (movement: LatentMovement) => {
-    return await executeTransaction(
-      chainId,
-      async () => {
-        const provider = await getEthersProvider();
-        const signer = await provider.getSigner();
-        const contract = new ethers.Contract(
-          deployments.WillWe[cleanChainId],
-          ABIs.WillWe,
-          signer
-        );
+    if (!ready || !authenticated) {
+      throw new Error('Wallet not connected');
+    }
 
-        return contract.executeQueue(movement.movementHash);
-      },
-      {
-        successMessage: 'Movement executed successfully',
-        onSuccess: fetchMovementData
-      }
-    );
+    try {
+      // Get the correct hash from the contract using hashMovement
+      const provider = await getEthersProvider();
+      const executionContract = new ethers.Contract(
+        deployments.Execution[cleanChainId],
+        ABIs.Execution,
+        provider
+      );
+      
+      const movementHash = await executionContract.hashMovement(movement.movement);
+      console.log('Using contract-computed hash for execution:', movementHash);
+      
+      return await executeTransaction(
+        chainId,
+        async () => {
+          const signer = await provider.getSigner();
+          const willWeContract = new ethers.Contract(
+            deployments.WillWe[cleanChainId],
+            ABIs.WillWe,
+            signer
+          );
+
+          return willWeContract.executeQueue(movementHash);
+        },
+        {
+          successMessage: 'Movement executed successfully',
+          onSuccess: fetchMovementData
+        }
+      );
+    } catch (error) {
+      console.error('Error executing movement:', error);
+      throw error;
+    }
   };
 
-  // Process movement data with proper EIP-712 hashing
   const processMovementData = (rawMovement: any): LatentMovement => {
+    console.log('Processing movement:', rawMovement);
+
+    // Extract movement data, ensuring all required fields are present
     const movement = {
-      category: Number(rawMovement.movement.category),
-      initiatior: rawMovement.movement.initiatior.toString(),
-      exeAccount: rawMovement.movement.exeAccount.toString(),
-      viaNode: rawMovement.movement.viaNode.toString(),
-      expiresAt: rawMovement.movement.expiresAt.toString(),
-      descriptionHash: rawMovement.movement.descriptionHash.toString(),
-      executedPayload: rawMovement.movement.executedPayload.toString()
+      category: Number(rawMovement.movement.category || 0),
+      initiatior: rawMovement.movement.initiatior?.toString() || ethers.ZeroAddress,
+      exeAccount: rawMovement.movement.exeAccount?.toString() || ethers.ZeroAddress,
+      viaNode: rawMovement.movement.viaNode?.toString() || '0',
+      expiresAt: rawMovement.movement.expiresAt?.toString() || '0',
+      description: rawMovement.movement.description || '',
+      executedPayload: rawMovement.movement.executedPayload?.toString() || '0x'
     };
 
-    const domain = {
-      name: 'WillWe',
-      version: '1',
-      chainId: Number(cleanChainId),
-      verifyingContract: deployments.Execution[cleanChainId]
-    };
-
-    // Calculate EIP-712 hash using ethers v6 syntax
-    const movementHash = ethers.TypedDataEncoder.hash(
-      domain,
-      { Movement: MOVEMENT_TYPE },
-      movement
-    );
-
-    return {
+    const processed: LatentMovement = {
       movement,
-      movementHash,
       signatureQueue: {
-        state: Number(rawMovement.signatureQueue.state),
-        Action: rawMovement.signatureQueue.Action,
-        Signers: Array.isArray(rawMovement.signatureQueue.Signers) 
-          ? rawMovement.signatureQueue.Signers.map((s: any) => s.toString())
+        state: Number(rawMovement.signatureQueue.state || 0),
+        Action: rawMovement.signatureQueue.Action || movement,
+        Signers: Array.isArray(rawMovement.signatureQueue.Signers)
+          ? rawMovement.signatureQueue.Signers.map(s => s?.toString() || ethers.ZeroAddress)
           : [],
         Sigs: Array.isArray(rawMovement.signatureQueue.Sigs)
-          ? rawMovement.signatureQueue.Sigs.map((s: any) => s.toString())
+          ? rawMovement.signatureQueue.Sigs.map(s => s?.toString() || '0x')
           : []
       }
     };
-  };
 
-  // Also update the fetchMovementDescription function (if it exists) to handle bytes32
-  const fetchMovementDescription = async (descriptionHash: string): Promise<string> => {
-    try {
-      // Implement your logic to fetch the description from IPFS using the hash
-      const response = await fetch(`/api/get-ipfs-data?hash=${descriptionHash}`);
-      if (!response.ok) throw new Error('Failed to fetch description');
-      const data = await response.json();
-      return data.description;
-    } catch (error) {
-      console.error('Error fetching description:', error);
-      return 'Failed to load description';
-    }
+    console.log('Processed movement result:', processed);
+    return processed;
   };
 
   return {
@@ -19024,7 +18989,8 @@ export const useMovements = ({ nodeId, chainId }: UseMovementsProps) => {
     createMovement,
     signMovement,
     executeMovement,
-    refreshMovements: fetchMovementData
+    refreshMovements: fetchMovementData,
+    isReady: ready && authenticated
   };
 };
 
@@ -20306,6 +20272,7 @@ export interface NodeBasicInfo {
   lastRedistribution: string;       
   balanceOfUser: string;            
   endpointOfUserForNode: string;    
+  totalSupply: string;              
 }
 
 export interface UserSignal {
@@ -20337,7 +20304,8 @@ export interface NodeState {
     eligibilityPerSec: string,
     lastRedistributionTime: string,
     balanceOfUser: string,
-    endpointOfUserForNode: string
+    endpointOfUserForNode: string,
+    totalSupply: string
   ];
   membraneMeta: string;          
   membersOfNode: string[];       
@@ -20346,112 +20314,6 @@ export interface NodeState {
   rootPath: string[];            
   signals: UserSignal[];         
 }
-
-//  /// @notice returns a node's data given its identifier
-//     /// @notice basicInfo: [nodeId, inflation, balanceAnchor, balanceBudget, value, membraneId, (balance of user), balanceOfUser, childParentEligibilityPerSec, lastParentRedistribution]
-//     /// @param nodeId node identifier
-//     /// @dev for eth_call
-//     function getNodeData(uint256 nodeId) private view returns (NodeState memory NodeData) {
-//       /// Node identifier
-//       NodeData.basicInfo[0] = nodeId.toString();
-//       /// Current inflation rate per second
-//       NodeData.basicInfo[1] = inflSec[nodeId][0].toString();
-//       /// Reserve balance - amount of tokens held in parent's reserve
-//       NodeData.basicInfo[2] = balanceOf(toAddress(nodeId), parentOf[nodeId]).toString();
-//       /// Budget balance - amount of tokens held in node's own account
-//       NodeData.basicInfo[3] = balanceOf(toAddress(nodeId), nodeId).toString();
-//       /// Root valuation of node's budget (denominated in root token)
-//       NodeData.basicInfo[4] = (asRootValuation(nodeId, balanceOf(toAddress(nodeId), nodeId))).toString();
-//       /// Root valuation of node's reserve (denominated in root token)
-//       NodeData.basicInfo[5] = (asRootValuation(nodeId, balanceOf(toAddress(nodeId), parentOf[nodeId]))).toString();
-//       /// Active membrane identifier
-//       NodeData.basicInfo[6] = (inUseMembraneId[nodeId][0]).toString();
-//       /// Redistribution eligibility rate from parent per second in root valuation
-//       NodeData.basicInfo[7] = (
-//           asRootValuation(options[keccak256(abi.encodePacked(nodeId, parentOf[nodeId]))][0], parentOf[nodeId])
-//       ).toString();
-
-//       /// Timestamp of last redistribution
-//       NodeData.basicInfo[8] = inflSec[nodeId][2].toString();
-//       /// Balance of user
-//       /// basicInfo[9];
-//       /// Endpoint of user for node if any
-//       /// basicInfo[10];
-
-//       /// Membrane Metadata CID
-//       NodeData.membraneMeta = M.getMembraneById(inUseMembraneId[nodeId][0]).meta;
-//       /// Array of member addresses
-//       NodeData.membersOfNode = members[nodeId];
-
-//       NodeData.movementEndpoints = members[toID(executionAddress) + nodeId];
-//       /// Array of direct children node IDs
-//       NodeData.childrenNodes = uintArrayToStringArray(childrenOf[nodeId]);
-//       /// Path from root token to node ID (ancestors)
-//       NodeData.rootPath = uintArrayToStringArray(getFidPath(nodeId));
-//   }
-
-//   function getNodes(uint256[] memory nodeIds) external view returns (NodeState[] memory nodes) {
-//       nodes = new NodeState[](nodeIds.length);
-//       for (uint256 i = 0; i < nodeIds.length; i++) {
-//           nodes[i] = getNodeData(nodeIds[i]);
-//       }
-//   }
-
-//   ///
-//   function getAllNodesForRoot(address rootAddress, address userIfAny)
-//       external
-//       view
-//       returns (NodeState[] memory nodes)
-//   {
-//       uint256 rootId = toID(rootAddress);
-//       nodes = new NodeState[](members[rootId].length);
-//       for (uint256 i = 0; i < members[rootId].length; i++) {
-//           nodes[i] = getNodeData(toID(members[rootId][i]), userIfAny);
-//       }
-//   }
-
-//   /// @notice Returns the array containing signal info for each child node in given originator and parent context
-//   /// @param signalOrigin address of originator
-//   /// @param parentNodeId node id for which originator has expressed
-//   function getUserNodeSignals(address signalOrigin, uint256 parentNodeId)
-//       external
-//       view
-//       returns (uint256[2][] memory UserNodeSignals)
-//   {
-//       uint256[] memory childNodes = childrenOf[parentNodeId];
-//       UserNodeSignals = new uint256[2][](childNodes.length);
-
-//       for (uint256 i = 0; i < childNodes.length; i++) {
-//           // Include the signalOrigin (user's address) in the signalKey
-//           bytes32 userTargetedPreference = keccak256(abi.encodePacked(signalOrigin, parentNodeId, childNodes[i]));
-
-//           // Store the signal value and the timestamp (assuming options[userKey] structure)
-//           UserNodeSignals[i][0] = options[userTargetedPreference][0]; // Signal value
-//           UserNodeSignals[i][1] = options[userTargetedPreference][1]; // Last updated timestamp
-//       }
-
-//       return UserNodeSignals;
-//   }
-
-//   function getNodeData(uint256 nodeId, address user) public view returns (NodeState memory nodeData) {
-//       nodeData = getNodeData(nodeId);
-//       if (user == address(0)) return nodeData;
-//       nodeData.basicInfo[9] = balanceOf(user, nodeId).toString();
-//       uint256 userEndpointId = toID(user) + nodeId;
-//       if (members[userEndpointId].length > 0) {
-//           nodeData.basicInfo[10] = Strings.toHexString(members[userEndpointId][0]);
-//       }
-//       nodeData.signals = new UserSignal[](1);
-//       nodeData.signals[0].MembraneInflation = new string[2][](childrenOf[nodeId].length);
-//       nodeData.signals[0].lastRedistSignal = new string[](childrenOf[nodeId].length);
-
-//       for (uint256 i = 0; i < childrenOf[nodeId].length; i++) {
-//           nodeData.signals[0].MembraneInflation[i][1] = inflSec[nodeId][0].toString();
-
-//           bytes32 userKey = keccak256(abi.encodePacked(user, nodeId, childrenOf[nodeId][i]));
-//           nodeData.signals[0].lastRedistSignal[i] = options[userKey][0].toString();
-//       }
-//   }
 
 
 export interface MembraneRequirement {
@@ -20541,7 +20403,7 @@ export interface Movement {
   exeAccount: string;
   viaNode: string;
   expiresAt: string;
-  descriptionHash: string;
+  description: string;
   executedPayload: string;
 }
 
@@ -20550,13 +20412,16 @@ export interface SignatureQueue {
   Action: Movement;
   Signers: string[];
   Sigs: string[];
-  exeSig: string;
 }
 
 export interface LatentMovement {
   movement: Movement;
-  movementHash: string; // This is derived from the movement data
-  signatureQueue: SignatureQueue;
+  signatureQueue: {
+    state: SignatureQueueState;
+    Action: Movement;  // This should match the Movement interface
+    Signers: string[];
+    Sigs: string[];
+  };
 }
 
 export interface IPFSMetadata {
@@ -20581,7 +20446,7 @@ export interface MovementSignatureStatus {
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 11 &&
+    data.basicInfo.length === 12 &&
     typeof data.membraneMeta === 'string' &&
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
@@ -20615,7 +20480,8 @@ export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
     eligibilityPerSec: nodeData.basicInfo[7],
     lastRedistribution: nodeData.basicInfo[8],
     balanceOfUser: nodeData.basicInfo[9],
-    endpointOfUserForNode: nodeData.basicInfo[10]
+    endpointOfUserForNode: nodeData.basicInfo[10],
+    totalSupply: nodeData.basicInfo[11]
   };
 };
 
@@ -25613,6 +25479,7 @@ export interface NodeBasicInfo {
   lastRedistribution: string;       
   balanceOfUser: string;            
   endpointOfUserForNode: string;    
+  totalSupply: string;              
 }
 
 export interface UserSignal {
@@ -25647,7 +25514,8 @@ export interface NodeState {
     eligibilityPerSec: string,
     lastRedistributionTime: string,
     balanceOfUser: string,
-    endpointOfUserForNode: string
+    endpointOfUserForNode: string,
+    totalSupply: string
   ];
   membraneMeta: string;          
   membersOfNode: string[];       
@@ -25739,7 +25607,7 @@ export interface Movement {
   exeAccount: string;
   viaNode: string;
   expiresAt: string;
-  descriptionHash: string;
+  description: string;
   executedPayload: string;
 }
 
@@ -25749,14 +25617,17 @@ export interface SignatureQueue {
   Action: Movement;
   Signers: string[];
   Sigs: string[];
-  exeSig: string;
 }
 
 export interface LatentMovement {
 export interface LatentMovement {
   movement: Movement;
-  movementHash: string; // This is derived from the movement data
-  signatureQueue: SignatureQueue;
+  signatureQueue: {
+    state: SignatureQueueState;
+    Action: Movement;  // This should match the Movement interface
+    Signers: string[];
+    Sigs: string[];
+  };
 }
 
 export interface IPFSMetadata {
@@ -25782,7 +25653,7 @@ export const isValidNodeState = (data: any): data is NodeState => {
 export const isValidNodeState = (data: any): data is NodeState => {
   return (
     Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 11 &&
+    data.basicInfo.length === 12 &&
     typeof data.membraneMeta === 'string' &&
     Array.isArray(data.membersOfNode) &&
     Array.isArray(data.childrenNodes) &&
@@ -25818,7 +25689,8 @@ export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
     eligibilityPerSec: nodeData.basicInfo[7],
     lastRedistribution: nodeData.basicInfo[8],
     balanceOfUser: nodeData.basicInfo[9],
-    endpointOfUserForNode: nodeData.basicInfo[10]
+    endpointOfUserForNode: nodeData.basicInfo[10],
+    totalSupply: nodeData.basicInfo[11]
   };
 };
 </document_content>

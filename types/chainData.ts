@@ -160,6 +160,7 @@ export interface LatentMovement {
     Signers: string[];
     Sigs: string[];
   };
+  movementHash: string;
 }
 
 export interface IPFSMetadata {

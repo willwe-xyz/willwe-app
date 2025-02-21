@@ -149,24 +149,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
     }
 
     try {
-      const calls = [{
-        target: formData.target,
-        callData: formData.calldata,
-        value: ethers.parseEther(formData.value || '0')
-      }];
-  
-      const executedPayload = ethers.AbiCoder.defaultAbiCoder().encode(
-        [{
-          type: 'tuple[]',
-          components: [
-            { name: 'target', type: 'address' },
-            { name: 'callData', type: 'bytes' },
-            { name: 'value', type: 'uint256' }
-          ]
-        }],
-        [calls]
-      );
-  
+      // The calldata should already be properly formatted, don't re-encode it
       return await executeTransaction(
         chainId,
         async () => {
@@ -184,7 +167,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
             formData.expiryDays,
             formData.endpoint === 'new' ? ethers.ZeroAddress : formData.endpoint,
             formData.description,
-            executedPayload
+            formData.calldata // Use the calldata directly
           );
         },
         {
@@ -202,18 +185,12 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
     if (!ready || !authenticated || !userAddress) {
       throw new Error('Not ready to sign');
     }
-  
+
     try {
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
       const signerAddress = await signer.getAddress();
       
-      const executionContract = new ethers.Contract(
-        deployments.Execution[cleanChainId],
-        ABIs.Execution,
-        provider
-      );
-  
       // Format the movement
       const formattedMovement = {
         category: Number(movement.movement.category),
@@ -226,10 +203,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
       };
       
       console.log('Formatted movement:', formattedMovement);
-      
-      // Get movement hash from contract for submission
-      const movementHash = await executionContract.hashMovement(formattedMovement);
-      console.log('Movement hash:', movementHash);
       
       // Define EIP-712 domain and types
       const domain = {
@@ -274,7 +247,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         match: recoveredAddress.toLowerCase() === signerAddress.toLowerCase()
       });
       
-      // Submit the signature
       return await executeTransaction(
         chainId,
         async () => {
@@ -284,82 +256,129 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
             signer
           );
           
-          console.log('Submitting signature:', {
-            movementHash,
-            signer: signerAddress,
-            signature
-          });
-          
           return willWeContract.submitSignatures(
-            movementHash,
+            movement.movementHash,
             [signerAddress],
             [signature]
           );
         },
         {
           successMessage: 'Movement signed successfully',
-          onSuccess: async () => {
-            // Log queue status after submission
-            try {
-              const isValid = await executionContract.isQueueValid(movementHash);
-              console.log('Queue valid after submission:', isValid);
-              
-              // Get the updated queue
-              const queue = await executionContract.getSigQueue(movementHash);
-              console.log('Queue after submission:', {
-                state: Number(queue.state),
-                signersCount: queue.Signers.length,
-                signaturesCount: queue.Sigs.length
-              });
-            } catch (error) {
-              console.error('Error checking queue after submission:', error);
+          onSuccess: fetchMovementData,
+          errorMessage: 'Failed to sign movement',
+          handleError: (error: any) => {
+            // Check if the error is a user rejection
+            if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+              return 'Transaction was cancelled';
             }
-            
-            fetchMovementData();
+            // Return a generic error message for other errors
+            return 'Failed to sign movement. Please try again.';
           }
         }
       );
-    } catch (error) {
+    } catch (error: any) {
+      // Handle user rejection of signature request
+      if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+        throw new Error('Transaction was cancelled');
+      }
       console.error('Error signing movement:', error);
       throw error;
     }
   };
-  
-  const executeMovement = async (movement: LatentMovement) => {
-    if (!ready || !authenticated) {
-      throw new Error('Wallet not connected');
+
+  const removeSignature = async (movement: LatentMovement) => {
+    if (!ready || !authenticated || !userAddress) {
+      throw new Error('Not ready to remove signature');
     }
 
     try {
-      // Get the correct hash from the contract using hashMovement
-      const provider = await getEthersProvider();
-      const executionContract = new ethers.Contract(
-        deployments.Execution[cleanChainId],
-        ABIs.Execution,
-        provider
-      );
-      
-      const movementHash = await executionContract.hashMovement(movement.movement);
-      console.log('Using contract-computed hash for execution:', movementHash);
-      
       return await executeTransaction(
         chainId,
         async () => {
+          const provider = await getEthersProvider();
           const signer = await provider.getSigner();
+          const signerAddress = await signer.getAddress();
+          
+          // Find the signer's index in the signers array
+          const signerIndex = movement.signatureQueue.Signers.findIndex(
+            addr => addr.toLowerCase() === signerAddress.toLowerCase()
+          );
+          
+          if (signerIndex === -1) {
+            throw new Error('Your signature was not found');
+          }
+
           const willWeContract = new ethers.Contract(
             deployments.WillWe[cleanChainId],
             ABIs.WillWe,
             signer
           );
+          
+          return willWeContract.removeSignature(
+            movement.movementHash,
+            signerIndex,
+            signerAddress
+          );
+        },
+        {
+          successMessage: 'Signature removed successfully',
+          onSuccess: fetchMovementData,
+          errorMessage: 'Failed to remove signature',
+          handleError: (error: any) => {
+            if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+              return 'Transaction was cancelled';
+            }
+            return 'Failed to remove signature. Please try again.';
+          }
+        }
+      );
+    } catch (error: any) {
+      if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+        throw new Error('Transaction was cancelled');
+      }
+      console.error('Error removing signature:', error);
+      throw error;
+    }
+  };
 
-          return willWeContract.executeQueue(movementHash);
+  const executeMovement = async (movement: LatentMovement) => {
+    if (!ready || !authenticated) {
+      throw new Error('Wallet not connected');
+    }
+    console.log(movement);
+    try {
+      return await executeTransaction(
+        chainId,
+        async () => {
+          const provider = await getEthersProvider();
+          const signer = await provider.getSigner();
+          const contract = new ethers.Contract(
+            deployments.WillWe[chainId],
+            ABIs.WillWe,
+            signer
+          );
+          
+          return contract.executeQueue(movement.movementHash);
         },
         {
           successMessage: 'Movement executed successfully',
-          onSuccess: fetchMovementData
+          onSuccess: fetchMovementData,
+          errorMessage: 'Failed to execute movement',
+          handleError: (error: any) => {
+            // Check if the error is a user rejection
+            if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+              return 'Transaction was cancelled';
+            }
+            // Return a generic error message for other errors
+            return 'Failed to execute movement. Please try again.';
+          }
         }
       );
-    } catch (error) {
+    } catch (error: any) {
+      // Handle user rejection
+      if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+        throw new Error('Transaction was cancelled');
+      }
       console.error('Error executing movement:', error);
       throw error;
     }
@@ -390,7 +409,8 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         Sigs: Array.isArray(rawMovement.signatureQueue.Sigs)
           ? rawMovement.signatureQueue.Sigs.map(s => s?.toString() || '0x')
           : []
-      }
+      },
+      movementHash: rawMovement.movementHash
     };
 
     console.log('Processed movement result:', processed);
@@ -398,11 +418,14 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
   };
 
   return {
-    ...state,
+    movements: state.movements,
+    signatures: state.signatures,
+    endpointAuthTypes: state.endpointAuthTypes,
+    isLoading: state.isLoading,
     createMovement,
     signMovement,
+    removeSignature,
     executeMovement,
-    refreshMovements: fetchMovementData,
-    isReady: ready && authenticated
+    refresh: fetchMovementData
   };
 };

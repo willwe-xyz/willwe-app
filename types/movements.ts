@@ -17,6 +17,11 @@ export interface FormState {
   params?: {
     [key: string]: string | number | { cid: string };
   };
+  calls?: Array<{
+    target: string;
+    callData: string;
+    value: string;
+  }>;
 }
 
 export interface EndpointOption {
@@ -43,23 +48,21 @@ export interface MovementFormProps {
 
 export const DEFAULT_FORM_STATE: FormState = {
   type: MovementType.AgentMajority,
-  description: '', // Will be updated to CID object when uploaded
+  description: '',
   expiryDays: 7,
   endpoint: 'new',
-  target: '',  // Leave empty initially
+  target: '',
   calldata: '0x',
   value: '0',
   actionType: 'customCall',
   params: {
-    to: '',    // Initialize empty recipient for token transfers
-    amount: '0', // Initialize zero amount for token transfers
-    target: '', // Initialize empty target for custom calls
-    calldata: '0x', // Initialize empty calldata for custom calls
-    value: '0'  // Initialize zero value for custom calls
+    to: '',
+    amount: '0',
+    target: '',
+    calldata: '0x',
+    value: '0'
   }
 };
-
-
 
 export const validateFormField = (name: keyof FormState | string, value: string): boolean => {
   // Handle empty values appropriately

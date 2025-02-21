@@ -46,6 +46,27 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
   // const { description, isUploading, error, uploadDescription } = useMovementDescription();
   const toast = useToast();
 
+  // ERC20 minimal ABI for transfer function
+  const ERC20_ABI = [
+    "function transfer(address to, uint256 amount) returns (bool)"
+  ];
+
+  // Multicall3 ABI for tryAggregate
+  const MULTICALL3_ABI = [
+    "function tryAggregate(bool requireSuccess, tuple(address target, bytes callData, uint256 value)[] calls) returns (tuple(bool success, bytes returnData)[])"
+  ];
+
+  // Function signature for tryAggregate
+  const TRY_AGGREGATE_SIG = "0x96b5a755"; // keccak256("tryAggregate(bool,(address,bytes,uint256)[])").slice(0, 10)
+
+  interface CleanParams {
+    to?: string;
+    amount?: string;
+    target?: string;
+    calldata?: string;
+    value?: string;
+    [key: string]: string | undefined;
+  }
 
   const endpointOptions = useMemo(() => {
     if (!nodeData?.movementEndpoints?.length) return [];
@@ -60,13 +81,14 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
     }));
   }, [nodeData?.movementEndpoints, nodeData?.childrenNodes, nodeData?.basicInfo]);
 
-  // Update the handleEndpointChange to also set safe defaults
+  // Update the handleEndpointChange to allow movement type selection for new endpoints
   const handleEndpointChange = (endpoint: string) => {
     const selectedEndpoint = endpointOptions.find(opt => opt.value === endpoint);
     setFormData(prev => ({
       ...prev,
       endpoint,
-      type: selectedEndpoint ? selectedEndpoint.authType : prev.type,
+      // Only set the type if it's an existing endpoint
+      type: endpoint === 'new' ? prev.type : (selectedEndpoint ? selectedEndpoint.authType : prev.type),
       target: selectedEndpoint ? selectedEndpoint.value : ethers.ZeroAddress,
       calldata: '0x',
       value: '0'
@@ -76,10 +98,14 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
       target: true,
       calldata: true,
       description: true,
-      value: true
+      value: true,
+      to: true
     });
     setTouchedFields({});
   };
+
+  // Allow movement type selection for new endpoints
+  const canSelectMovementType = formData.endpoint === 'new';
 
   const isValidHexString = (value: string) => /^0x[0-9a-fA-F]*$/.test(value);
 
@@ -102,12 +128,17 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
   };
 
   // Update to handle empty values properly
-  const handleInputChange = (field: keyof FormState, value: string) => {
-    // Ensure value is treated as string
-    let finalValue = value;
-    if (field === 'value') {
+  const handleInputChange = (field: keyof FormState, value: string | number) => {
+    // Handle different field types appropriately
+    let finalValue: string | number = value;
+    
+    if (field === 'expiryDays') {
+      // Ensure it's a positive number
+      const numValue = typeof value === 'string' ? parseInt(value) : value;
+      finalValue = Math.max(1, isNaN(numValue) ? 1 : numValue);
+    } else if (field === 'value') {
       // Strip non-numeric characters and leading zeros for value field
-      finalValue = value.replace(/[^\d.]/g, '').replace(/^0+(\d)/, '$1');
+      finalValue = String(value).replace(/[^\d.]/g, '').replace(/^0+(\d)/, '$1');
       if (finalValue === '') finalValue = '0';
     }
 
@@ -119,99 +150,125 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
     setTouchedFields(prev => ({ ...prev, [field]: true }));
     setValidation(prev => ({
       ...prev,
-      [field]: validateFormField(field, finalValue)
+      [field]: validateFormField(field, String(finalValue))
     }));
   };
 
-  const handleSubmit = async () => {
-    const isTokenTransfer = formData.actionType === 'tokenTransfer';
-    
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
     try {
       const action = getActionOptions.find(a => a.id === formData.actionType);
       if (!action) throw new Error('Invalid action type');
-  
+
       // Get target address based on action type
       let targetAddress;
-      if (isTokenTransfer) {
+      if (formData.actionType === 'tokenTransfer') {
         targetAddress = nodeData?.rootPath?.[0];
-        targetAddress = nodeIdToAddress(targetAddress); 
+        targetAddress = nodeIdToAddress(targetAddress);
       } else {
         targetAddress = formData.target || formData.params?.target;
       }
-  
+
       // Validate target address
       if (!targetAddress || !ethers.isAddress(targetAddress)) {
         throw new Error('Target address is required');
       }
-  
+
       // Extract CID from description if it's an object
       const descriptionCid = typeof formData.description === 'object' && 'cid' in formData.description
         ? formData.description.cid
         : formData.description;
-  
-      // Create clean parameters object without CID objects
-      const cleanParams = Object.entries(formData.params || {}).reduce((acc, [key, value]) => {
-        let cleanValue;
-        
-        // Convert CID objects to strings
+
+      // Create clean parameters object
+      const cleanParams: CleanParams = Object.entries(formData.params || {}).reduce((acc, [key, value]) => {
+        let cleanValue: string | undefined;
         if (typeof value === 'object' && 'cid' in value) {
           cleanValue = value.cid;
-        }
-        // Convert numbers to strings
-        else if (typeof value === 'number') {
+        } else if (typeof value === 'number') {
           cleanValue = value.toString();
-        }
-        // Handle addresses
-        else if (key.toLowerCase().includes('address') || key === 'target' || key === 'to') {
+        } else if (key.toLowerCase().includes('address') || key === 'target' || key === 'to') {
           try {
             cleanValue = ethers.getAddress(value as string);
           } catch {
-            cleanValue = value;
+            cleanValue = value as string;
           }
+        } else {
+          cleanValue = value as string;
         }
-        // Use value as is for other cases
-        else {
-          cleanValue = value;
-        }
-  
         return { ...acc, [key]: cleanValue };
       }, {});
-  
-      // Add required parameters
-      const formattedParams = {
-        ...cleanParams,
-        value: formData.value || '0',
-        target: targetAddress,
-        description: descriptionCid // Use string CID instead of object
-      };
-  
-      // Get call data with formatted parameters
-      const callData = action.getCallData(formattedParams, nodeData.rootPath[0]);
-  
+
+      // Structure the inner call first
+      let innerCall;
+      if (formData.actionType === 'tokenTransfer') {
+        if (!cleanParams.to) {
+          throw new Error('Recipient address is required for token transfer');
+        }
+        if (!cleanParams.amount) {
+          throw new Error('Amount is required for token transfer');
+        }
+
+        try {
+          // This will throw if the amount is invalid
+          ethers.parseUnits(cleanParams.amount, 18);
+        } catch (error) {
+          throw new Error('Invalid amount format');
+        }
+
+        const tokenInterface = new ethers.Interface(ERC20_ABI);
+        const transferCalldata = tokenInterface.encodeFunctionData('transfer', [
+          cleanParams.to,
+          ethers.parseUnits(cleanParams.amount, 18)
+        ]);
+
+        innerCall = {
+          target: targetAddress,
+          callData: transferCalldata,
+          value: ethers.parseEther('0')
+        };
+      } else {
+        try {
+          if (formData.value) {
+            // This will throw if the value is invalid
+            ethers.parseEther(formData.value);
+          }
+        } catch (error) {
+          throw new Error('Invalid value format');
+        }
+
+        innerCall = {
+          target: targetAddress,
+          callData: formData.calldata || '0x',
+          value: ethers.parseEther(formData.value || '0')
+        };
+      }
+
+      // Encode the tryAggregate call using the contract's interface
+      const multicallInterface = new ethers.Interface(MULTICALL3_ABI);
+      const encodedCalldata = multicallInterface.encodeFunctionData('tryAggregate', [
+        true, // requireSuccess
+        [innerCall]
+      ]);
+
       // Prepare final submission data
       const submissionData = {
         ...formData,
-        description: descriptionCid, // Use string CID
-        value: formData.value || '0',
+        description: descriptionCid,
         target: targetAddress,
-        callData: callData.callData || '0x',
-        params: formattedParams // Use cleaned parameters
+        calldata: encodedCalldata,
+        calls: [innerCall] // Keep the original calls array for reference
       };
-  
+
       // Validate submission data
-      const validationResult = {
-        ...validateFormForSubmission({
-          ...submissionData,
-          description: descriptionCid // Ensure validation uses string CID
-        }),
-        target: true
-      };
-  
+      const validationResult = validateFormForSubmission(submissionData);
       setValidation(prev => ({
         ...prev,
         ...validationResult
       }));
-  
+
       if (!Object.values(validationResult).every(Boolean)) {
         toast({
           title: 'Validation Error',
@@ -221,17 +278,24 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
         });
         return;
       }
-  
-      setIsSubmitting(true);
+
       await onSubmit(submissionData);
       onClose();
-    } catch (error) {
-      console.error('Submission error:', error);
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create movement',
+        title: 'Movement created',
+        description: 'Your movement has been created successfully',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (err) {
+      setError(err.message);
+      toast({
+        title: 'Error creating movement',
+        description: err.message,
         status: 'error',
-        duration: 5000
+        duration: 5000,
+        isClosable: true,
       });
     } finally {
       setIsSubmitting(false);
@@ -370,14 +434,16 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
         <FormLabel>Movement Type</FormLabel>
         <Select
           value={formData.type}
-          onChange={(e) => handleInputChange('type', e.target.value)}
-          isDisabled={formData.endpoint !== 'new'}
+          onChange={(e) => handleInputChange('type', parseInt(e.target.value))}
+          isDisabled={!canSelectMovementType}
         >
           <option value={MovementType.AgentMajority}>Agent Majority</option>
           <option value={MovementType.EnergeticMajority}>Value Majority</option>
         </Select>
         <FormHelperText>
-          {formData.endpoint !== 'new' && 'Movement type must match endpoint authorization type'}
+          {canSelectMovementType 
+            ? 'Select the type of consensus required for this movement' 
+            : 'Movement type is determined by the selected endpoint'}
         </FormHelperText>
       </FormControl>
 
@@ -399,20 +465,32 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
       <FormControl>
         <FormLabel>Expires In (Days)</FormLabel>
         <HStack>
-          <Button onClick={() => handleInputChange('expiryDays', String(Math.max(1, formData.expiryDays - 1)))}>
+          <Button 
+            onClick={() => handleInputChange('expiryDays', Math.max(1, formData.expiryDays - 1))}
+            aria-label="Decrease expiry days"
+          >
             -
           </Button>
           <Input
             type="number"
             value={formData.expiryDays}
             onChange={(e) => handleInputChange('expiryDays', e.target.value)}
+            onBlur={(e) => {
+              const value = parseInt(e.target.value);
+              handleInputChange('expiryDays', isNaN(value) ? 1 : Math.max(1, value));
+            }}
             min={1}
             textAlign="center"
+            width="80px"
           />
-          <Button onClick={() => handleInputChange('expiryDays', String(formData.expiryDays + 1))}>
+          <Button 
+            onClick={() => handleInputChange('expiryDays', formData.expiryDays + 1)}
+            aria-label="Increase expiry days"
+          >
             +
           </Button>
         </HStack>
+        <FormHelperText>Number of days until this movement expires</FormHelperText>
       </FormControl>
 
       <FormControl isRequired>
