@@ -1,7 +1,7 @@
 // File: ./pages/dashboard.tsx
 
 import { useRouter } from 'next/router';
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { 
   Box, 
   Text, 
@@ -16,7 +16,6 @@ import ActivityFeed from '../components/ActivityFeed/ActivityFeed';
 import { useNode } from '../contexts/NodeContext';
 import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
-import { useChainId } from '../hooks/useChainId';
 import { useActivityFeed } from '../hooks/useActivityFeed';
 
 export default function DashboardPage() {
@@ -25,13 +24,17 @@ export default function DashboardPage() {
   
   // Hooks
   const { colorState, cycleColors } = useColorManagement();
+
   const { user, ready, authenticated, logout, login } = usePrivy();
+  const {wallets} = useWallets();
+
   const { selectedToken, selectToken } = useNode();
-  const { chainId } = useChainId();
-  const { activities, isLoading: activitiesLoading } = useActivityFeed(chainId);
+  const { activities, isLoading: activitiesLoading } = useActivityFeed();
 
   // Get token from URL or context
   const tokenAddress = router.query.token as string || selectedToken;
+  const chainId = router.query.chainId as string || wallets[0]?.chainId;
+  const cleanChainId = chainId.replace('eip155:', '');
 
   // Fetch nodes data
   const { 
@@ -40,7 +43,7 @@ export default function DashboardPage() {
     error: nodesError, 
     refetch: refreshNodes 
   } = useRootNodes(
-    chainId,
+    cleanChainId,
     tokenAddress,
     user?.wallet?.address || ''
   );
@@ -56,13 +59,13 @@ export default function DashboardPage() {
 
   // Handle node selection
   const handleNodeSelect = (nodeId: string) => {
-    router.push(`/nodes/${chainId}/${nodeId}`);
+    router.push(`/nodes/${cleanChainId}/${nodeId}`);
   };
 
   // Prepare header props
   const headerProps = {
     userAddress: user?.wallet?.address,
-    chainId: chainId,
+    chainId: cleanChainId,
     logout,
     login,
     isTransacting: false,
@@ -129,7 +132,7 @@ export default function DashboardPage() {
             error={nodesError}
             onRefresh={refreshNodes}
             selectedTokenColor={colorState.contrastingColor}
-            chainId={chainId}
+            chainId={cleanChainId}
             selectedToken={tokenAddress}
             onNodeSelect={headerProps.onNodeSelect}
           />

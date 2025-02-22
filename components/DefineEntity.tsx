@@ -261,27 +261,40 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       try {
         // Wait for confirmation differently
         const receipt = await provider.waitForTransaction(tx.hash);
-        console.log('Transaction confirmed:', receipt);
+        console.log('Transaction receipt:', JSON.stringify(receipt, null, 2));
 
         // Close pending toast
         toast.close(pendingToastId);
 
+        // Create contract interface for parsing logs
+        const iface = new ethers.Interface(ABIs.Membrane);
+        
+        // Parse logs using contract interface
+        const logs = receipt.logs.map(log => {
+          try {
+            return iface.parseLog(log);
+          } catch (e) {
+            return null;
+          }
+        }).filter(Boolean);
+
+        console.log('Parsed logs:', logs);
+
         // Find MembraneCreated event
-        const membraneCreatedEvent = receipt.logs
-          .find(log => {
-            try {
-              return log.topics[0] === ethers.id("MembraneCreated(uint256,string)");
-            } catch {
-              return false;
-            }
-          });
+        const membraneCreatedEvent = logs.find(
+          log => log?.name === 'MembraneCreated'
+        );
 
         if (!membraneCreatedEvent) {
+          console.error('All transaction logs:', receipt.logs);
           throw new Error('Could not find membrane ID in transaction logs');
         }
 
-        const membraneId = ethers.toBigInt(membraneCreatedEvent.topics[1]).toString();
-        console.log('Membrane created with ID:', membraneId);
+        console.log('Found MembraneCreated event:', membraneCreatedEvent);
+
+        // Access the membraneId from the parsed event args
+        const membraneId = membraneCreatedEvent.args.membraneId.toString();
+        console.log('Parsed membrane ID:', membraneId);
 
         setCreationResult({
           membraneId,

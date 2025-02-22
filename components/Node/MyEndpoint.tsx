@@ -479,7 +479,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         </Stat>
         
         <Stat>
-          <StatLabel>Root Token Balance</StatLabel>
+          <StatLabel>Endpoint Balance</StatLabel>
           <StatNumber>{Number(formatBalance(rootTokenBalance)).toFixed(4)} {rootTokenSymbol}</StatNumber>
         </Stat>
       </HStack>
