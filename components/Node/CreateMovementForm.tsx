@@ -212,46 +212,77 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
         }
 
         try {
+          // Convert the recipient address to proper format
+          const recipient = ethers.getAddress(cleanParams.to);
+          
           // This will throw if the amount is invalid
-          ethers.parseUnits(cleanParams.amount, 18);
+          const amount = ethers.parseUnits(cleanParams.amount, 18);
+          
+          // Create ERC20 interface and encode transfer call
+          const tokenInterface = new ethers.Interface([
+            "function transfer(address to, uint256 amount) returns (bool)"
+          ]);
+          
+          const transferCalldata = tokenInterface.encodeFunctionData('transfer', [
+            recipient,
+            amount
+          ]);
+
+          console.log('Token transfer parameters:', {
+            to: recipient,
+            amount: amount.toString(),
+            encodedCalldata: transferCalldata
+          });
+
+          innerCall = {
+            target: targetAddress,
+            callData: transferCalldata,
+            value: ethers.parseEther('0').toString() // Ensure value is string
+          };
         } catch (error) {
-          throw new Error('Invalid amount format');
+          console.error('Error encoding token transfer:', error);
+          throw new Error('Invalid token transfer parameters: ' + error.message);
         }
-
-        const tokenInterface = new ethers.Interface(ERC20_ABI);
-        const transferCalldata = tokenInterface.encodeFunctionData('transfer', [
-          cleanParams.to,
-          ethers.parseUnits(cleanParams.amount, 18)
-        ]);
-
-        innerCall = {
-          target: targetAddress,
-          callData: transferCalldata,
-          value: ethers.parseEther('0')
-        };
       } else {
         try {
-          if (formData.value) {
-            // This will throw if the value is invalid
-            ethers.parseEther(formData.value);
-          }
+          // Parse and validate value if provided
+          const value = formData.value ? ethers.parseEther(formData.value) : ethers.parseEther('0');
+          
+          innerCall = {
+            target: targetAddress,
+            callData: formData.calldata || '0x',
+            value: value.toString() // Ensure value is string
+          };
         } catch (error) {
           throw new Error('Invalid value format');
         }
-
-        innerCall = {
-          target: targetAddress,
-          callData: formData.calldata || '0x',
-          value: ethers.parseEther(formData.value || '0')
-        };
       }
 
-      // Encode the tryAggregate call using the contract's interface
-      const multicallInterface = new ethers.Interface(MULTICALL3_ABI);
+      // Encode the tryAggregate call
+      const multicallInterface = new ethers.Interface([
+        "function tryAggregate(bool requireSuccess, tuple(address target, bytes callData, uint256 value)[] calls) returns (tuple(bool success, bytes returnData)[])"
+      ]);
+
+      // Validate the inner call
+      if (!ethers.isAddress(innerCall.target)) {
+        throw new Error('Invalid target address');
+      }
+      if (!innerCall.callData.startsWith('0x')) {
+        throw new Error('Invalid calldata format');
+      }
+
+      console.log('Inner call to be encoded:', {
+        target: innerCall.target,
+        callData: innerCall.callData,
+        value: innerCall.value
+      });
+
       const encodedCalldata = multicallInterface.encodeFunctionData('tryAggregate', [
         true, // requireSuccess
         [innerCall]
       ]);
+
+      console.log('Encoded tryAggregate calldata:', encodedCalldata);
 
       // Prepare final submission data
       const submissionData = {

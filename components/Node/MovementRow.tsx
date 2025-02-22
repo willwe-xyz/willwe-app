@@ -61,6 +61,8 @@ const MovementRow: React.FC<MovementRowProps> = ({
   const { user } = usePrivy();
   const userAddress = user?.wallet?.address;
 
+  const isExecuted = movement.signatureQueue.state === SignatureQueueState.Executed;
+
   useEffect(() => {
     const checkQueueValidity = async () => {
       try {
@@ -200,8 +202,8 @@ const MovementRow: React.FC<MovementRowProps> = ({
                 <Badge colorScheme="purple">
                   {getMovementTypeLabel(movement.movement.category)}
                 </Badge>
-                <Badge colorScheme="blue">
-                  {movement.signatureQueue.Signers.length} / {calculateRequiredSignatures()} signatures
+                <Badge colorScheme={isExecuted ? 'blue' : 'yellow'}>
+                  {isExecuted ? 'Executed' : `${movement.signatureQueue.Signers.filter(signer => signer !== ethers.ZeroAddress).length} / ${calculateRequiredSignatures()} signatures`}
                 </Badge>
               </HStack>
             </Box>
@@ -232,9 +234,11 @@ const MovementRow: React.FC<MovementRowProps> = ({
                 <Text fontWeight="semibold" fontSize="sm">Signers:</Text>
                 <VStack align="start" spacing={1}>
                   {movement.signatureQueue.Signers.map((signer, index) => (
-                    <Code key={index} fontSize="sm" p={1}>
-                      {signer}
-                    </Code>
+                    signer !== ethers.ZeroAddress && (
+                      <Code key={index} fontSize="sm" p={1}>
+                        {signer}
+                      </Code>
+                    )
                   ))}
                 </VStack>
               </Box>
@@ -260,36 +264,40 @@ const MovementRow: React.FC<MovementRowProps> = ({
       </Td>
       <Td isNumeric>
         <ButtonGroup>
-          {!isUserSigner && (
-            <Button
-              size="sm"
-              colorScheme="blue"
-              onClick={handleSign}
-              isLoading={isLoading}
-            >
-              Sign
-            </Button>
-          )}
-          {isUserSigner && (
-            <Button
-              size="sm"
-              colorScheme="red"
-              variant="outline"
-              onClick={handleRemoveSignature}
-              isLoading={isLoading}
-            >
-              Remove Signature
-            </Button>
-          )}
-          {isQueueValid && (
-            <Button
-              size="sm"
-              colorScheme="green"
-              onClick={handleExecute}
-              isLoading={isLoading}
-            >
-              Execute
-            </Button>
+          {!isExecuted && (
+            <>
+              {!isUserSigner && (
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  onClick={handleSign}
+                  isLoading={isLoading}
+                >
+                  Sign
+                </Button>
+              )}
+              {isUserSigner && (
+                <Button
+                  size="sm"
+                  colorScheme="red"
+                  variant="outline"
+                  onClick={handleRemoveSignature}
+                  isLoading={isLoading}
+                >
+                  Remove Signature
+                </Button>
+              )}
+              {isQueueValid && (
+                <Button
+                  size="sm"
+                  colorScheme="green"
+                  onClick={handleExecute}
+                  isLoading={isLoading}
+                >
+                  Execute
+                </Button>
+              )}
+            </>
           )}
         </ButtonGroup>
       </Td>

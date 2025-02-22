@@ -51,7 +51,8 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId 
     isLoading,
     signMovement,
     removeSignature,
-    executeMovement
+    executeMovement,
+    createMovement
   } = useMovements({ 
     nodeId, 
     chainId, 
@@ -154,7 +155,7 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId 
               nodeData={nodeData}
               onSubmit={async (formData) => {
                 try {
-                  await signMovement?.(formData);
+                  await createMovement?.(formData);
                   onClose();
                 } catch (error) {
                   console.error('Error creating movement:', error);
