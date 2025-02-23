@@ -17,23 +17,25 @@ import { useNode } from '../contexts/NodeContext';
 import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
 import { useActivityFeed } from '../hooks/useActivityFeed';
+import { useState } from 'react';
 
 export default function DashboardPage() {
   const router = useRouter();
   const toast = useToast();
+  const [selectedToken, setSelectedToken] = useState<string>('');
   
   // Hooks
   const { colorState, cycleColors } = useColorManagement();
 
   const { user, ready, authenticated, logout, login } = usePrivy();
-  const {wallets} = useWallets();
-
-  const { selectedToken, selectToken } = useNode();
-  const { activities, isLoading: activitiesLoading } = useActivityFeed();
+  const { wallets } = useWallets();
 
   // Get token from URL or context
   const tokenAddress = router.query.token as string || selectedToken;
-  const chainId = router.query.chainId as string || wallets[0]?.chainId;
+  
+  // Add proper null checks and default chainId
+  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '1';
+  const chainId = router.query.chainId as string || wallets[0]?.chainId || defaultChainId;
   const cleanChainId = chainId.replace('eip155:', '');
 
   // Fetch nodes data
@@ -50,7 +52,7 @@ export default function DashboardPage() {
 
   // Handle token selection
   const handleTokenSelect = (tokenAddress: string) => {
-    selectToken(tokenAddress);
+    setSelectedToken(tokenAddress);
     router.push({
       pathname: '/dashboard',
       query: { token: tokenAddress }
@@ -88,11 +90,11 @@ export default function DashboardPage() {
           Select a token from above to explore its value network
         </Text>
         
-        <ActivityFeed
+        {/* <ActivityFeed
           activities={activities}
           isLoading={activitiesLoading}
           onRefresh={refreshNodes}
-        />
+        /> */}
       </Box>
     </Box>
   );
