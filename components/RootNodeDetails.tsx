@@ -34,7 +34,6 @@ import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance, addressToNodeId } from '../utils/formatters';
 import { useTransaction } from '../contexts/TransactionContext';
-import { NodeHierarchyView } from './Node/NodeHierarchyView';
 import { SankeyChart } from './Node/SankeyChart';
 import { StatsCard } from './Node/StatsCards'; 
 import { NodeFilters } from './Node/NodeFilters';
@@ -344,17 +343,18 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       </Flex>
 
       <NodeOperations
-  nodeId={selectedToken}
-  chainId={chainId}
-  selectedTokenColor={selectedTokenColor}
-  userAddress={userAddress}
-  onSuccess={() => {
-    setShowSpawnModal(false);
-    if (onRefresh) onRefresh();
-  }}
-  initialTab={showSpawnModal ? 'spawn' : null}
-  showToolbar={false}
-/>
+        nodeId={selectedToken}
+        chainId={chainId}
+        selectedTokenColor={selectedTokenColor}
+        userAddress={userAddress}
+        onSuccess={() => {
+          setShowSpawnModal(false);
+          if (onRefresh) onRefresh();
+        }}
+        isOpen={showSpawnModal}
+        onClose={() => setShowSpawnModal(false)}
+        showToolbar={false}
+      />
     </Flex>
   );
 };

@@ -42,24 +42,57 @@ export const getExplorerLink = (
 ): string => {
   try {
     // Ensure we're using the chainId, not an address
-    if (!chainId ) {
+    if (!chainId) {
       throw new Error('Invalid chain ID format');
     }
     
     // Clean chainId format
     const cleanChainId = chainId.replace('eip155:', '');
     
-    // Get chain info from viem
-    const chain = getChainById(cleanChainId);
-    const explorerUrl = chain.blockExplorers?.default?.url;
+    // Fallback explorer URLs for common networks
+    const fallbackExplorers: Record<string, string> = {
+      '1': 'https://etherscan.io',
+      '5': 'https://goerli.etherscan.io',
+      '11155111': 'https://sepolia.etherscan.io',
+      '137': 'https://polygonscan.com',
+      '80001': 'https://mumbai.polygonscan.com',
+      '42161': 'https://arbiscan.io',
+      '421613': 'https://goerli.arbiscan.io',
+      '10': 'https://optimistic.etherscan.io',
+      '420': 'https://goerli-optimism.etherscan.io',
+      '56': 'https://bscscan.com',
+      '97': 'https://testnet.bscscan.com',
+      '84532': 'https://sepolia.basescan.org',
+      '11155420': 'https://sepolia-optimism.etherscan.io',
+      '167009': 'https://explorer.katla.taiko.xyz',
+      '167000': 'https://explorer.taiko.xyz',
+      '534351': 'https://sepolia-blockscout.scroll.io',
+    };
+    
+    let explorerUrl: string | undefined;
+    
+    try {
+      // Try to get chain info from viem
+      const chain = getChainById(cleanChainId);
+      explorerUrl = chain.blockExplorers?.default?.url;
+    } catch (error) {
+      console.warn('Error getting chain by ID:', error);
+      // If viem lookup fails, try the fallback
+      explorerUrl = fallbackExplorers[cleanChainId];
+    }
     
     if (!explorerUrl) {
-      throw new Error('No explorer URL found for chain');
+      console.warn(`No explorer URL found for chain ID: ${chainId}`);
+      return '#';
     }
+    
+    // Remove trailing slash if present
+    explorerUrl = explorerUrl.endsWith('/') ? explorerUrl.slice(0, -1) : explorerUrl;
 
     // Validate address format for address type
     if (type === 'address' && !ethers.isAddress(address)) {
-      throw new Error('Invalid address format');
+      console.warn('Invalid address format:', address);
+      return '#';
     }
 
     return `${explorerUrl}/${type}/${address}`;
@@ -68,6 +101,7 @@ export const getExplorerLink = (
     return '#';
   }
 };
+
 export const getMembraneContract = async (
   chainId: string,
   provider: ethers.Provider

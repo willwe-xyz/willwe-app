@@ -48,20 +48,56 @@ export function useMembraneOperations(chainId: string) {
 
           const receipt = await tx.wait();
 
-          // Find MembraneCreated event
+          console.log('Transaction receipt logs:', JSON.stringify(receipt.logs, null, 2));
+          
+          // The event signature for MembraneCreated(address,uint256,string)
+          const membraneCreatedSignature = ethers.id("MembraneCreated(address,uint256,string)");
+          
           const membraneCreatedLog = receipt.logs.find((log: any) => {
             try {
-              return log.topics[0] === ethers.id("MembraneCreated(uint256,string)");
-            } catch {
+              console.log('Checking log topic:', log.topics[0]);
+              console.log('Expected topic:', membraneCreatedSignature);
+              return log.topics[0] === membraneCreatedSignature;
+            } catch (e) {
+              console.error('Error checking log topic:', e);
               return false;
             }
           });
           
           if (!membraneCreatedLog) {
+            console.log('All log topics:', receipt.logs.map((log: any) => log.topics[0]));
             throw new Error('Failed to find MembraneCreated event in logs');
           }
 
-          const membraneId = ethers.toBigInt(membraneCreatedLog.topics[1]).toString();
+          console.log('Found membrane event:', membraneCreatedLog);
+          
+          // Extract membraneId from the data field since parameters are not indexed
+          let membraneId;
+          try {
+            // According to the ABI, the parameters are not indexed, so they're in the data field
+            // We need to decode the data field which contains all parameters
+            const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+            
+            // The data contains [address creator, uint256 membraneId, string CID]
+            const decodedData = abiCoder.decode(
+              ['address', 'uint256', 'string'], 
+              membraneCreatedLog.data
+            );
+            
+            console.log('Decoded event data:', decodedData);
+            
+            // The membraneId is the second parameter (index 1)
+            membraneId = decodedData[1].toString();
+            
+            if (!membraneId) {
+              throw new Error('Could not extract membrane ID from event data');
+            }
+          } catch (error) {
+            console.error('Error extracting membrane ID:', error);
+            throw new Error('Failed to parse membrane ID from transaction logs');
+          }
+          
+          console.log('Membrane created with ID:', membraneId);
 
           return tx;
         },

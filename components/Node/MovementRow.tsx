@@ -39,9 +39,9 @@ const getMovementTypeLabel = (type: MovementType): string => {
     case MovementType.Revert:
       return 'Revert';
     case MovementType.AgentMajority:
-      return 'Agent Majority';
+      return 'Member Majority';
     case MovementType.EnergeticMajority:
-      return 'Energetic Majority';
+      return 'Value Majority';
     default:
       return 'Unknown';
   }
@@ -58,10 +58,11 @@ const MovementRow: React.FC<MovementRowProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isQueueValid, setIsQueueValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [localExecuted, setLocalExecuted] = useState(false);
   const { user } = usePrivy();
   const userAddress = user?.wallet?.address;
 
-  const isExecuted = movement.signatureQueue.state === SignatureQueueState.Executed;
+  const isExecuted = localExecuted || movement.signatureQueue.state === SignatureQueueState.Executed;
 
   useEffect(() => {
     const checkQueueValidity = async () => {
@@ -160,6 +161,8 @@ const MovementRow: React.FC<MovementRowProps> = ({
     try {
       setIsLoading(true);
       await onExecute();
+      // Set local state to executed after successful execution
+      setLocalExecuted(true);
     } catch (error) {
       // Error handling is done by TransactionContext
       console.error('Error in handleExecute:', error);

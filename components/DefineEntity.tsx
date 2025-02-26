@@ -62,7 +62,6 @@ interface EntityMetadata {
 }
 
 export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit }) => {
-  console.log('chainId', chainId);
   // Form state
   const [entityName, setEntityName] = useState('');
   const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
@@ -267,20 +266,55 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         toast.close(pendingToastId);
 
         // Find MembraneCreated event
-        const membraneCreatedEvent = receipt.logs
-          .find(log => {
-            try {
-              return log.topics[0] === ethers.id("MembraneCreated(uint256,string)");
-            } catch {
-              return false;
-            }
-          });
+        console.log('Transaction receipt logs:', JSON.stringify(receipt.logs, null, 2));
+        
+        // The event signature for MembraneCreated(address,uint256,string)
+        const membraneCreatedSignature = ethers.id("MembraneCreated(address,uint256,string)");
+        
+        const membraneCreatedEvent = receipt.logs.find((log: any) => {
+          try {
+            console.log('Checking log topic:', log.topics[0]);
+            console.log('Expected topic:', membraneCreatedSignature);
+            return log.topics[0] === membraneCreatedSignature;
+          } catch (e) {
+            console.error('Error checking log topic:', e);
+            return false;
+          }
+        });
 
         if (!membraneCreatedEvent) {
+          console.log('All log topics:', receipt.logs.map((log: any) => log.topics[0]));
           throw new Error('Could not find membrane ID in transaction logs');
         }
 
-        const membraneId = ethers.toBigInt(membraneCreatedEvent.topics[1]).toString();
+        console.log('Found membrane event:', membraneCreatedEvent);
+        
+        // Extract membraneId from the data field since parameters are not indexed
+        let membraneId;
+        try {
+          // According to the ABI, the parameters are not indexed, so they're in the data field
+          // We need to decode the data field which contains all parameters
+          const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+          
+          // The data contains [address creator, uint256 membraneId, string CID]
+          const decodedData = abiCoder.decode(
+            ['address', 'uint256', 'string'], 
+            membraneCreatedEvent.data
+          );
+          
+          console.log('Decoded event data:', decodedData);
+          
+          // The membraneId is the second parameter (index 1)
+          membraneId = decodedData[1].toString();
+          
+          if (!membraneId) {
+            throw new Error('Could not extract membrane ID from event data');
+          }
+        } catch (error) {
+          console.error('Error extracting membrane ID:', error);
+          throw new Error('Failed to parse membrane ID from transaction logs');
+        }
+        
         console.log('Membrane created with ID:', membraneId);
 
         setCreationResult({
@@ -347,12 +381,12 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
               <FormLabel>Characteristics</FormLabel>
               <HStack mb={4}>
                 <Input
-                  placeholder="Title"
+                  placeholder="label"
                   value={newCharTitle}
                   onChange={(e) => setNewCharTitle(e.target.value)}
                 />
                 <Input
-                  placeholder="Link"
+                  placeholder="url"
                   value={newCharLink}
                   onChange={(e) => setNewCharLink(e.target.value)}
                 />
@@ -505,7 +539,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
                   </HStack>
                   {creationResult.txHash && (
                     <Link 
-                      href={getExplorerLink(chainId, creationResult.txHash)}
+                      href={getExplorerLink(creationResult.txHash, chainId, 'tx')}
                       isExternal
                       color="purple.500"
                       fontSize="sm"
