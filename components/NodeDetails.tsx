@@ -29,6 +29,7 @@ import { Chat } from './Node/Chat';
 import { MyEndpoint } from './Node/MyEndpoint';
 import { EndpointComponent } from './Node/EndpointComponent';
 import { MovementsErrorBoundary } from './Node/MovementsErrorBoundary';
+import { ethers } from 'ethers';
 
 import { 
   Signal, 
@@ -138,6 +139,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             userAddress={user?.wallet?.address}
             onSuccess={refetch}
             showToolbar={true}
+            isOpen={isOpen}
+            onClose={onClose}
           />
 
           <Box flex="1" overflow="auto">
@@ -203,7 +206,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
                 <TabPanel p={6}>
                   <Box maxW="900px" mx="auto">
-                    <MyEndpoint nodeData={nodeData} chainId={chainId} onSuccess={refetch} />
+                    <MyEndpoint nodeData={nodeData} chainId={chainId} userAddress={user?.wallet?.address || ethers.ZeroAddress} onSuccess={refetch} />
                   </Box>
                 </TabPanel>
               </TabPanels>

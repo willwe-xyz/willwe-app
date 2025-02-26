@@ -62,7 +62,6 @@ interface EntityMetadata {
 }
 
 export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit }) => {
-  console.log('chainId', chainId);
   // Form state
   const [entityName, setEntityName] = useState('');
   const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
@@ -261,40 +260,62 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       try {
         // Wait for confirmation differently
         const receipt = await provider.waitForTransaction(tx.hash);
-        console.log('Transaction receipt:', JSON.stringify(receipt, null, 2));
+        console.log('Transaction confirmed:', receipt);
 
         // Close pending toast
         toast.close(pendingToastId);
 
-        // Create contract interface for parsing logs
-        const iface = new ethers.Interface(ABIs.Membrane);
-        
-        // Parse logs using contract interface
-        const logs = receipt.logs.map(log => {
-          try {
-            return iface.parseLog(log);
-          } catch (e) {
-            return null;
-          }
-        }).filter(Boolean);
-
-        console.log('Parsed logs:', logs);
-
         // Find MembraneCreated event
-        const membraneCreatedEvent = logs.find(
-          log => log?.name === 'MembraneCreated'
-        );
+        console.log('Transaction receipt logs:', JSON.stringify(receipt.logs, null, 2));
+        
+        // The event signature for MembraneCreated(address,uint256,string)
+        const membraneCreatedSignature = ethers.id("MembraneCreated(address,uint256,string)");
+        
+        const membraneCreatedEvent = receipt.logs.find((log: any) => {
+          try {
+            console.log('Checking log topic:', log.topics[0]);
+            console.log('Expected topic:', membraneCreatedSignature);
+            return log.topics[0] === membraneCreatedSignature;
+          } catch (e) {
+            console.error('Error checking log topic:', e);
+            return false;
+          }
+        });
 
         if (!membraneCreatedEvent) {
-          console.error('All transaction logs:', receipt.logs);
+          console.log('All log topics:', receipt.logs.map((log: any) => log.topics[0]));
           throw new Error('Could not find membrane ID in transaction logs');
         }
 
-        console.log('Found MembraneCreated event:', membraneCreatedEvent);
-
-        // Access the membraneId from the parsed event args
-        const membraneId = membraneCreatedEvent.args.membraneId.toString();
-        console.log('Parsed membrane ID:', membraneId);
+        console.log('Found membrane event:', membraneCreatedEvent);
+        
+        // Extract membraneId from the data field since parameters are not indexed
+        let membraneId;
+        try {
+          // According to the ABI, the parameters are not indexed, so they're in the data field
+          // We need to decode the data field which contains all parameters
+          const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+          
+          // The data contains [address creator, uint256 membraneId, string CID]
+          const decodedData = abiCoder.decode(
+            ['address', 'uint256', 'string'], 
+            membraneCreatedEvent.data
+          );
+          
+          console.log('Decoded event data:', decodedData);
+          
+          // The membraneId is the second parameter (index 1)
+          membraneId = decodedData[1].toString();
+          
+          if (!membraneId) {
+            throw new Error('Could not extract membrane ID from event data');
+          }
+        } catch (error) {
+          console.error('Error extracting membrane ID:', error);
+          throw new Error('Failed to parse membrane ID from transaction logs');
+        }
+        
+        console.log('Membrane created with ID:', membraneId);
 
         setCreationResult({
           membraneId,
@@ -360,12 +381,12 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
               <FormLabel>Characteristics</FormLabel>
               <HStack mb={4}>
                 <Input
-                  placeholder="Title"
+                  placeholder="label"
                   value={newCharTitle}
                   onChange={(e) => setNewCharTitle(e.target.value)}
                 />
                 <Input
-                  placeholder="Link"
+                  placeholder="url"
                   value={newCharLink}
                   onChange={(e) => setNewCharLink(e.target.value)}
                 />
@@ -518,7 +539,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
                   </HStack>
                   {creationResult.txHash && (
                     <Link 
-                      href={getExplorerLink(chainId, creationResult.txHash)}
+                      href={getExplorerLink(creationResult.txHash, chainId, 'tx')}
                       isExternal
                       color="purple.500"
                       fontSize="sm"

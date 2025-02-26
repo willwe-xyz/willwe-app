@@ -312,13 +312,6 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
 
       await onSubmit(submissionData);
       onClose();
-      toast({
-        title: 'Movement created',
-        description: 'Your movement has been created successfully',
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-      });
     } catch (err) {
       setError(err.message);
       toast({

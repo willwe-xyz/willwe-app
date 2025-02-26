@@ -289,12 +289,12 @@ const SpawnNodeForm = ({
               <FormLabel>Characteristics</FormLabel>
               <HStack mb={4}>
                 <Input
-                  placeholder="Title"
+                  placeholder="label"
                   value={newCharTitle}
                   onChange={(e) => setNewCharTitle(e.target.value)}
                 />
                 <Input
-                  placeholder="Link"
+                  placeholder="url"
                   value={newCharLink}
                   onChange={(e) => setNewCharLink(e.target.value)}
                 />
@@ -433,7 +433,7 @@ const SpawnNodeForm = ({
             <VStack align="stretch" width="100%" spacing={2}>
               <Text>Node successfully created</Text>
               <Link 
-                href={getExplorerLink(chainId, transactionHash)}
+                href={getExplorerLink(transactionHash, chainId, 'tx')}
                 isExternal
                 color="purple.500"
                 fontSize="sm"

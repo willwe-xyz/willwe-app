@@ -92,7 +92,8 @@ export type NodeOperationsProps = {
   selectedTokenColor?: string;
   userAddress?: string;
   onSuccess?: () => void;
-  initialTab?: 'spawn' | 'membrane' | 'mint' | 'burn' | null;
+  isOpen?: boolean;
+  onClose?: () => void;
   showToolbar?: boolean;
 };
 
@@ -102,11 +103,12 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   selectedTokenColor,
   userAddress,
   onSuccess,
-  initialTab = null,
-  showToolbar = false
+  isOpen = false,
+  onClose,
+  showToolbar = true
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeModal, setActiveModal] = useState<ModalType>(initialTab);
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [membraneId, setMembraneId] = useState('');
   const [mintAmount, setMintAmount] = useState('');
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -128,10 +130,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const { data: nodeData } = useNodeData(chainId, userAddress, nodeId);
   const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address || '');
 
+  useEffect(() => {
+    // If isOpen prop changes to true, set activeModal to 'spawn'
+    if (isOpen) {
+      setActiveModal('spawn');
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setActiveModal(null);
+    if (onClose) onClose();
+  };
+
   // Effect to handle initialTab prop changes
   useEffect(() => {
-    setActiveModal(initialTab);
-  }, [initialTab]);
+    setActiveModal(null);
+  }, []);
 
   // Reset states when modal closes
   useEffect(() => {
@@ -830,30 +844,31 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         </Box>
       )}
 
-<Modal 
-  isOpen={activeModal === 'spawn'} 
-  onClose={() => setActiveModal(null)}
-  motionPreset="slideInBottom"
->
-  <ModalOverlay backdropFilter="blur(4px)" />
-  <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
-    <ModalHeader>Create New Node</ModalHeader>
-    <ModalCloseButton />
-    <ModalBody pb={6}>
-      <SpawnNodeForm
-        nodeId={nodeId}
-        chainId={chainId}
-        onSuccess={onSuccess}
-        onClose={() => setActiveModal(null)}
-      />
-    </ModalBody>
-  </ModalContent>
-</Modal>
+      {/* Spawn Node Modal */}
+      <Modal 
+        isOpen={activeModal === 'spawn'} 
+        onClose={handleClose}
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
+          <ModalHeader>Create New Node</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <SpawnNodeForm
+              nodeId={nodeId}
+              chainId={chainId}
+              onSuccess={onSuccess}
+              onClose={handleClose}
+            />
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       {/* Mint Modal */}
       <Modal 
         isOpen={activeModal === 'mint'} 
-        onClose={() => setActiveModal(null)}
+        onClose={handleClose}
         motionPreset="slideInBottom"
       >
         <ModalOverlay backdropFilter="blur(4px)" />
@@ -869,7 +884,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       {/* Burn Modal */}
       <Modal 
         isOpen={activeModal === 'burn'} 
-        onClose={() => setActiveModal(null)}
+        onClose={handleClose}
         motionPreset="slideInBottom"
       >
         <ModalOverlay backdropFilter="blur(4px)" />

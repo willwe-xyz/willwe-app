@@ -8,34 +8,33 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-//   Will: 0x584F994bF22CF073d7656892203bdDd14C5A2497
-//   Membrane: 0x7488f70a1C53244266CcDD280BD1f2ccF4a626fe
-//   Execution: 0xD7e289d133B91f58d99dA5005E614E75718Cf9cD
-//   WillWe: 0x00d3C18Bee4658f38242ad65f693A5FE78690d78
+//   Will: 0x9F3b87134f3e7Ae82Fa773923beDeE0472a10B32
+//   Membrane: 0x0e794c42Ef49cc5596137743c6e9Fb4129d0Db9E
+//   Execution: 0xFE479221504A36457b4BB500251935015373211d
+//   WillWe: 0x492805e8971197038e19A0F15EF5649cf01e2412
 //   Kibern Director: 0x0000000000000000000000000000000000000000
-//   Control [0,1]: 0x0743742D08Fe3b4c6689de8f3cCB1CAefAE81e83 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0x7bC0967E8bd9913307e2757CD55cdd36cD88f409 0x0000000000000000000000000000000000000000
 //   Will Price in ETH: 1000000000
-
 
 export const deployments: Deployments = {
     "RVI": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x584F994bF22CF073d7656892203bdDd14C5A2497",
+        "11155420": "0x9F3b87134f3e7Ae82Fa773923beDeE0472a10B32",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0x7488f70a1C53244266CcDD280BD1f2ccF4a626fe",
+        "11155420": "0x0e794c42Ef49cc5596137743c6e9Fb4129d0Db9E",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0xD7e289d133B91f58d99dA5005E614E75718Cf9cD",
+        "11155420": "0xFE479221504A36457b4BB500251935015373211d",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0x00d3C18Bee4658f38242ad65f693A5FE78690d78",
+        "11155420": "0x492805e8971197038e19A0F15EF5649cf01e2412",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -641,84 +640,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "getSigQueue",
-            "inputs": [
-                {
-                    "name": "hash_",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "tuple",
-                    "internalType": "struct SignatureQueue",
-                    "components": [
-                        {
-                            "name": "state",
-                            "type": "uint8",
-                            "internalType": "enum SQState"
-                        },
-                        {
-                            "name": "Action",
-                            "type": "tuple",
-                            "internalType": "struct Movement",
-                            "components": [
-                                {
-                                    "name": "category",
-                                    "type": "uint8",
-                                    "internalType": "enum MovementType"
-                                },
-                                {
-                                    "name": "initiatior",
-                                    "type": "address",
-                                    "internalType": "address"
-                                },
-                                {
-                                    "name": "exeAccount",
-                                    "type": "address",
-                                    "internalType": "address"
-                                },
-                                {
-                                    "name": "viaNode",
-                                    "type": "uint256",
-                                    "internalType": "uint256"
-                                },
-                                {
-                                    "name": "expiresAt",
-                                    "type": "uint256",
-                                    "internalType": "uint256"
-                                },
-                                {
-                                    "name": "description",
-                                    "type": "string",
-                                    "internalType": "string"
-                                },
-                                {
-                                    "name": "executedPayload",
-                                    "type": "bytes",
-                                    "internalType": "bytes"
-                                }
-                            ]
-                        },
-                        {
-                            "name": "Signers",
-                            "type": "address[]",
-                            "internalType": "address[]"
-                        },
-                        {
-                            "name": "Sigs",
-                            "type": "bytes[]",
-                            "internalType": "bytes[]"
-                        }
-                    ]
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
             "name": "getUserNodeSignals",
             "inputs": [
                 {
@@ -841,49 +762,6 @@ export const ABIs: ABIKP = {
                     "name": "",
                     "type": "bool",
                     "internalType": "bool"
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "isQueueValid",
-            "inputs": [
-                {
-                    "name": "sigHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bool",
-                    "internalType": "bool"
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "isValidSignature",
-            "inputs": [
-                {
-                    "name": "_hash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "_signature",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bytes4",
-                    "internalType": "bytes4"
                 }
             ],
             "stateMutability": "view"

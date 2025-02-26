@@ -53,12 +53,14 @@ interface CurrentCallState extends Call {
 interface MyEndpointProps {
   nodeData: NodeState;
   chainId: string;
+  userAddress: string;
   onSuccess?: () => void;
 }
 
 export const MyEndpoint: React.FC<MyEndpointProps> = ({ 
   nodeData, 
   chainId,
+  userAddress,
   onSuccess 
 }) => {
   const { user } = usePrivy();
@@ -89,15 +91,23 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     member => member.toLowerCase() === user?.wallet?.address?.toLowerCase()
   );
   
-  const readProvider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+  // Memoize the provider to prevent recreation on every render
+  const readProvider = React.useMemo(() => {
+    try {
+      return new ethers.JsonRpcProvider(getRPCUrl(chainId));
+    } catch (error) {
+      console.error('Failed to create provider:', error);
+      return null;
+    }
+  }, [chainId]);
+
   const rootTokenAddress = nodeData.rootPath[0] ? nodeIdToAddress(nodeData.rootPath[0]) : null;
 
-  // Use root valuation reserve at index 5 instead of balance
-  const endpointBalance = Number(ethers.formatEther(nodeData.basicInfo[2])).toFixed(4);  // Use balance anchor (reserve)
+  const endpointBalance = Number(ethers.formatEther(nodeData.basicInfo[2])).toFixed(4); 
 
   useEffect(() => {
     const fetchRootTokenBalance = async () => {
-      if (!endpointAddress || !rootTokenAddress) return;
+      if (!endpointAddress || !rootTokenAddress || !readProvider) return;
       
       try {
         const tokenContract = new ethers.Contract(
@@ -114,11 +124,10 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     };
 
     fetchRootTokenBalance();
-  }, [endpointAddress, rootTokenAddress, readProvider]);
-
+  }, [endpointAddress, rootTokenAddress]); 
   useEffect(() => {
     const fetchEndpointData = async () => {
-      if (!endpointAddress || endpointAddress === ethers.ZeroAddress || !endpointId) return;
+      if (!endpointAddress || endpointAddress === ethers.ZeroAddress || !endpointId || !readProvider) return;
       
       try {
         const willWeContract = new ethers.Contract(
@@ -127,8 +136,6 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
           readProvider
         );
 
-        // Pass the window.ethereum address or zero address as fallback
-        const userAddress = window.ethereum?.selectedAddress || ethers.ZeroAddress;
         const data = await willWeContract.getNodeData(endpointId, userAddress);
         setEndpointNodeData(data);
       } catch (error) {
@@ -137,11 +144,11 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     };
 
     fetchEndpointData();
-  }, [endpointAddress, endpointId, chainId, readProvider]);
+  }, [endpointAddress, endpointId]); 
 
   useEffect(() => {
     const fetchRootTokenSymbol = async () => {
-      if (!rootTokenAddress) return;
+      if (!rootTokenAddress || !readProvider) return;
       
       try {
         const tokenContract = new ethers.Contract(
@@ -159,7 +166,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     };
 
     fetchRootTokenSymbol();
-  }, [rootTokenAddress, readProvider]);
+  }, [rootTokenAddress]); // Removed readProvider dependency
 
   const deployEndpoint = async () => {
     if (!isMember) {
@@ -179,7 +186,6 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         async () => {
           const provider = await getEthersProvider();
           const signer = await provider.getSigner();
-          const userAddress = await signer.getAddress();
           
           const contract = new ethers.Contract(
             deployments.WillWe[chainId.replace('eip155:', '')],
