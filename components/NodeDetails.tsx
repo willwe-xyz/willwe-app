@@ -184,7 +184,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 <TabPanel p={6}>
                   <Box mx="auto">
                     <MovementsErrorBoundary>
-                      <Movements nodeId={nodeData.basicInfo[0]} chainId={cleanChainId} nodeData={nodeData} />
+                      <Movements nodeId={nodeData.basicInfo[0]} chainId={cleanChainId} nodeData={nodeData} userAddress={user?.wallet?.address || ethers.ZeroAddress} />
                     </MovementsErrorBoundary>
                   </Box>
                 </TabPanel>

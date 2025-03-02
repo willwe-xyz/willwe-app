@@ -1,0 +1,775 @@
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSON
+
+scalar BigInt
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type Meta {
+  status: JSON
+}
+
+type Query {
+  user(id: String!): User
+  users(where: UserFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): UserPage!
+  node(id: String!): Node
+  nodes(where: NodeFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): NodePage!
+  membrane(id: String!): Membrane
+  membranes(where: MembraneFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): MembranePage!
+  movement(id: String!): Movement
+  movements(where: MovementFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): MovementPage!
+  signature(id: String!): Signature
+  signatures(where: SignatureFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): SignaturePage!
+  movementSignature(id: String!): MovementSignature
+  movementSignatures(where: MovementSignatureFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): MovementSignaturePage!
+  activityLog(id: String!): ActivityLog
+  activityLogs(where: ActivityLogFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): ActivityLogPage!
+  chatMessage(id: String!): ChatMessage
+  chatMessages(where: ChatMessageFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): ChatMessagePage!
+  userPreference(id: String!): UserPreference
+  userPreferences(where: UserPreferenceFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): UserPreferencePage!
+  _meta: Meta
+}
+
+type User {
+  id: String!
+  address: String!
+  createdAt: String!
+  updatedAt: String!
+  preferences(where: UserPreferenceFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): UserPreferencePage
+}
+
+type UserPreferencePage {
+  items: [UserPreference!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type UserPreference {
+  id: String!
+  userId: String!
+  key: String!
+  value: String!
+  user: User
+}
+
+input UserPreferenceFilter {
+  AND: [UserPreferenceFilter]
+  OR: [UserPreferenceFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  userId: String
+  userId_not: String
+  userId_in: [String]
+  userId_not_in: [String]
+  userId_contains: String
+  userId_not_contains: String
+  userId_starts_with: String
+  userId_ends_with: String
+  userId_not_starts_with: String
+  userId_not_ends_with: String
+  key: String
+  key_not: String
+  key_in: [String]
+  key_not_in: [String]
+  key_contains: String
+  key_not_contains: String
+  key_starts_with: String
+  key_ends_with: String
+  key_not_starts_with: String
+  key_not_ends_with: String
+  value: String
+  value_not: String
+  value_in: [String]
+  value_not_in: [String]
+  value_contains: String
+  value_not_contains: String
+  value_starts_with: String
+  value_ends_with: String
+  value_not_starts_with: String
+  value_not_ends_with: String
+}
+
+type UserPage {
+  items: [User!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+input UserFilter {
+  AND: [UserFilter]
+  OR: [UserFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  address: String
+  address_not: String
+  address_in: [String]
+  address_not_in: [String]
+  address_contains: String
+  address_not_contains: String
+  address_starts_with: String
+  address_ends_with: String
+  address_not_starts_with: String
+  address_not_ends_with: String
+  createdAt: String
+  createdAt_not: String
+  createdAt_in: [String]
+  createdAt_not_in: [String]
+  createdAt_contains: String
+  createdAt_not_contains: String
+  createdAt_starts_with: String
+  createdAt_ends_with: String
+  createdAt_not_starts_with: String
+  createdAt_not_ends_with: String
+  updatedAt: String
+  updatedAt_not: String
+  updatedAt_in: [String]
+  updatedAt_not_in: [String]
+  updatedAt_contains: String
+  updatedAt_not_contains: String
+  updatedAt_starts_with: String
+  updatedAt_ends_with: String
+  updatedAt_not_starts_with: String
+  updatedAt_not_ends_with: String
+}
+
+type Node {
+  id: String!
+  nodeId: String!
+  parentId: String
+  totalSupply: String!
+  inflationRate: String
+  members: [String!]
+  createdAt: String!
+  updatedAt: String!
+  membranes(where: MembraneFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): MembranePage
+  movements(where: MovementFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): MovementPage
+  activityLogs(where: ActivityLogFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): ActivityLogPage
+  chatMessages(where: ChatMessageFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): ChatMessagePage
+}
+
+type MembranePage {
+  items: [Membrane!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type Membrane {
+  id: String!
+  membraneId: String!
+  creator: String!
+  tokens: [String!]!
+  balances: [String!]!
+  nodeId: String!
+  cid: String
+  createdAt: String!
+  node: Node
+}
+
+input MembraneFilter {
+  AND: [MembraneFilter]
+  OR: [MembraneFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  membraneId: String
+  membraneId_not: String
+  membraneId_in: [String]
+  membraneId_not_in: [String]
+  membraneId_contains: String
+  membraneId_not_contains: String
+  membraneId_starts_with: String
+  membraneId_ends_with: String
+  membraneId_not_starts_with: String
+  membraneId_not_ends_with: String
+  creator: String
+  creator_not: String
+  creator_in: [String]
+  creator_not_in: [String]
+  creator_contains: String
+  creator_not_contains: String
+  creator_starts_with: String
+  creator_ends_with: String
+  creator_not_starts_with: String
+  creator_not_ends_with: String
+  tokens: [String]
+  tokens_not: [String]
+  tokens_has: String
+  tokens_not_has: String
+  balances: [String]
+  balances_not: [String]
+  balances_has: String
+  balances_not_has: String
+  nodeId: String
+  nodeId_not: String
+  nodeId_in: [String]
+  nodeId_not_in: [String]
+  nodeId_contains: String
+  nodeId_not_contains: String
+  nodeId_starts_with: String
+  nodeId_ends_with: String
+  nodeId_not_starts_with: String
+  nodeId_not_ends_with: String
+  cid: String
+  cid_not: String
+  cid_in: [String]
+  cid_not_in: [String]
+  cid_contains: String
+  cid_not_contains: String
+  cid_starts_with: String
+  cid_ends_with: String
+  cid_not_starts_with: String
+  cid_not_ends_with: String
+  createdAt: String
+  createdAt_not: String
+  createdAt_in: [String]
+  createdAt_not_in: [String]
+  createdAt_contains: String
+  createdAt_not_contains: String
+  createdAt_starts_with: String
+  createdAt_ends_with: String
+  createdAt_not_starts_with: String
+  createdAt_not_ends_with: String
+}
+
+type MovementPage {
+  items: [Movement!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type Movement {
+  id: String!
+  movementHash: String!
+  category: Int!
+  type: String!
+  initiator: String!
+  nodeId: String!
+  expiresAt: String
+  description: String
+  payload: String
+  state: String
+  requiredSignatures: Int
+  currentSignatures: Int
+  executed: Boolean!
+  executedAt: String
+  createdAt: String!
+  signatures(where: MovementSignatureFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): MovementSignaturePage
+  node: Node
+}
+
+type MovementSignaturePage {
+  items: [MovementSignature!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type MovementSignature {
+  id: String!
+  movementId: String!
+  signatureId: String!
+  movement: Movement
+  signature: Signature
+}
+
+type Signature {
+  id: String!
+  movementHash: String!
+  signer: String!
+  signedAt: String!
+}
+
+input MovementSignatureFilter {
+  AND: [MovementSignatureFilter]
+  OR: [MovementSignatureFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  movementId: String
+  movementId_not: String
+  movementId_in: [String]
+  movementId_not_in: [String]
+  movementId_contains: String
+  movementId_not_contains: String
+  movementId_starts_with: String
+  movementId_ends_with: String
+  movementId_not_starts_with: String
+  movementId_not_ends_with: String
+  signatureId: String
+  signatureId_not: String
+  signatureId_in: [String]
+  signatureId_not_in: [String]
+  signatureId_contains: String
+  signatureId_not_contains: String
+  signatureId_starts_with: String
+  signatureId_ends_with: String
+  signatureId_not_starts_with: String
+  signatureId_not_ends_with: String
+}
+
+input MovementFilter {
+  AND: [MovementFilter]
+  OR: [MovementFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  movementHash: String
+  movementHash_not: String
+  movementHash_in: [String]
+  movementHash_not_in: [String]
+  movementHash_contains: String
+  movementHash_not_contains: String
+  movementHash_starts_with: String
+  movementHash_ends_with: String
+  movementHash_not_starts_with: String
+  movementHash_not_ends_with: String
+  category: Int
+  category_not: Int
+  category_in: [Int]
+  category_not_in: [Int]
+  category_gt: Int
+  category_lt: Int
+  category_gte: Int
+  category_lte: Int
+  type: String
+  type_not: String
+  type_in: [String]
+  type_not_in: [String]
+  type_contains: String
+  type_not_contains: String
+  type_starts_with: String
+  type_ends_with: String
+  type_not_starts_with: String
+  type_not_ends_with: String
+  initiator: String
+  initiator_not: String
+  initiator_in: [String]
+  initiator_not_in: [String]
+  initiator_contains: String
+  initiator_not_contains: String
+  initiator_starts_with: String
+  initiator_ends_with: String
+  initiator_not_starts_with: String
+  initiator_not_ends_with: String
+  nodeId: String
+  nodeId_not: String
+  nodeId_in: [String]
+  nodeId_not_in: [String]
+  nodeId_contains: String
+  nodeId_not_contains: String
+  nodeId_starts_with: String
+  nodeId_ends_with: String
+  nodeId_not_starts_with: String
+  nodeId_not_ends_with: String
+  expiresAt: String
+  expiresAt_not: String
+  expiresAt_in: [String]
+  expiresAt_not_in: [String]
+  expiresAt_contains: String
+  expiresAt_not_contains: String
+  expiresAt_starts_with: String
+  expiresAt_ends_with: String
+  expiresAt_not_starts_with: String
+  expiresAt_not_ends_with: String
+  description: String
+  description_not: String
+  description_in: [String]
+  description_not_in: [String]
+  description_contains: String
+  description_not_contains: String
+  description_starts_with: String
+  description_ends_with: String
+  description_not_starts_with: String
+  description_not_ends_with: String
+  payload: String
+  payload_not: String
+  payload_in: [String]
+  payload_not_in: [String]
+  payload_contains: String
+  payload_not_contains: String
+  payload_starts_with: String
+  payload_ends_with: String
+  payload_not_starts_with: String
+  payload_not_ends_with: String
+  state: String
+  state_not: String
+  state_in: [String]
+  state_not_in: [String]
+  state_contains: String
+  state_not_contains: String
+  state_starts_with: String
+  state_ends_with: String
+  state_not_starts_with: String
+  state_not_ends_with: String
+  requiredSignatures: Int
+  requiredSignatures_not: Int
+  requiredSignatures_in: [Int]
+  requiredSignatures_not_in: [Int]
+  requiredSignatures_gt: Int
+  requiredSignatures_lt: Int
+  requiredSignatures_gte: Int
+  requiredSignatures_lte: Int
+  currentSignatures: Int
+  currentSignatures_not: Int
+  currentSignatures_in: [Int]
+  currentSignatures_not_in: [Int]
+  currentSignatures_gt: Int
+  currentSignatures_lt: Int
+  currentSignatures_gte: Int
+  currentSignatures_lte: Int
+  executed: Boolean
+  executed_not: Boolean
+  executed_in: [Boolean]
+  executed_not_in: [Boolean]
+  executedAt: String
+  executedAt_not: String
+  executedAt_in: [String]
+  executedAt_not_in: [String]
+  executedAt_contains: String
+  executedAt_not_contains: String
+  executedAt_starts_with: String
+  executedAt_ends_with: String
+  executedAt_not_starts_with: String
+  executedAt_not_ends_with: String
+  createdAt: String
+  createdAt_not: String
+  createdAt_in: [String]
+  createdAt_not_in: [String]
+  createdAt_contains: String
+  createdAt_not_contains: String
+  createdAt_starts_with: String
+  createdAt_ends_with: String
+  createdAt_not_starts_with: String
+  createdAt_not_ends_with: String
+}
+
+type ActivityLogPage {
+  items: [ActivityLog!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ActivityLog {
+  id: String!
+  nodeId: String!
+  userAddress: String!
+  eventType: String!
+  data: String!
+  timestamp: String!
+  node: Node
+}
+
+input ActivityLogFilter {
+  AND: [ActivityLogFilter]
+  OR: [ActivityLogFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  nodeId: String
+  nodeId_not: String
+  nodeId_in: [String]
+  nodeId_not_in: [String]
+  nodeId_contains: String
+  nodeId_not_contains: String
+  nodeId_starts_with: String
+  nodeId_ends_with: String
+  nodeId_not_starts_with: String
+  nodeId_not_ends_with: String
+  userAddress: String
+  userAddress_not: String
+  userAddress_in: [String]
+  userAddress_not_in: [String]
+  userAddress_contains: String
+  userAddress_not_contains: String
+  userAddress_starts_with: String
+  userAddress_ends_with: String
+  userAddress_not_starts_with: String
+  userAddress_not_ends_with: String
+  eventType: String
+  eventType_not: String
+  eventType_in: [String]
+  eventType_not_in: [String]
+  eventType_contains: String
+  eventType_not_contains: String
+  eventType_starts_with: String
+  eventType_ends_with: String
+  eventType_not_starts_with: String
+  eventType_not_ends_with: String
+  data: String
+  data_not: String
+  data_in: [String]
+  data_not_in: [String]
+  data_contains: String
+  data_not_contains: String
+  data_starts_with: String
+  data_ends_with: String
+  data_not_starts_with: String
+  data_not_ends_with: String
+  timestamp: String
+  timestamp_not: String
+  timestamp_in: [String]
+  timestamp_not_in: [String]
+  timestamp_contains: String
+  timestamp_not_contains: String
+  timestamp_starts_with: String
+  timestamp_ends_with: String
+  timestamp_not_starts_with: String
+  timestamp_not_ends_with: String
+}
+
+type ChatMessagePage {
+  items: [ChatMessage!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ChatMessage {
+  id: String!
+  nodeId: String!
+  sender: String!
+  content: String!
+  timestamp: String!
+  node: Node
+}
+
+input ChatMessageFilter {
+  AND: [ChatMessageFilter]
+  OR: [ChatMessageFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  nodeId: String
+  nodeId_not: String
+  nodeId_in: [String]
+  nodeId_not_in: [String]
+  nodeId_contains: String
+  nodeId_not_contains: String
+  nodeId_starts_with: String
+  nodeId_ends_with: String
+  nodeId_not_starts_with: String
+  nodeId_not_ends_with: String
+  sender: String
+  sender_not: String
+  sender_in: [String]
+  sender_not_in: [String]
+  sender_contains: String
+  sender_not_contains: String
+  sender_starts_with: String
+  sender_ends_with: String
+  sender_not_starts_with: String
+  sender_not_ends_with: String
+  content: String
+  content_not: String
+  content_in: [String]
+  content_not_in: [String]
+  content_contains: String
+  content_not_contains: String
+  content_starts_with: String
+  content_ends_with: String
+  content_not_starts_with: String
+  content_not_ends_with: String
+  timestamp: String
+  timestamp_not: String
+  timestamp_in: [String]
+  timestamp_not_in: [String]
+  timestamp_contains: String
+  timestamp_not_contains: String
+  timestamp_starts_with: String
+  timestamp_ends_with: String
+  timestamp_not_starts_with: String
+  timestamp_not_ends_with: String
+}
+
+type NodePage {
+  items: [Node!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+input NodeFilter {
+  AND: [NodeFilter]
+  OR: [NodeFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  nodeId: String
+  nodeId_not: String
+  nodeId_in: [String]
+  nodeId_not_in: [String]
+  nodeId_contains: String
+  nodeId_not_contains: String
+  nodeId_starts_with: String
+  nodeId_ends_with: String
+  nodeId_not_starts_with: String
+  nodeId_not_ends_with: String
+  parentId: String
+  parentId_not: String
+  parentId_in: [String]
+  parentId_not_in: [String]
+  parentId_contains: String
+  parentId_not_contains: String
+  parentId_starts_with: String
+  parentId_ends_with: String
+  parentId_not_starts_with: String
+  parentId_not_ends_with: String
+  totalSupply: String
+  totalSupply_not: String
+  totalSupply_in: [String]
+  totalSupply_not_in: [String]
+  totalSupply_contains: String
+  totalSupply_not_contains: String
+  totalSupply_starts_with: String
+  totalSupply_ends_with: String
+  totalSupply_not_starts_with: String
+  totalSupply_not_ends_with: String
+  inflationRate: String
+  inflationRate_not: String
+  inflationRate_in: [String]
+  inflationRate_not_in: [String]
+  inflationRate_contains: String
+  inflationRate_not_contains: String
+  inflationRate_starts_with: String
+  inflationRate_ends_with: String
+  inflationRate_not_starts_with: String
+  inflationRate_not_ends_with: String
+  members: [String]
+  members_not: [String]
+  members_has: String
+  members_not_has: String
+  createdAt: String
+  createdAt_not: String
+  createdAt_in: [String]
+  createdAt_not_in: [String]
+  createdAt_contains: String
+  createdAt_not_contains: String
+  createdAt_starts_with: String
+  createdAt_ends_with: String
+  createdAt_not_starts_with: String
+  createdAt_not_ends_with: String
+  updatedAt: String
+  updatedAt_not: String
+  updatedAt_in: [String]
+  updatedAt_not_in: [String]
+  updatedAt_contains: String
+  updatedAt_not_contains: String
+  updatedAt_starts_with: String
+  updatedAt_ends_with: String
+  updatedAt_not_starts_with: String
+  updatedAt_not_ends_with: String
+}
+
+type SignaturePage {
+  items: [Signature!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+input SignatureFilter {
+  AND: [SignatureFilter]
+  OR: [SignatureFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  movementHash: String
+  movementHash_not: String
+  movementHash_in: [String]
+  movementHash_not_in: [String]
+  movementHash_contains: String
+  movementHash_not_contains: String
+  movementHash_starts_with: String
+  movementHash_ends_with: String
+  movementHash_not_starts_with: String
+  movementHash_not_ends_with: String
+  signer: String
+  signer_not: String
+  signer_in: [String]
+  signer_not_in: [String]
+  signer_contains: String
+  signer_not_contains: String
+  signer_starts_with: String
+  signer_ends_with: String
+  signer_not_starts_with: String
+  signer_not_ends_with: String
+  signedAt: String
+  signedAt_not: String
+  signedAt_in: [String]
+  signedAt_not_in: [String]
+  signedAt_contains: String
+  signedAt_not_contains: String
+  signedAt_starts_with: String
+  signedAt_ends_with: String
+  signedAt_not_starts_with: String
+  signedAt_not_ends_with: String
+}

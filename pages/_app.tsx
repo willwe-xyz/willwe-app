@@ -15,10 +15,16 @@ import {
   taikoHekla, 
   taiko 
 } from 'viem/chains';
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { config } from '../config/wagmi';
 import { TransactionProvider } from '../contexts/TransactionContext';
 import { NodeProvider } from '../contexts/NodeContext';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { customTheme } from '../config/theme';
+
+// Create a client
+const queryClient = new QueryClient();
 
 // App wrapper to provide toast context
 function AppContent({ Component, pageProps }: AppProps) {
@@ -89,31 +95,35 @@ function MyApp(props: AppProps) {
         <meta property="og:site_name" content="WillWe" />
       </Head>
       
-      <PrivyProvider
-        appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
-        config={{
-          loginMethods: ['wallet', 'farcaster', 'email'],
-          defaultChain: taikoHekla,
-          supportedChains: [
-            localhost,
-            baseSepolia,
-            base,
-            taikoHekla,
-            taiko,
-            optimismSepolia,
-            optimism
-          ],
-          appearance: {
-            theme: 'light',
-            accentColor: customTheme.colors.brand[600],
-            showWalletLoginFirst: true,
-          },
-        }}
-      >
-        <ChakraProvider theme={customTheme}>
-          <AppContent {...props} />
-        </ChakraProvider>
-      </PrivyProvider>
+      <QueryClientProvider client={queryClient}>
+        <WagmiProvider config={config}>
+          <PrivyProvider
+            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
+            config={{
+              loginMethods: ['wallet', 'farcaster', 'email'],
+              defaultChain: taikoHekla,
+              supportedChains: [
+                localhost,
+                baseSepolia,
+                base,
+                taikoHekla,
+                taiko,
+                optimismSepolia,
+                optimism
+              ],
+              appearance: {
+                theme: 'light',
+                accentColor: customTheme.colors.brand[600],
+                showWalletLoginFirst: true,
+              },
+            }}
+          >
+            <ChakraProvider theme={customTheme}>
+              <AppContent {...props} />
+            </ChakraProvider>
+          </PrivyProvider>
+        </WagmiProvider>
+      </QueryClientProvider>
     </>
   );
 }

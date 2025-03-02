@@ -1,0 +1,108 @@
+type User {
+  id: ID!
+  address: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Node {
+  id: ID!
+  nodeId: String!
+  parentId: String
+  totalSupply: String!
+  inflationRate: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Membrane {
+  id: ID!
+  membraneId: String!
+  creator: String!
+  tokens: [String!]!
+  balances: [String!]!
+  nodeId: String!
+  cid: String
+  createdAt: String!
+}
+
+type Movement {
+  id: ID!
+  movementHash: String!
+  category: Int!
+  type: String!
+  initiator: String!
+  nodeId: String!
+  expiresAt: String
+  description: String
+  payload: String
+  state: String
+  requiredSignatures: Int
+  currentSignatures: Int
+  executed: Boolean!
+  executedAt: String
+  createdAt: String!
+}
+
+type Signature {
+  id: ID!
+  movementHash: String!
+  signer: String!
+  signedAt: String!
+}
+
+type ActivityLog {
+  id: ID!
+  nodeId: String
+  userAddress: String
+  eventType: String!
+  data: String
+  timestamp: String!
+}
+
+type ChatMessage {
+  id: ID!
+  nodeId: String!
+  sender: String!
+  content: String!
+  timestamp: String!
+}
+
+type UserPreference {
+  id: ID!
+  userAddress: String!
+  redistributivePreferences: String
+  supportedMovements: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type MovementSignature {
+  id: ID!
+  movementHash: String!
+  signatureData: String!
+  userAddress: String!
+  nodeId: String!
+  createdAt: String!
+}
+
+type Query {
+  users: [User!]!
+  user(id: ID!): User
+  nodes: [Node!]!
+  node(id: ID!): Node
+  membranes: [Membrane!]!
+  membrane(id: ID!): Membrane
+  movements: [Movement!]!
+  movement(id: ID!): Movement
+  signatures: [Signature!]!
+  signature(id: ID!): Signature
+  activityLogs: [ActivityLog!]!
+  activityLog(id: ID!): ActivityLog
+  chatMessages: [ChatMessage!]!
+  chatMessage(id: ID!): ChatMessage
+  userPreferences: [UserPreference!]!
+  userPreference(id: ID!): UserPreference
+  movementSignatures: [MovementSignature!]!
+  movementSignature(id: ID!): MovementSignature
+}

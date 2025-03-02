@@ -1,6 +1,22 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
   reactStrictMode: true,
+  webpack: (config, { isServer }) => {
+    // If client-side, don't polyfill Node modules
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        os: false,
+        crypto: false,
+        stream: false,
+        sqlite3: false,
+        'sqlite3-binding': false
+      };
+    }
+    return config;
+  },
   async redirects() {
     return [
       {

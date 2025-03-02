@@ -1,0 +1,969 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "WillToken_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "fallback",
+    "stateMutability": "payable"
+  },
+  {
+    "type": "receive",
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "DOMAIN_SEPARATOR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "EIP712_DOMAIN_TYPEHASH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MOVEMENT_TYPEHASH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "WillToken",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "WillWe",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IFun"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "createEndpointForOwner",
+    "inputs": [
+      {
+        "name": "origin",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "nodeId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "endpoint",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createInitWillWeEndpoint",
+    "inputs": [
+      {
+        "name": "nodeId_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "endpoint",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "endpointOwner",
+    "inputs": [
+      {
+        "name": "endpointAddress",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "executeQueue",
+    "inputs": [
+      {
+        "name": "queueHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "success",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getDigestToSign",
+    "inputs": [
+      {
+        "name": "movement",
+        "type": "tuple",
+        "internalType": "struct Movement",
+        "components": [
+          {
+            "name": "category",
+            "type": "uint8",
+            "internalType": "enum MovementType"
+          },
+          {
+            "name": "initiatior",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "exeAccount",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "viaNode",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "expiresAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "executedPayload",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getEIP712MessageHash",
+    "inputs": [
+      {
+        "name": "movementHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getLatentMovements",
+    "inputs": [
+      {
+        "name": "nodeId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "latentMovements",
+        "type": "tuple[]",
+        "internalType": "struct LatentMovement[]",
+        "components": [
+          {
+            "name": "movement",
+            "type": "tuple",
+            "internalType": "struct Movement",
+            "components": [
+              {
+                "name": "category",
+                "type": "uint8",
+                "internalType": "enum MovementType"
+              },
+              {
+                "name": "initiatior",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "exeAccount",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "viaNode",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "expiresAt",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "description",
+                "type": "string",
+                "internalType": "string"
+              },
+              {
+                "name": "executedPayload",
+                "type": "bytes",
+                "internalType": "bytes"
+              }
+            ]
+          },
+          {
+            "name": "signatureQueue",
+            "type": "tuple",
+            "internalType": "struct SignatureQueue",
+            "components": [
+              {
+                "name": "state",
+                "type": "uint8",
+                "internalType": "enum SQState"
+              },
+              {
+                "name": "Action",
+                "type": "tuple",
+                "internalType": "struct Movement",
+                "components": [
+                  {
+                    "name": "category",
+                    "type": "uint8",
+                    "internalType": "enum MovementType"
+                  },
+                  {
+                    "name": "initiatior",
+                    "type": "address",
+                    "internalType": "address"
+                  },
+                  {
+                    "name": "exeAccount",
+                    "type": "address",
+                    "internalType": "address"
+                  },
+                  {
+                    "name": "viaNode",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                  },
+                  {
+                    "name": "expiresAt",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                  },
+                  {
+                    "name": "description",
+                    "type": "string",
+                    "internalType": "string"
+                  },
+                  {
+                    "name": "executedPayload",
+                    "type": "bytes",
+                    "internalType": "bytes"
+                  }
+                ]
+              },
+              {
+                "name": "Signers",
+                "type": "address[]",
+                "internalType": "address[]"
+              },
+              {
+                "name": "Sigs",
+                "type": "bytes[]",
+                "internalType": "bytes[]"
+              }
+            ]
+          },
+          {
+            "name": "movementHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getSigQueue",
+    "inputs": [
+      {
+        "name": "hash_",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct SignatureQueue",
+        "components": [
+          {
+            "name": "state",
+            "type": "uint8",
+            "internalType": "enum SQState"
+          },
+          {
+            "name": "Action",
+            "type": "tuple",
+            "internalType": "struct Movement",
+            "components": [
+              {
+                "name": "category",
+                "type": "uint8",
+                "internalType": "enum MovementType"
+              },
+              {
+                "name": "initiatior",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "exeAccount",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "viaNode",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "expiresAt",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "description",
+                "type": "string",
+                "internalType": "string"
+              },
+              {
+                "name": "executedPayload",
+                "type": "bytes",
+                "internalType": "bytes"
+              }
+            ]
+          },
+          {
+            "name": "Signers",
+            "type": "address[]",
+            "internalType": "address[]"
+          },
+          {
+            "name": "Sigs",
+            "type": "bytes[]",
+            "internalType": "bytes[]"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hashMovement",
+    "inputs": [
+      {
+        "name": "movement",
+        "type": "tuple",
+        "internalType": "struct Movement",
+        "components": [
+          {
+            "name": "category",
+            "type": "uint8",
+            "internalType": "enum MovementType"
+          },
+          {
+            "name": "initiatior",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "exeAccount",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "viaNode",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "expiresAt",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "executedPayload",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "isQueueValid",
+    "inputs": [
+      {
+        "name": "sigHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isValidSignature",
+    "inputs": [
+      {
+        "name": "_hash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "_signature",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lastSalt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nextSalt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "removeLatentAction",
+    "inputs": [
+      {
+        "name": "actionHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "removeSignature",
+    "inputs": [
+      {
+        "name": "queueHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "signer",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setWillWe",
+    "inputs": [
+      {
+        "name": "implementation",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "startMovement",
+    "inputs": [
+      {
+        "name": "typeOfMovement",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "nodeId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expiresInDays",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "executingAccount",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "movementHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "submitSignatures",
+    "inputs": [
+      {
+        "name": "queueHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "signers",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "signatures",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "LatentActionRemoved",
+    "inputs": [
+      {
+        "name": "nodeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "actionHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "index",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "NewMovementCreated",
+    "inputs": [
+      {
+        "name": "nodeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "initiator",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "movementHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "NewSignaturesSubmitted",
+    "inputs": [
+      {
+        "name": "queueHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "QueueExecuted",
+    "inputs": [
+      {
+        "name": "nodeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "queueHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SignatureRemoved",
+    "inputs": [
+      {
+        "name": "nodeId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "queueHash",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "signer",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "WillWeSet",
+    "inputs": [
+      {
+        "name": "implementation",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "EXE_A0sig",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_ActionIndexMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_AlreadyHasEndpoint",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_AlreadyInit",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_AlreadyInitialized",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_AlreadySigned",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_BadOwnerOrAuthType",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_EmptyUnallowed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_ExpiredMovement",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_ExpiredQueue",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_InProgress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_InvalidQueue",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_LenErr",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_NoDescription",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_NoMembersForNode",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_NoMovementType",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_NoSignatures",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_NoType",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_NotExeAccOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_NotNodeMember",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_OnlyMore",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_OnlySigner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_OnlyWillWe",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_SQInvalid",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_UnavailableState",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_UninitQueue",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_ZeroLen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EXE_exeQFail",
+    "inputs": []
+  }
+]

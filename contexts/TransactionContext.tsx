@@ -60,7 +60,6 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
           throw new Error('Provider not available');
         }
 
-        // Show pending toast
         toastId = toast({
           title: 'Confirm Transaction',
           description: 'Please confirm the transaction in your wallet',
@@ -69,11 +68,11 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
           isClosable: false,
         });
 
-        // Execute transaction
+        // Execute transaction with gas estimate
         const tx = await transactionFn();
+        
         setCurrentHash(tx.hash);
 
-        // Update toast to processing
         if (toastId) {
           toast.update(toastId, {
             title: 'Processing',
@@ -82,16 +81,14 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
           });
         }
 
-        // Wait for confirmation
-        const receipt = await provider.waitForTransaction(tx.hash, 1);
+        // Wait for confirmation with more blocks
+        const receipt = await provider.waitForTransaction(tx.hash, 2);
 
-        // Close pending toast
         if (toastId) {
           toast.close(toastId);
         }
 
         if (receipt && receipt.status === 1) {
-          // Success
           if (options?.successMessage) {
             toast({
               title: 'Success',
@@ -108,36 +105,28 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         } else {
           throw new Error('Transaction failed');
         }
-      } catch (error) {
-        // Close pending toast if exists
+      } catch (error: any) {
         if (toastId) {
           toast.close(toastId);
         }
 
         console.error('Transaction error:', error);
-        let errorMessage = 'Transaction failed';
+        let errorMessage = options?.errorMessage || 'Transaction failed';
         
-        if (error instanceof Error) {
-          if (error.message.includes('rejected')) {
-            errorMessage = 'Transaction rejected by user';
-          } else if (error.message.includes('insufficient funds')) {
-            errorMessage = 'Insufficient funds for transaction';
-          } else if (error.message.includes('gas required exceeds allowance')) {
-            errorMessage = 'Transaction would exceed gas limit';
-          } else {
-            errorMessage = error.message;
-          }
+        if (error?.message?.includes('user rejected')) {
+          errorMessage = 'Transaction rejected by user';
         }
 
         setError(error instanceof Error ? error : new Error(errorMessage));
-        
         toast({
           title: 'Error',
-          description: options?.errorMessage || errorMessage,
+          description: errorMessage,
           status: 'error',
           duration: 5000,
           isClosable: true,
         });
+
+        throw error;
       } finally {
         setIsTransacting(false);
         setCurrentHash(null);
