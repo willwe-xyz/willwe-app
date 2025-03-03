@@ -18,13 +18,28 @@ import {
   RefreshCw,
   GitBranch,
   Signal,
-  Users
+  Users,
+  Sliders,
+  Percent,
+  Filter,
+  FileSignature,
+  CheckCircle,
+  XCircle,
+  Trash2,
+  Globe,
+  Layers,
+  ArrowLeftRight,
+  Repeat
 } from 'lucide-react';
 import { formatDistance } from 'date-fns';
 
 interface ActivityItem {
   id: string;
-  type: 'mint' | 'burn' | 'transfer' | 'signal' | 'spawn' | 'membership';
+  type: 'mint' | 'burn' | 'transfer' | 'signal' | 'spawn' | 'membership' | 
+        'inflationChange' | 'membraneChange' | 'configSignal' | 'endpoint' | 
+        'newMovement' | 'willWeSet' | 'membraneCreated' | 'newSignatures' | 
+        'queueExecuted' | 'signatureRemoved' | 'latentActionRemoved' | 'redistribute' |
+        'resignal';
   timestamp: number;
   description: string;
   account: string;
@@ -76,12 +91,36 @@ export function ActivityFeed({
         return <ArrowUpRight className="text-green-500" size={16} />;
       case 'burn':
         return <ArrowDownRight className="text-red-500" size={16} />;
+      case 'transfer':
+        return <ArrowLeftRight className="text-blue-500" size={16} />;
       case 'spawn':
         return <GitBranch className="text-purple-500" size={16} />;
       case 'signal':
         return <Signal className="text-blue-500" size={16} />;
+      case 'resignal':
+        return <Repeat className="text-blue-500" size={16} />;
       case 'membership':
         return <Users className="text-orange-500" size={16} />;
+      case 'inflationChange':
+        return <Percent className="text-yellow-500" size={16} />;
+      case 'membraneChange':
+        return <Filter className="text-teal-500" size={16} />;
+      case 'configSignal':
+        return <Sliders className="text-indigo-500" size={16} />;
+      case 'endpoint':
+        return <Globe className="text-cyan-500" size={16} />;
+      case 'newMovement':
+        return <Layers className="text-pink-500" size={16} />;
+      case 'newSignatures':
+        return <FileSignature className="text-blue-500" size={16} />;
+      case 'queueExecuted':
+        return <CheckCircle className="text-green-500" size={16} />;
+      case 'signatureRemoved':
+        return <XCircle className="text-red-500" size={16} />;
+      case 'latentActionRemoved':
+        return <Trash2 className="text-orange-500" size={16} />;
+      case 'redistribute':
+        return <ArrowUpRight className="text-purple-500" size={16} />;
       default:
         return <Activity className="text-gray-500" size={16} />;
     }

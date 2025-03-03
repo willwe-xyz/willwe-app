@@ -175,11 +175,18 @@ export function usePonderData() {
     setError(null);
     
     try {
+      console.log(`Fetching chat messages for node ${nodeId}`);
+      
       const response = await fetch(`/api/ponder/chat-messages?nodeId=${nodeId}&limit=${limit}`);
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error response from server: ${errorText}`);
         throw new Error(`Error fetching chat messages: ${response.statusText}`);
       }
+      
       const data = await response.json();
+      console.log(`Retrieved ${data.length} chat messages for node ${nodeId}`);
+      
       setIsLoading(false);
       return data;
     } catch (err) {
@@ -198,6 +205,8 @@ export function usePonderData() {
     setError(null);
     
     try {
+      console.log(`Sending chat message for node ${nodeId} from ${sender}`);
+      
       const response = await fetch('/api/ponder/chat-messages', {
         method: 'POST',
         headers: {
@@ -207,17 +216,21 @@ export function usePonderData() {
       });
       
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error response from server: ${errorText}`);
         throw new Error(`Error sending chat message: ${response.statusText}`);
       }
       
       const data = await response.json();
+      console.log('Chat message sent successfully:', data);
+      
       setIsLoading(false);
       return data;
     } catch (err) {
       console.error('Error sending chat message:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
-      return null;
+      throw err;
     }
   }, []);
 

@@ -1,10 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getDb } from '../../../lib/db';
+import { getChatMessages, storeChatMessage } from '../../../ponder/utils/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const db = await getDb();
-
+    console.log(`[chat-messages] Received ${req.method} request`, {
+      query: req.query,
+      body: req.body
+    });
+    
     if (req.method === 'GET') {
       const { nodeId, limit = 50 } = req.query;
       
@@ -12,11 +15,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Node ID is required' });
       }
       
+      console.log(`[chat-messages] Fetching messages for node ${nodeId}`);
+      
       // Get chat messages for a specific node
-      const messages = await db.all(
-        'SELECT * FROM ChatMessage WHERE nodeId = ? ORDER BY timestamp DESC LIMIT ?',
-        [nodeId, Number(limit)]
-      );
+      const messages = await getChatMessages(nodeId as string, Number(limit));
+      
+      console.log(`[chat-messages] Found ${messages.length} messages`);
       
       return res.status(200).json(messages);
     } 
@@ -27,28 +31,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Missing required fields' });
       }
       
-      const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      const timestamp = new Date().toISOString();
+      console.log(`[chat-messages] Storing message for node ${nodeId} from ${sender}`);
       
-      // Insert chat message
-      await db.run(
-        'INSERT INTO ChatMessage (id, nodeId, sender, content, timestamp) VALUES (?, ?, ?, ?, ?)',
-        [id, nodeId, sender, content, timestamp]
-      );
+      // Store chat message
+      const message = await storeChatMessage(nodeId as string, sender, content);
       
-      return res.status(201).json({ 
-        id, 
-        nodeId, 
-        sender, 
-        content, 
-        timestamp
-      });
+      console.log(`[chat-messages] Message stored successfully with ID ${message.id}`);
+      
+      return res.status(201).json(message);
     }
     
     // Method not allowed
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    console.error('API error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('[chat-messages] API error:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 }

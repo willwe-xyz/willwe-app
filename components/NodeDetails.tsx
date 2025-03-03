@@ -25,7 +25,7 @@ import NodeInfo from './Node/NodeInfo';
 import { SignalHistory } from './Node/SignalHistory';
 import { Movements } from './Node/Movements';
 import { ActivitySection } from './Node/ActivitySection';
-import { Chat } from './Node/Chat';
+import NodeChat from './NodeChat';
 import { MyEndpoint } from './Node/MyEndpoint';
 import { EndpointComponent } from './Node/EndpointComponent';
 import { MovementsErrorBoundary } from './Node/MovementsErrorBoundary';
@@ -194,13 +194,16 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                   <ActivitySection 
                     signals={nodeData.signals} 
                     selectedTokenColor={selectedTokenColor}
+                    nodeId={nodeId}
                   />
+
+
                   </Box>
                 </TabPanel>
 
                 <TabPanel p={6}>
                   <Box maxW="900px" mx="auto">
-                    <Chat />
+                    <NodeChat nodeId={nodeId} />
                   </Box>
                 </TabPanel>
 

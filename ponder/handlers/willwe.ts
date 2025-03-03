@@ -68,12 +68,17 @@ ponder.on('WillWe:InflationMinted', async ({ event, context }) => {
   const { branchId, amount } = event.args;
   const { Node } = context.db;
 
+  // Convert branchId to string and log it
+  const nodeIdString = branchId.toString();
+  console.log(`[Ponder] InflationMinted event for node ${nodeIdString}, amount: ${amount.toString()}`);
+
   // Get or create node
-  let node = await Node.findUnique({ id: branchId.toString() });
+  let node = await Node.findUnique({ id: nodeIdString });
   if (!node) {
+    console.log(`[Ponder] Creating new node with ID ${nodeIdString}`);
     node = await Node.create({
-      id: branchId.toString(),
-      nodeId: branchId.toString(),
+      id: nodeIdString,
+      nodeId: nodeIdString,
       totalSupply: amount,
       inflationRate: 0n,
       createdAt: new Date(),
@@ -81,8 +86,9 @@ ponder.on('WillWe:InflationMinted', async ({ event, context }) => {
     });
   } else {
     // Update node total supply
+    console.log(`[Ponder] Updating node ${nodeIdString} total supply from ${node.totalSupply} to ${node.totalSupply + amount}`);
     await Node.update({
-      id: branchId.toString(),
+      id: nodeIdString,
       data: {
         totalSupply: node.totalSupply + amount,
         updatedAt: new Date(),
@@ -91,19 +97,29 @@ ponder.on('WillWe:InflationMinted', async ({ event, context }) => {
   }
 
   // Create activity log entry
+  const activityId = `${event.transaction.hash}-${event.logIndex}`;
+  console.log(`[Ponder] Creating activity log with ID ${activityId} for node ${nodeIdString}`);
+  
   await context.db.ActivityLog.create({
-    id: `${event.transaction.hash}-${event.logIndex}`,
-    nodeId: branchId.toString(),
+    id: activityId,
+    nodeId: nodeIdString,
+    userAddress: event.transaction.from,
     eventType: 'InflationMinted',
-    data: JSON.stringify({ branchId: branchId.toString(), amount: amount.toString() }),
+    data: JSON.stringify({ branchId: nodeIdString, amount: amount.toString() }),
     timestamp: new Date(Number(event.block.timestamp) * 1000),
   });
 
   // Also store in SQLite for real-time access
-  await storeActivityLog(
-    branchId.toString(),
-    null,
-    'InflationMinted',
-    { branchId: branchId.toString(), amount: amount.toString() }
-  );
+  try {
+    console.log(`[Ponder] Storing activity in SQLite for node ${nodeIdString}`);
+    await storeActivityLog(
+      nodeIdString,
+      event.transaction.from,
+      'InflationMinted',
+      { branchId: nodeIdString, amount: amount.toString() }
+    );
+    console.log(`[Ponder] Successfully stored activity in SQLite for node ${nodeIdString}`);
+  } catch (error) {
+    console.error(`[Ponder] Error storing activity in SQLite for node ${nodeIdString}:`, error);
+  }
 });

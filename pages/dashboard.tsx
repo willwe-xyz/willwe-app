@@ -8,15 +8,16 @@ import {
   Spinner, 
   Alert, 
   AlertIcon, 
-  useToast 
+  useToast,
+  Grid,
+  GridItem
 } from '@chakra-ui/react';
 import { MainLayout } from '../components/Layout/MainLayout';
 import { RootNodeDetails } from '../components/RootNodeDetails';
-import ActivityFeed from '../components/ActivityFeed/ActivityFeed';
+import { UserActivityFeed } from '../components/UserActivityFeed';
 import { useNode } from '../contexts/NodeContext';
 import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
-import { useActivityFeed } from '../hooks/useActivityFeed';
 import { useState } from 'react';
 
 export default function DashboardPage() {
@@ -90,11 +91,6 @@ export default function DashboardPage() {
           Select a token from above to explore its value network
         </Text>
         
-        {/* <ActivityFeed
-          activities={activities}
-          isLoading={activitiesLoading}
-          onRefresh={refreshNodes}
-        /> */}
       </Box>
     </Box>
   );
@@ -128,16 +124,26 @@ export default function DashboardPage() {
         {!tokenAddress ? (
           renderEmptyDashboard()
         ) : (
-          <RootNodeDetails 
-            nodes={nodes || []}
-            isLoading={nodesLoading}
-            error={nodesError}
-            onRefresh={refreshNodes}
-            selectedTokenColor={colorState.contrastingColor}
-            chainId={cleanChainId}
-            selectedToken={tokenAddress}
-            onNodeSelect={headerProps.onNodeSelect}
-          />
+          <Grid templateColumns={{ base: "1fr", lg: "2fr 1fr" }} gap={6}>
+            <GridItem>
+              <RootNodeDetails 
+                nodes={nodes || []}
+                isLoading={nodesLoading}
+                error={nodesError}
+                onRefresh={refreshNodes}
+                selectedTokenColor={colorState.contrastingColor}
+                chainId={cleanChainId}
+                selectedToken={tokenAddress}
+                onNodeSelect={headerProps.onNodeSelect}
+              />
+            </GridItem>
+            <GridItem>
+              <UserActivityFeed 
+                userAddress={user?.wallet?.address || ''}
+                selectedTokenColor={colorState.contrastingColor}
+              />
+            </GridItem>
+          </Grid>
         )}
       </Box>
     </MainLayout>

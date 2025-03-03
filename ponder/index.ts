@@ -5,6 +5,10 @@ import { getDatabase } from './utils/database';
 import './handlers/willwe';
 import './handlers/membranes';
 import './handlers/execution';
+import './handlers/nodeEvents';
+import './handlers/executionEvents';
+import './handlers/tokenEvents';
+import './handlers/chat';
 
 // Initialize SQLite database when Ponder starts
 ponder.on('start', async () => {
