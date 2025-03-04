@@ -175,7 +175,6 @@ export function usePonderData() {
     setError(null);
     
     try {
-      console.log(`Fetching chat messages for node ${nodeId}`);
       
       const response = await fetch(`/api/ponder/chat-messages?nodeId=${nodeId}&limit=${limit}`);
       if (!response.ok) {
@@ -185,7 +184,6 @@ export function usePonderData() {
       }
       
       const data = await response.json();
-      console.log(`Retrieved ${data.length} chat messages for node ${nodeId}`);
       
       setIsLoading(false);
       return data;

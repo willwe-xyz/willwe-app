@@ -5,9 +5,12 @@
     "node": ">=19.0.0 <20.18.0"
   },
   "scripts": {
-    "dev": "concurrently \"next dev\" \"ponder dev\"",
-    "build": "next build && ponder build",
-    "start": "concurrently \"next start\" \"ponder start\"",
+    "dev": "next dev",
+    "dev:full": "concurrently \"next dev\" \"ponder dev\"",
+    "build": "next build",
+    "build:full": "next build && ponder build",
+    "start": "next start",
+    "start:full": "concurrently \"next start\" \"ponder start\"",
     "format": "npx prettier --write \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\"",
     "lint": "next lint && npx prettier --check \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\" && npx tsc --noEmit",
     "context": "./create-context.sh",

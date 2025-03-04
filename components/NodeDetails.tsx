@@ -203,7 +203,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
                 <TabPanel p={6}>
                   <Box maxW="900px" mx="auto">
-                    <NodeChat nodeId={nodeId} />
+                    <NodeChat nodeId={nodeId} nodeData={nodeData} />
                   </Box>
                 </TabPanel>
 

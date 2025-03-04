@@ -10,23 +10,31 @@ import {
   Flex, 
   Spinner,
   useColorModeValue,
-  Divider
+  Divider,
+  useToast,
+  Tooltip
 } from '@chakra-ui/react';
 import { usePonderData } from '../hooks/usePonderData';
 import { useAccount } from 'wagmi';
 import { formatDistanceToNow } from 'date-fns';
+import { NodeState } from '../types/chainData';
 
 interface NodeChatProps {
   nodeId?: string;
+  nodeData?: NodeState;
 }
 
-const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
+const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData }) => {
   const { address } = useAccount();
   const { getNodeChatMessages, sendChatMessage, isLoading } = usePonderData();
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  
+  // Check if the current user is a member of the node
+  const isMember = nodeData?.membersOfNode?.includes(address || '');
   
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -38,7 +46,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
     const fetchMessages = async () => {
       try {
         const data = await getNodeChatMessages(nodeId, 50);
-        setMessages(data || []);
+        // Sort messages by timestamp in ascending order (oldest first, newest last)
+        const sortedData = [...(data || [])].sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        setMessages(sortedData);
       } catch (error) {
         console.error('Error fetching chat messages:', error);
       }
@@ -63,6 +75,18 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
       return;
     }
     
+    // Check if user is a member before allowing to send message
+    if (!isMember) {
+      toast({
+        title: "Not a member",
+        description: "Only node members can send messages in this chat.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      return;
+    }
+    
     setIsSending(true);
     
     try {
@@ -75,6 +99,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
         content: newMessage.trim(),
         timestamp: new Date().toISOString()
       };
+      // Add new message to the end of the array (newest at bottom)
       setMessages(prev => [...prev, newMsg]);
       setNewMessage('');
     } catch (error) {
@@ -95,6 +120,18 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
     } catch (e) {
       return 'just now';
     }
+  };
+  
+  // Function to copy address to clipboard
+  const copyAddressToClipboard = (address: string) => {
+    navigator.clipboard.writeText(address);
+    toast({
+      title: "Address copied",
+      description: "Address copied to clipboard",
+      status: "success",
+      duration: 2000,
+      isClosable: true,
+    });
   };
 
   if (isLoading && messages.length === 0) {
@@ -146,9 +183,17 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
                 />
                 <Box>
                   <HStack spacing={2}>
-                    <Text fontWeight="bold" fontSize="sm">
-                      {message.sender === address ? 'You' : formatAddress(message.sender)}
-                    </Text>
+                    <Tooltip label="Click to copy address" placement="top">
+                      <Text 
+                        fontWeight="bold" 
+                        fontSize="sm"
+                        cursor="pointer"
+                        _hover={{ textDecoration: 'underline' }}
+                        onClick={() => copyAddressToClipboard(message.sender)}
+                      >
+                        {message.sender === address ? 'You' : formatAddress(message.sender)}
+                      </Text>
+                    </Tooltip>
                     <Text fontSize="xs" color="gray.500">
                       {formatTimestamp(message.timestamp)}
                     </Text>
@@ -171,14 +216,14 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               bg={inputBg}
-              disabled={!address || isSending}
+              disabled={!address || isSending || !isMember}
             />
             <Button
               colorScheme="purple"
               type="submit"
               isLoading={isSending}
               loadingText="Sending"
-              disabled={!address || !newMessage.trim() || isSending}
+              disabled={!address || !newMessage.trim() || isSending || !isMember}
             >
               Send
             </Button>
@@ -186,6 +231,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId }) => {
           {!address && (
             <Text fontSize="sm" color="red.500" mt={2}>
               Please connect your wallet to send messages
+            </Text>
+          )}
+          {address && !isMember && (
+            <Text fontSize="sm" color="red.500" mt={2}>
+              Only node members can send messages in this chat
             </Text>
           )}
         </form>
