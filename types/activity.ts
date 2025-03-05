@@ -18,16 +18,16 @@ export interface ActivityLogEntry {
 }
 
 /**
- * Transformed activity item for display
+ * Activity item for display in the UI
  */
 export interface ActivityItem {
   id: string;
   nodeId: string;
   userAddress: string;
-  type?: string;
-  eventType?: string;
+  type: string;
+  eventType: string;
   description: string;
-  data: Record<string, any>;
+  data: any;
   timestamp: string;
   isUserFocused?: boolean;
 }

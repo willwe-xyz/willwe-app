@@ -61,6 +61,10 @@ function generateDescription(eventType: string, data: any): string {
       return `Test activity: ${data.message || 'No message'}`;
     
     default:
+      // If we have a message in the data, use that
+      if (data && data.message) {
+        return data.message;
+      }
       return `${eventType} event`;
   }
 }
@@ -112,7 +116,7 @@ export function transformActivities(
     }
       
     // Log each activity and its transformed data
-    console.log(`Processing activity: ${activity.id}, type: ${activity.eventType}, node: ${activity.nodeId}`);
+    console.log(`Processing activity: ${activity.id}, type: ${activity.eventType || activity.event_type}, node: ${activity.nodeId || activity.node_id}`);
     
     // Get the event type - handle both camelCase and snake_case
     const eventType = activity.event_type || activity.eventType;
@@ -121,10 +125,10 @@ export function transformActivities(
     const timestamp = activity.timestamp;
     
     // Get the node ID
-    const nodeId = activity.node_id || activity.nodeId;
+    const nodeId = activity.node_id || activity.nodeId || '';
     
     // Get the user address
-    const userAddress = activity.user_address || activity.userAddress;
+    const userAddress = activity.user_address || activity.userAddress || '';
     
     // Map event types to activity types
     const typeMap: Record<string, string> = {
@@ -133,6 +137,7 @@ export function transformActivities(
       'InflationRateChanged': 'inflationChange',
       'MembraneChanged': 'membraneChange',
       'Signaled': 'signal',
+      'signal': 'signal',
       'Resignal': 'resignal',
       'Transfer': 'transfer',
       'Burn': 'burn',
@@ -160,6 +165,7 @@ export function transformActivities(
       nodeId,
       userAddress,
       type: activityType,
+      eventType,
       description,
       data: activityData,
       timestamp,

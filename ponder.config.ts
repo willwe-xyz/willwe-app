@@ -91,7 +91,7 @@ export default createConfig({
     },
   },
   database: {
-    type: "sqlite",
-    filename: "./ponder.db",
+    kind: "pglite",
+    directory: "./.ponder/pglite",
   },
 });

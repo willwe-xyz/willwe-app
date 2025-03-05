@@ -30,6 +30,7 @@ export default function DashboardPage() {
 
   const { user, ready, authenticated, logout, login } = usePrivy();
   const { wallets } = useWallets();
+  const userAddress = user?.wallet?.address;
 
   // Get token from URL or context
   const tokenAddress = router.query.token as string || selectedToken;
@@ -67,7 +68,7 @@ export default function DashboardPage() {
 
   // Prepare header props
   const headerProps = {
-    userAddress: user?.wallet?.address,
+    userAddress: user?.wallet?.address || null,
     chainId: cleanChainId,
     logout,
     login,
@@ -82,8 +83,8 @@ export default function DashboardPage() {
 
   // Empty dashboard state
   const renderEmptyDashboard = () => (
-    <Box className="flex flex-col items-center justify-center h-full max-w-3xl mx-auto w-full p-8">
-      <Box className="w-full bg-white rounded-lg shadow-sm p-8 border border-gray-100">
+    <Box className="flex flex-col mx-auto w-full p-1">
+      {/* <Box className="w-full bg-white rounded-lg shadow-sm p-8 border border-gray-100">
         <Text className="text-2xl font-semibold mb-6 text-center">
           Welcome to WillWe
         </Text>
@@ -91,7 +92,10 @@ export default function DashboardPage() {
           Select a token from above to explore its value network
         </Text>
         
-      </Box>
+      </Box> */}
+
+        <UserActivityFeed userAddress={userAddress} chainId={cleanChainId} tokenAddress={tokenAddress} />
+
     </Box>
   );
 
@@ -139,7 +143,7 @@ export default function DashboardPage() {
             </GridItem>
             <GridItem>
               <UserActivityFeed 
-                userAddress={user?.wallet?.address || ''}
+                userAddress={user?.wallet?.address}
                 selectedTokenColor={colorState.contrastingColor}
               />
             </GridItem>

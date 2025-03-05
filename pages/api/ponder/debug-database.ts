@@ -42,6 +42,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ logs });
       }
       
+      if (action === 'user-activities') {
+        const userAddress = req.query.userAddress;
+        if (!userAddress) {
+          return res.status(400).json({ error: 'userAddress parameter is required' });
+        }
+        
+        // Get activities for a specific user
+        const logs = await database.all(
+          'SELECT * FROM activity_logs WHERE user_address = ? ORDER BY timestamp DESC LIMIT 100',
+          [userAddress]
+        );
+        
+        // If no logs found, try case-insensitive search
+        if (logs.length === 0) {
+          console.log(`[API] No logs found for user ${userAddress}, trying case-insensitive search`);
+          
+          const caseInsensitiveLogs = await database.all(
+            'SELECT * FROM activity_logs WHERE LOWER(user_address) = LOWER(?) ORDER BY timestamp DESC LIMIT 100',
+            [userAddress]
+          );
+          
+          if (caseInsensitiveLogs.length > 0) {
+            console.log(`[API] Found ${caseInsensitiveLogs.length} logs with case-insensitive search`);
+            return res.status(200).json({ logs: caseInsensitiveLogs });
+          }
+          
+          // Get all unique user addresses in the database
+          const allAddresses = await database.all(
+            "SELECT DISTINCT user_address FROM activity_logs WHERE user_address IS NOT NULL AND user_address != ''"
+          );
+          
+          return res.status(200).json({ 
+            logs, 
+            message: 'No activities found for this user address',
+            allAddresses: allAddresses.map((row: any) => row.user_address)
+          });
+        }
+        
+        return res.status(200).json({ logs });
+      }
+      
       if (action === 'test-insert' && nodeId) {
         // Insert a test activity log
         const id = uuidv4();
@@ -58,6 +99,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
         
         return res.status(200).json({ success: true, id });
+      }
+      
+      if (action === 'test-insert-user') {
+        // Insert a test activity log for a specific user
+        const userAddress = req.query.userAddress;
+        if (!userAddress) {
+          return res.status(400).json({ error: 'userAddress parameter is required' });
+        }
+        
+        const id = uuidv4();
+        const timestamp = new Date().toISOString();
+        const nodeId = req.query.nodeId || 'test-node-id';
+        const eventType = req.query.eventType || 'TestEvent';
+        
+        const testData = {
+          test: true,
+          message: 'This is a test user activity',
+          amount: '100',
+          timestamp: Date.now()
+        };
+        
+        await database.run(
+          'INSERT INTO activity_logs (id, node_id, user_address, event_type, data, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+          [id, nodeId, userAddress, eventType, JSON.stringify(testData), timestamp]
+        );
+        
+        return res.status(200).json({ 
+          success: true, 
+          id,
+          message: `Test activity created for user ${userAddress}` 
+        });
       }
       
       if (action === 'reset-table') {
@@ -84,7 +156,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           'activity-logs', 
           'activity-count', 
           'node-activities', 
+          'user-activities',
           'test-insert', 
+          'test-insert-user',
           'reset-table'
         ] 
       });

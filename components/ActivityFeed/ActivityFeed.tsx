@@ -32,30 +32,15 @@ import {
   Repeat
 } from 'lucide-react';
 import { formatDistance } from 'date-fns';
-
-interface ActivityItem {
-  id: string;
-  type: 'mint' | 'burn' | 'transfer' | 'signal' | 'spawn' | 'membership' | 
-        'inflationChange' | 'membraneChange' | 'configSignal' | 'endpoint' | 
-        'newMovement' | 'willWeSet' | 'membraneCreated' | 'newSignatures' | 
-        'queueExecuted' | 'signatureRemoved' | 'latentActionRemoved' | 'redistribute' |
-        'resignal';
-  timestamp: number;
-  description: string;
-  account: string;
-  nodeId?: string;
-  amount?: string;
-  tokenSymbol?: string;
-  status: 'success' | 'pending' | 'failed';
-  transactionHash?: string;
-}
+import { ActivityItem } from '../../types/activity';
 
 interface ActivityFeedProps {
-  activities?: ActivityItem[];
+  activities: ActivityItem[];
   isLoading?: boolean;
-  error?: Error | null;
+  error?: Error | string | null;
   onRefresh?: () => void;
   selectedToken?: string;
+  emptyStateMessage?: string;
 }
 
 export function ActivityFeed({
@@ -63,7 +48,8 @@ export function ActivityFeed({
   isLoading = false,
   error = null,
   onRefresh,
-  selectedToken
+  selectedToken,
+  emptyStateMessage = "No activities to display"
 }: ActivityFeedProps) {
   // Theme colors
   const bgColor = useColorModeValue('gray.50', 'gray.800');
@@ -127,7 +113,16 @@ export function ActivityFeed({
   };
 
   const sortedActivities = useMemo(() => {
-    return [...activities].sort((a, b) => b.timestamp - a.timestamp);
+    if (!activities || activities.length === 0) {
+      return [];
+    }
+    
+    // Convert string timestamps to Date objects for sorting
+    return [...activities].sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
   }, [activities]);
 
   if (isLoading) {
@@ -141,7 +136,7 @@ export function ActivityFeed({
         display="flex"
         alignItems="center"
         justifyContent="center"
-        minH="400px"
+        minH="200px"
       >
         <Spinner size="xl" color="purple.500" />
       </Box>
@@ -159,7 +154,7 @@ export function ActivityFeed({
       >
         <VStack spacing={4} align="center">
           <Text color="red.500" fontWeight="medium">
-            Error loading activities: {error.message}
+            Error loading activities: {typeof error === 'string' ? error : error.message}
           </Text>
           {onRefresh && (
             <Button
@@ -176,119 +171,84 @@ export function ActivityFeed({
     );
   }
 
-  return (
-    <Box
-      p={6}
-      bg={bgColor}
-      borderRadius="xl"
-      border="1px solid"
-      borderColor={borderColor}
-      height="100%"
-      minH="400px"
-    >
-      <VStack spacing={6} align="stretch">
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Text fontSize="xl" fontWeight="bold">
-            Recent Activity
-          </Text>
-          {onRefresh && (
-            <Button
-              size="sm"
-              variant="ghost"
-              leftIcon={<RefreshCw size={16} />}
-              onClick={onRefresh}
-              colorScheme="purple"
-            >
-              Refresh
-            </Button>
-          )}
-        </Box>
-
-        {sortedActivities.length === 0 ? (
-          <Box
-            py={12}
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            bg={emptyStateBg}
-            borderRadius="lg"
+  if (!activities || activities.length === 0) {
+    return (
+      <Box
+        p={8}
+        bg={emptyStateBg}
+        borderRadius="xl"
+        border="1px solid"
+        borderColor={borderColor}
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        minH="200px"
+      >
+        <Text color={textColor} mb={4} textAlign="center">
+          {emptyStateMessage}
+        </Text>
+        {onRefresh && (
+          <Button
+            leftIcon={<RefreshCw size={16} />}
+            onClick={onRefresh}
+            colorScheme="purple"
+            size="sm"
           >
-            <Activity size={32} className="text-gray-400 mb-4" />
-            <Text color={textColor}>No recent activity</Text>
-            {selectedToken && (
-              <Text color={textColor} fontSize="sm" mt={2}>
-                Select a token to view its activity
-              </Text>
-            )}
-          </Box>
-        ) : (
-          <VStack spacing={4} align="stretch">
-            {sortedActivities.map((activity) => (
-              <Box
-                key={activity.id}
-                p={4}
-                borderRadius="lg"
-                border="1px solid"
-                borderColor={borderColor}
-                transition="all 0.2s"
-                _hover={{
-                  transform: 'translateY(-2px)',
-                  shadow: 'sm',
-                  bg: hoverBg
-                }}
-              >
-                <VStack spacing={2} align="stretch">
-                  <HStack justify="space-between">
-                    <HStack spacing={3}>
-                      {getActivityIcon(activity.type)}
-                      <Text fontWeight="medium">
-                        {activity.type.charAt(0).toUpperCase() + activity.type.slice(1)}
-                      </Text>
-                    </HStack>
-                    <Badge colorScheme={getStatusColor(activity.status)}>
-                      {activity.status}
-                    </Badge>
-                  </HStack>
-                  
-                  <Text color={textColor} fontSize="sm">
-                    {activity.description}
-                  </Text>
-                  
-                  {activity.amount && (
-                    <Text fontSize="sm" fontWeight="medium">
-                      Amount: {activity.amount} {activity.tokenSymbol}
-                    </Text>
-                  )}
-                  
-                  <HStack justify="space-between" fontSize="xs" color={textColor}>
-                    <Text>
-                      {formatDistance(activity.timestamp, new Date(), { addSuffix: true })}
-                    </Text>
-                    <HStack spacing={4}>
-                      {activity.nodeId && (
-                        <Text fontFamily="mono">
-                          Node: {activity.nodeId.slice(0, 6)}...{activity.nodeId.slice(-4)}
-                        </Text>
-                      )}
-                      <Text fontFamily="mono">
-                        {activity.account.slice(0, 6)}...{activity.account.slice(-4)}
-                      </Text>
-                    </HStack>
-                  </HStack>
-
-                  {activity.transactionHash && (
-                    <Text fontSize="xs" color="purple.500" fontFamily="mono">
-                      Tx: {activity.transactionHash.slice(0, 10)}...
-                    </Text>
-                  )}
-                </VStack>
-              </Box>
-            ))}
-          </VStack>
+            Refresh
+          </Button>
         )}
-      </VStack>
-    </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <VStack spacing={0} align="stretch" bg={bgColor} borderRadius="xl" border="1px solid" borderColor={borderColor} overflow="hidden">
+      {sortedActivities.map((activity, index) => (
+        <Box
+          key={activity.id || index}
+          p={4}
+          borderBottom={index < sortedActivities.length - 1 ? "1px solid" : "none"}
+          borderColor={borderColor}
+          _hover={{ bg: hoverBg }}
+          transition="background-color 0.2s"
+        >
+          <HStack spacing={4} align="flex-start">
+            <Box
+              p={2}
+              borderRadius="full"
+              bg={`${getStatusColor(activity.status || 'success')}.100`}
+              color={`${getStatusColor(activity.status || 'success')}.500`}
+            >
+              {getActivityIcon(activity.type)}
+            </Box>
+            <VStack align="start" spacing={1} flex={1}>
+              <Text fontWeight="medium">{activity.description}</Text>
+              <HStack spacing={2}>
+                <Badge colorScheme={getStatusColor(activity.status || 'success')} variant="subtle">
+                  {activity.status || 'success'}
+                </Badge>
+                {activity.timestamp && (
+                  <Text fontSize="sm" color={textColor}>
+                    {formatDistance(new Date(activity.timestamp), new Date(), { addSuffix: true })}
+                  </Text>
+                )}
+                {activity.nodeId && (
+                  <Badge colorScheme="purple" variant="outline">
+                    Node {activity.nodeId}
+                  </Badge>
+                )}
+                {activity.eventType && (
+                  <Badge colorScheme="blue" variant="outline">
+                    {activity.eventType}
+                  </Badge>
+                )}
+              </HStack>
+            </VStack>
+          </HStack>
+        </Box>
+      ))}
+    </VStack>
   );
 }
 

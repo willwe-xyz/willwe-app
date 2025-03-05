@@ -305,13 +305,109 @@ export async function getUserActivityLogs(userAddress: string, limit = 50) {
     // Ensure the database is initialized
     const database = await getDatabase();
     
-    // Get the logs for the user
+    // Normalize the user address to lowercase for case-insensitive comparison
+    const normalizedUserAddress = userAddress.toLowerCase();
+    
+    // First, try to get logs with exact match (case-insensitive)
+    console.log(`[Database] Querying for logs with LOWER(user_address) = ${normalizedUserAddress}`);
     const logs = await database.all(
-      'SELECT * FROM activity_logs WHERE user_address = ? ORDER BY timestamp DESC LIMIT ?',
-      [userAddress, limit]
+      'SELECT * FROM activity_logs WHERE LOWER(user_address) = ? ORDER BY timestamp DESC LIMIT ?',
+      [normalizedUserAddress, limit]
     );
     
     console.log(`[Database] Found ${logs.length} activity logs for user ${userAddress}`);
+    
+    // If no logs found, try to sync from Ponder
+    if (logs.length === 0) {
+      console.log(`[Database] No logs found for user ${userAddress}, checking for similar addresses`);
+      
+      // Get all unique user addresses in the database
+      const userAddressQuery = await database.all(
+        "SELECT DISTINCT user_address FROM activity_logs WHERE user_address IS NOT NULL AND user_address != ''"
+      );
+      
+      if (userAddressQuery.length > 0) {
+        console.log(`[Database] Found ${userAddressQuery.length} unique user addresses in the database`);
+        
+        // Log all user addresses for debugging
+        const addresses = userAddressQuery.map((row: any) => row.user_address);
+        console.log(`[Database] User addresses in database:`, addresses.slice(0, 10).join(', ') + (addresses.length > 10 ? '...' : ''));
+        
+        // Try to find a case-insensitive match
+        for (const row of userAddressQuery) {
+          if (row.user_address && row.user_address.toLowerCase() === normalizedUserAddress) {
+            console.log(`[Database] Found case-insensitive match for ${userAddress}: ${row.user_address}`);
+            
+            // Get logs for this address
+            const caseInsensitiveLogs = await database.all(
+              'SELECT * FROM activity_logs WHERE user_address = ? ORDER BY timestamp DESC LIMIT ?',
+              [row.user_address, limit]
+            );
+            
+            console.log(`[Database] Found ${caseInsensitiveLogs.length} logs for case-insensitive match`);
+            
+            if (caseInsensitiveLogs.length > 0) {
+              return caseInsensitiveLogs.map(log => {
+                try {
+                  return {
+                    ...log,
+                    data: typeof log.data === 'string' ? JSON.parse(log.data) : log.data
+                  };
+                } catch (error) {
+                  console.error(`[Database] Error parsing data for log ${log.id}:`, error);
+                  return {
+                    ...log,
+                    data: {}
+                  };
+                }
+              });
+            }
+          }
+        }
+      }
+      
+      // Try a more flexible search if still no results
+      console.log(`[Database] No exact matches found, trying partial match with LIKE`);
+      const partialMatchLogs = await database.all(
+        "SELECT * FROM activity_logs WHERE user_address LIKE ? ORDER BY timestamp DESC LIMIT ?",
+        [`%${userAddress.slice(-20)}%`, limit]
+      );
+      
+      console.log(`[Database] Found ${partialMatchLogs.length} logs with partial address match`);
+      
+      if (partialMatchLogs.length > 0) {
+        return partialMatchLogs.map(log => {
+          try {
+            return {
+              ...log,
+              data: typeof log.data === 'string' ? JSON.parse(log.data) : log.data
+            };
+          } catch (error) {
+            console.error(`[Database] Error parsing data for log ${log.id}:`, error);
+            return {
+              ...log,
+              data: {}
+            };
+          }
+        });
+      }
+      
+      // Check the database schema and tables
+      console.log(`[Database] Checking database schema`);
+      const tables = await database.all("SELECT name FROM sqlite_master WHERE type='table'");
+      console.log(`[Database] Tables in database:`, tables.map((t: any) => t.name).join(', '));
+      
+      const activityLogsSchema = await database.all("PRAGMA table_info(activity_logs)");
+      console.log(`[Database] activity_logs table schema:`, activityLogsSchema.map((col: any) => `${col.name} (${col.type})`).join(', '));
+      
+      // Count total activities in the database
+      const totalActivities = await database.get("SELECT COUNT(*) as count FROM activity_logs");
+      console.log(`[Database] Total activities in database: ${totalActivities?.count || 0}`);
+      
+      // Get a sample of activities to check
+      const sampleActivities = await database.all("SELECT * FROM activity_logs LIMIT 5");
+      console.log(`[Database] Sample activities:`, sampleActivities.map((a: any) => `${a.id} (user: ${a.user_address}, node: ${a.node_id})`).join(', '));
+    }
     
     // Parse the data field for each log
     return logs.map(log => {

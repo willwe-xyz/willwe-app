@@ -1,93 +1,208 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Heading, VStack, useColorModeValue, Alert, AlertIcon, AlertTitle, AlertDescription } from '@chakra-ui/react';
+import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
 import { ActivityFeed } from './ActivityFeed/ActivityFeed';
-import { ActivityItem, transformActivities } from '../utils/activityTransformers';
+import { ActivityItem } from '../types/activity';
+import { transformActivities } from '../utils/activityTransformers';
 
 interface UserActivityFeedProps {
   userAddress: string;
-  selectedTokenColor?: string;
+  showDebug?: boolean;
 }
 
-export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
-  userAddress,
-  selectedTokenColor
-}) => {
+/**
+ * Component for displaying a user's activity feed
+ */
+export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({ userAddress, showDebug = true }) => {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
-  
-  const fetchUserActivities = async () => {
-    if (!userAddress) return;
-    
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>({});
+  const toast = useToast();
+
+  /**
+   * Fetch user activities from the API
+   */
+  const fetchUserActivities = async (forceSync: boolean = false) => {
+    if (!userAddress) {
+      setError('No user address provided');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     
     try {
-      console.log(`[UserActivityFeed] Fetching activities for user ${userAddress}`);
-      const response = await fetch(`/api/ponder/activities?userAddress=${userAddress}`);
+      // Update debug info
+      setDebugInfo(prev => ({
+        ...prev,
+        fetchStarted: new Date().toISOString(),
+        userAddress,
+        forceSync
+      }));
+      
+      // Fetch activities with optional force sync
+      console.log(`[UserActivityFeed] Fetching activities for user ${userAddress}, forceSync: ${forceSync}`);
+      const response = await fetch(`/api/ponder/activities?userAddress=${userAddress}&forceSync=${forceSync}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch user activities: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(`Failed to fetch activities: ${errorData.error || 'Unknown error'}`);
       }
       
       const data = await response.json();
-      console.log(`[UserActivityFeed] Received ${Array.isArray(data) ? data.length : 0} activities`);
       
-      // Make sure data is an array before transforming
-      if (!Array.isArray(data)) {
-        console.warn('[UserActivityFeed] Expected array of activities but received:', data);
-        setActivities([]);
-        return;
+      // Update debug info with API response
+      setDebugInfo(prev => ({
+        ...prev,
+        fetchCompleted: new Date().toISOString(),
+        apiResponse: data,
+        activitiesCount: Array.isArray(data.activities) ? data.activities.length : 0,
+        responseDebug: data.debug || {}
+      }));
+      
+      console.log(`[UserActivityFeed] Fetched ${Array.isArray(data.activities) ? data.activities.length : 0} activities for user ${userAddress}`);
+      
+      // If no activities found and we didn't force sync, try syncing
+      if (Array.isArray(data.activities) && data.activities.length === 0 && !forceSync) {
+        console.log(`[UserActivityFeed] No activities found, trying to sync`);
+        return fetchUserActivities(true);
       }
       
-      // Transform the data using the utility function
-      const transformedActivities = transformActivities(data, true);
+      // Transform activities
+      const transformedActivities = transformActivities(data.activities || [], true);
+      
+      // Update debug info
+      setDebugInfo(prev => ({
+        ...prev,
+        transformedActivities,
+        transformedCount: transformedActivities.length
+      }));
       
       setActivities(transformedActivities);
-    } catch (error) {
-      console.error('[UserActivityFeed] Error fetching user activities:', error);
-      setError(error instanceof Error ? error : new Error('Unknown error'));
+    } catch (err) {
+      console.error('[UserActivityFeed] Error fetching activities:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      
+      // Update debug info
+      setDebugInfo(prev => ({
+        ...prev,
+        error: err instanceof Error ? err.message : 'Unknown error'
+      }));
+      
+      toast({
+        title: 'Error fetching activities',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
     } finally {
       setIsLoading(false);
     }
   };
-  
+
+  // Fetch activities on component mount
   useEffect(() => {
-    fetchUserActivities();
+    if (userAddress) {
+      fetchUserActivities();
+    }
   }, [userAddress]);
-  
+
+  // Function to manually refresh activities
+  const handleRefresh = () => {
+    fetchUserActivities(true);
+    toast({
+      title: 'Refreshing activities',
+      description: 'Syncing and fetching latest activities...',
+      status: 'info',
+      duration: 3000,
+      isClosable: true,
+    });
+  };
+
   return (
-    <Box 
-      p={6} 
-      bg={bgColor} 
-      borderRadius="xl" 
-      border="1px solid" 
-      borderColor={borderColor}
-      shadow="sm"
-    >
-      <VStack spacing={6} align="stretch">
-        <Heading size="md">Your Recent Activity</Heading>
-        
-        {error && (
-          <Alert status="error" mb={4}>
-            <AlertIcon />
-            <AlertTitle>Error loading activities</AlertTitle>
-            <AlertDescription>{error.message}</AlertDescription>
-          </Alert>
-        )}
-        
-        <ActivityFeed 
-          activities={activities}
+    <VStack spacing={4} align="stretch" w="100%">
+      <Flex justifyContent="space-between" alignItems="center">
+        <Heading size="md">User Activity</Heading>
+        <Button 
+          size="sm" 
+          colorScheme="blue" 
+          onClick={handleRefresh} 
           isLoading={isLoading}
-          error={error}
-          onRefresh={fetchUserActivities}
-        />
-      </VStack>
-    </Box>
+        >
+          Refresh Activities
+        </Button>
+      </Flex>
+      
+      {error && (
+        <Box p={4} bg="red.50" color="red.500" borderRadius="md">
+          <Text fontWeight="bold">Error:</Text>
+          <Text>{error}</Text>
+        </Box>
+      )}
+      
+      {showDebug && (
+        <Accordion allowToggle>
+          <AccordionItem>
+            <h2>
+              <AccordionButton>
+                <Box flex="1" textAlign="left">
+                  Debug Information
+                </Box>
+                <AccordionIcon />
+              </AccordionButton>
+            </h2>
+            <AccordionPanel pb={4}>
+              <VStack align="start" spacing={2}>
+                <Text fontWeight="bold">User Address:</Text>
+                <Code p={2} borderRadius="md" w="100%">{userAddress}</Code>
+                
+                <Text fontWeight="bold">Activities Count:</Text>
+                <Text>{activities.length} activities found</Text>
+                
+                <Text fontWeight="bold">API Response Source:</Text>
+                <Text>{debugInfo.responseDebug?.source || 'N/A'}</Text>
+                
+                <Text fontWeight="bold">Sync Result:</Text>
+                <Code p={2} borderRadius="md" w="100%" overflowX="auto">
+                  {JSON.stringify(debugInfo.responseDebug?.syncResult || {}, null, 2)}
+                </Code>
+                
+                <Text fontWeight="bold">Activity Types:</Text>
+                <Code p={2} borderRadius="md" w="100%" overflowX="auto">
+                  {JSON.stringify(
+                    activities.reduce((acc, activity) => {
+                      acc[activity.type] = (acc[activity.type] || 0) + 1;
+                      return acc;
+                    }, {} as Record<string, number>),
+                    null,
+                    2
+                  )}
+                </Code>
+                
+                <Text fontWeight="bold">First Activity:</Text>
+                <Code p={2} borderRadius="md" w="100%" overflowX="auto">
+                  {activities.length > 0 
+                    ? JSON.stringify(activities[0], null, 2) 
+                    : 'No activities found'}
+                </Code>
+                
+                <Text fontWeight="bold">Raw API Response:</Text>
+                <Code p={2} borderRadius="md" w="100%" overflowX="auto" maxH="300px" overflowY="auto">
+                  {JSON.stringify(debugInfo.apiResponse || {}, null, 2)}
+                </Code>
+              </VStack>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
+      
+      <ActivityFeed 
+        activities={activities} 
+        isLoading={isLoading} 
+        error={error}
+        emptyStateMessage={`No activities found for user ${userAddress}. Try refreshing to sync from the blockchain.`}
+      />
+    </VStack>
   );
 };
-
-export default UserActivityFeed;

@@ -22,9 +22,10 @@ import { NodeState } from '../types/chainData';
 interface NodeChatProps {
   nodeId?: string;
   nodeData?: NodeState;
+  userAddress?: string;
 }
 
-const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData }) => {
+const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) => {
   const { address } = useAccount();
   const { getNodeChatMessages, sendChatMessage, isLoading } = usePonderData();
   const [messages, setMessages] = useState<any[]>([]);
@@ -34,7 +35,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData }) => {
   const toast = useToast();
   
   // Check if the current user is a member of the node
-  const isMember = nodeData?.membersOfNode?.includes(address || '');
+  const isMember = userAddress ? nodeData?.membersOfNode?.includes(userAddress) : false;
   
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
