@@ -24,26 +24,6 @@ type ABIKP = {
 };
 
 
-export const deployments: Deployments  = {
-    "WillWe" : {
-        "84532" :  "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0xcdf01592c88eaa45cf3efff824f7c7e0687263ad"
-
-    },
-    "Membrane" : {
-    "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-    "11155420": "0xc2985039aeb2040ac403484c8d792a5de53cdfb1"
-},
-    "Execution": { 
-        "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0xd5717a4bfc0c06540700e5f326d8c63b23d9216d"
-}, "RVI": {
-        "84532" : "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0xa0f47ae56845209db2f22c32af206ce33f8447a0"
-} 
-
-}
-
 
 
 
@@ -1311,7 +1291,7 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "spawnBranchWithMembrane",
+            "name": "spawnNodeWithMembrane",
             "inputs": [
                 {
                     "name": "fid_",
@@ -3116,7 +3096,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "RVI" :  [
+    "Will" :  [
         {
             "type": "constructor",
             "inputs": [

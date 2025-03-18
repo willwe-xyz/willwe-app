@@ -1,66 +1,29 @@
-import { open, Database } from 'sqlite';
-import { Database as SQLiteDatabase } from 'sqlite3';
-import path from 'path';
+import { getDatabase as getPonderDatabase } from './ponder-client';
+import { Database } from 'sqlite';
 
-let db: Database | null = null;
-
-async function initializeDb(database: Database) {
-  // Create tables if they don't exist
-  await database.exec(`
-    CREATE TABLE IF NOT EXISTS Movement (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      movement_hash TEXT NOT NULL,
-      node_id TEXT NOT NULL,
-      category INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      description TEXT,
-      initiator TEXT NOT NULL,
-      current_signatures INTEGER DEFAULT 0,
-      required_signatures INTEGER,
-      expires_at TEXT,
-      executed BOOLEAN DEFAULT FALSE,
-      executed_at TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      status TEXT DEFAULT 'pending'
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_movement_node_id ON Movement(node_id);
-    CREATE INDEX IF NOT EXISTS idx_movement_hash ON Movement(movement_hash);
-  `);
-}
-
+/**
+ * Get a connection to the database
+ * @returns Database connection
+ */
 export async function getDb() {
-  if (db) return db;
-  
-  try {
-    const dbPath = path.join(process.cwd(), '.ponder', 'pglite', 'ponder.db');
-    
-    db = await open({
-      filename: dbPath,
-      driver: SQLiteDatabase
-    });
-
-    // Initialize database tables
-    await initializeDb(db);
-    
-    return db;
-  } catch (error) {
-    console.error('Database initialization error:', error);
-    throw new Error('Failed to initialize database');
-  }
+  return await getPonderDatabase();
 }
 
+/**
+ * Close the database connection
+ * This is a no-op since the database connection is managed by ponder-client.ts
+ */
 export async function closeDb() {
-  if (db) {
-    try {
-      await db.close();
-      db = null;
-    } catch (error) {
-      console.error('Error closing database:', error);
-    }
-  }
+  // No-op as the connection is managed by ponder-client.ts
+  console.log('Database connection is managed by ponder-client.ts');
 }
 
+/**
+ * Execute a query on the database
+ * @param sql SQL query to execute
+ * @param params Parameters for the query
+ * @returns Query results
+ */
 export async function query(sql: string, params: any[] = []) {
   const database = await getDb();
   try {

@@ -181,7 +181,7 @@ const SpawnNodeForm = ({
 
         let transaction;
         if (useMembrane) {
-          transaction = await contract.spawnBranchWithMembrane(
+          transaction = await contract.spawnNodeWithMembrane(
             nodeId,
             membershipConditions.map(mc => mc.tokenAddress.toLowerCase()),
             membershipConditions.map(mc => ethers.parseUnits(mc.requiredBalance, 18)),

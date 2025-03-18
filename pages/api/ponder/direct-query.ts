@@ -1,8 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import path from 'path';
-import { open } from 'sqlite';
-import sqlite3 from 'sqlite3';
-import fs from 'fs';
+import { getDatabase } from '../../../lib/ponder-client';
 
 /**
  * API endpoint to directly query the Ponder database
@@ -10,32 +7,6 @@ import fs from 'fs';
  * @param res The response object
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Possible paths to the Ponder database
-  const ponderDbPaths = [
-    path.join(process.cwd(), '.ponder/pglite/ponder.db'),
-    path.join(process.cwd(), 'db/ponder.db')
-  ];
-  
-  // Find the first path that exists
-  let ponderDbPath = null;
-  for (const dbPath of ponderDbPaths) {
-    if (fs.existsSync(dbPath)) {
-      ponderDbPath = dbPath;
-      break;
-    }
-  }
-  
-  if (!ponderDbPath) {
-    return res.status(404).json({ 
-      error: 'Ponder database not found',
-      checkedPaths: ponderDbPaths
-    });
-  }
-  
-  console.log(`[API] Using Ponder database at: ${ponderDbPath}`);
-  
-  let ponderDb = null;
-  
   try {
     const { nodeId, eventType, limit = '50' } = req.query;
     const limitNum = parseInt(limit as string, 10);
@@ -46,29 +17,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     console.log(`[API] Direct query for node ${nodeId}, event type: ${eventType}, limit: ${limitNum}`);
     
-    // Connect to the Ponder database
-    ponderDb = await open({
-      filename: ponderDbPath,
-      driver: sqlite3.Database
-    });
+    // Connect to the database using our utility
+    const db = await getDatabase();
     
-    // Get the list of tables in the Ponder database
-    const tables = await ponderDb.all(
+    // Get the list of tables in the database
+    const tables = await db.all(
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
     );
     
-    console.log(`[API] Found ${tables.length} tables in Ponder database:`, tables.map((t: any) => t.name).join(', '));
+    console.log(`[API] Found ${tables.length} tables in database:`, tables.map((t: any) => t.name).join(', '));
     
     // If event type is specified, query only that table
     if (eventType) {
       try {
-        const events = await ponderDb.all(
-          `SELECT * FROM "${eventType}" WHERE "nodeId" = ? ORDER BY "blockTimestamp" DESC LIMIT ?`,
+        // Find the actual table name with correct case
+        const actualTable = tables.find((t: any) => 
+          t.name.toLowerCase() === (eventType as string).toLowerCase()
+        );
+        
+        if (!actualTable) {
+          return res.status(404).json({
+            error: `Table ${eventType} not found in database`,
+            availableTables: tables.map((t: any) => t.name)
+          });
+        }
+        
+        const events = await db.all(
+          `SELECT * FROM "${actualTable.name}" WHERE "nodeId" = ? ORDER BY "blockTimestamp" DESC LIMIT ?`,
           [nodeId, limitNum]
         );
         
         return res.status(200).json({
-          table: eventType,
+          table: actualTable.name,
           events
         });
       } catch (error) {
@@ -90,32 +70,66 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       'InflationRateChanged',
       'MembraneChanged',
       'Signaled',
-      'Transfer'
+      'Transfer',
+      'TransferSingle',
+      'NewBranch',
+      'NewRootBranch',
+      'MembershipMitend',
+      'ActivityLog'  
     ];
     
     // Filter to only include tables that exist in the database
     const existingTables = relevantTables.filter(table => 
-      tables.some((t: any) => t.name === table)
+      tables.some((t: any) => t.name.toLowerCase() === table.toLowerCase())
     );
     
     // Query each table
     for (const table of existingTables) {
       try {
-        const events = await ponderDb.all(
-          `SELECT * FROM "${table}" WHERE "nodeId" = ? ORDER BY "blockTimestamp" DESC LIMIT ?`,
-          [nodeId, limitNum]
+        // Find the actual table name with correct case
+        const actualTable = tables.find((t: any) => 
+          t.name.toLowerCase() === table.toLowerCase()
         );
         
-        if (events.length > 0) {
-          results[table] = events;
+        if (actualTable) {
+          const events = await db.all(
+            `SELECT * FROM "${actualTable.name}" WHERE "nodeId" = ? ORDER BY "blockTimestamp" DESC LIMIT ?`,
+            [nodeId, limitNum]
+          );
+          
+          if (events.length > 0) {
+            results[actualTable.name] = events;
+          }
         }
       } catch (error) {
         console.error(`[API] Error querying table ${table}:`, error);
       }
     }
     
+    // Also check the activity_logs table directly
+    try {
+      const activityLogs = await db.all(
+        `SELECT * FROM activity_logs WHERE node_id = ? ORDER BY timestamp DESC LIMIT ?`,
+        [nodeId, limitNum]
+      );
+      
+      if (activityLogs.length > 0) {
+        results['activity_logs'] = activityLogs.map(log => {
+          try {
+            return {
+              ...log,
+              data: typeof log.data === 'string' ? JSON.parse(log.data) : log.data
+            };
+          } catch (error) {
+            return log;
+          }
+        });
+      }
+    } catch (error) {
+      console.error(`[API] Error querying activity_logs table:`, error);
+    }
+    
     return res.status(200).json({
-      dbPath: ponderDbPath,
       tables: tables.map((t: any) => t.name),
       relevantTables: existingTables,
       results
@@ -126,10 +140,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       error: 'Query operation failed', 
       details: error instanceof Error ? error.message : String(error) 
     });
-  } finally {
-    // Close the Ponder database connection
-    if (ponderDb) {
-      await ponderDb.close();
-    }
   }
 }

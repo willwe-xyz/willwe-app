@@ -10,23 +10,31 @@ import {
   Flex, 
   Spinner,
   useColorModeValue,
-  Divider
+  Divider,
+  useToast
 } from '@chakra-ui/react';
-import { usePonderData } from '../../hooks/usePonderData';
+import { useChat } from '../../hooks/useChat';
 import { useAccount } from 'wagmi';
+import { usePrivy } from '@privy-io/react-auth';
 import { formatDistanceToNow } from 'date-fns';
 
 interface ChatProps {
   nodeId?: string;
+  isMember?: boolean;
 }
 
-export const Chat: React.FC<ChatProps> = ({ nodeId }) => {
+export const Chat: React.FC<ChatProps> = ({ nodeId, isMember = true }) => {
   const { address } = useAccount();
-  const { getNodeChatMessages, sendChatMessage, isLoading } = usePonderData();
+  const { authenticated, user } = usePrivy();
+  const { getNodeChatMessages, sendChatMessage, isLoading } = useChat();
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  
+  // Use Privy authenticated address if available, otherwise fallback to wallet address
+  const authenticatedAddress = user?.wallet?.address || address;
   
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -38,7 +46,11 @@ export const Chat: React.FC<ChatProps> = ({ nodeId }) => {
     const fetchMessages = async () => {
       try {
         const data = await getNodeChatMessages(nodeId, 50);
-        setMessages(data || []);
+        // Sort messages by timestamp in ascending order
+        const sortedData = [...(data || [])].sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        setMessages(sortedData);
       } catch (error) {
         console.error('Error fetching chat messages:', error);
       }
@@ -59,19 +71,31 @@ export const Chat: React.FC<ChatProps> = ({ nodeId }) => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!address || !newMessage.trim() || !nodeId) {
+    if (!authenticatedAddress || !newMessage.trim() || !nodeId || !authenticated) {
+      return;
+    }
+    
+    // Check if user is a member before allowing to send message
+    if (!isMember) {
+      toast({
+        title: "Not a member",
+        description: "Only node members can send messages in this chat.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
       return;
     }
     
     setIsSending(true);
     
     try {
-      await sendChatMessage(nodeId, address, newMessage.trim());
+      await sendChatMessage(nodeId, authenticatedAddress, newMessage.trim());
       // Optimistically add the message to the UI
       const newMsg = {
         id: `temp-${Date.now()}`,
         nodeId: nodeId,
-        sender: address,
+        sender: authenticatedAddress,
         content: newMessage.trim(),
         timestamp: new Date().toISOString()
       };
@@ -79,6 +103,13 @@ export const Chat: React.FC<ChatProps> = ({ nodeId }) => {
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
     } finally {
       setIsSending(false);
     }
@@ -142,12 +173,12 @@ export const Chat: React.FC<ChatProps> = ({ nodeId }) => {
                 <Avatar 
                   size="sm" 
                   name={formatAddress(message.sender)} 
-                  bg={message.sender === address ? "purple.500" : "gray.500"}
+                  bg={message.sender === authenticatedAddress ? "purple.500" : "gray.500"}
                 />
                 <Box>
                   <HStack spacing={2}>
                     <Text fontWeight="bold" fontSize="sm">
-                      {message.sender === address ? 'You' : formatAddress(message.sender)}
+                      {message.sender === authenticatedAddress ? 'You' : formatAddress(message.sender)}
                     </Text>
                     <Text fontSize="xs" color="gray.500">
                       {formatTimestamp(message.timestamp)}
@@ -171,21 +202,31 @@ export const Chat: React.FC<ChatProps> = ({ nodeId }) => {
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               bg={inputBg}
-              disabled={!address || isSending}
+              disabled={!authenticatedAddress || isSending || !isMember || !authenticated}
             />
             <Button
               colorScheme="purple"
               type="submit"
               isLoading={isSending}
               loadingText="Sending"
-              disabled={!address || !newMessage.trim() || isSending}
+              disabled={!authenticatedAddress || !newMessage.trim() || isSending || !isMember || !authenticated}
             >
               Send
             </Button>
           </HStack>
-          {!address && (
+          {!authenticatedAddress && (
             <Text fontSize="sm" color="red.500" mt={2}>
               Please connect your wallet to send messages
+            </Text>
+          )}
+          {authenticatedAddress && !authenticated && (
+            <Text fontSize="sm" color="red.500" mt={2}>
+              Please authenticate with Privy to send messages
+            </Text>
+          )}
+          {authenticatedAddress && authenticated && !isMember && (
+            <Text fontSize="sm" color="red.500" mt={2}>
+              Only node members can send messages in this chat
             </Text>
           )}
         </form>

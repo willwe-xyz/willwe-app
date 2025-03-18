@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getDatabase, getNodeActivityLogs, getUserActivityLogs } from '../../../ponder/utils/database';
+import { getDatabase, getNodeActivityLogs, getUserActivityLogs } from '../../../lib/ponder-client';
 
 /**
  * API endpoint to get activities for a node or user
@@ -202,11 +202,11 @@ async function syncActivitiesFromPonder(userAddress?: string, nodeId?: string): 
       
       return {
         success: false,
-        error: `Sync failed with status ${syncResponse.status}: ${errorText}`
+        error: errorText
       };
     }
   } catch (error) {
-    console.error('[API] Error syncing activities from Ponder:', error);
+    console.error('[API] Error syncing activities:', error);
     
     return {
       success: false,

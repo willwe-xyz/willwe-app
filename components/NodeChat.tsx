@@ -7,15 +7,15 @@ import {
   Button, 
   HStack, 
   Avatar, 
-  Flex, 
   Spinner,
   useColorModeValue,
   Divider,
   useToast,
   Tooltip
 } from '@chakra-ui/react';
-import { usePonderData } from '../hooks/usePonderData';
+import { useChat } from '../hooks/useChat';
 import { useAccount } from 'wagmi';
+import { usePrivy } from '@privy-io/react-auth';
 import { formatDistanceToNow } from 'date-fns';
 import { NodeState } from '../types/chainData';
 
@@ -27,12 +27,16 @@ interface NodeChatProps {
 
 const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) => {
   const { address } = useAccount();
-  const { getNodeChatMessages, sendChatMessage, isLoading } = usePonderData();
+  const { authenticated, user } = usePrivy();
+  const { getNodeChatMessages, sendChatMessage, isLoading } = useChat();
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
+  
+  // Use Privy authenticated address if available, otherwise use the wallet address
+  const authenticatedAddress = user?.wallet?.address || address;
   
   // Check if the current user is a member of the node
   const isMember = userAddress ? nodeData?.membersOfNode?.includes(userAddress) : false;
@@ -48,12 +52,22 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) =>
       try {
         const data = await getNodeChatMessages(nodeId, 50);
         // Sort messages by timestamp in ascending order (oldest first, newest last)
-        const sortedData = [...(data || [])].sort((a, b) => 
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
+        const sortedData = [...(data || [])].sort((a, b) => {
+          // Convert timestamps to numeric values for comparison
+          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return timeA - timeB;
+        });
         setMessages(sortedData);
       } catch (error) {
         console.error('Error fetching chat messages:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load chat messages.",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
       }
     };
     
@@ -62,7 +76,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) =>
     // Set up polling for new messages
     const interval = setInterval(fetchMessages, 10000);
     return () => clearInterval(interval);
-  }, [nodeId, getNodeChatMessages]);
+  }, [nodeId, getNodeChatMessages, toast]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -72,7 +86,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) =>
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!address || !newMessage.trim() || !nodeId) {
+    if (!authenticatedAddress || !newMessage.trim() || !nodeId || !authenticated) {
       return;
     }
     
@@ -91,20 +105,37 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) =>
     setIsSending(true);
     
     try {
-      await sendChatMessage(nodeId, address, newMessage.trim());
-      // Optimistically add the message to the UI
-      const newMsg = {
-        id: `temp-${Date.now()}`,
-        node_id: nodeId,
-        sender: address,
-        content: newMessage.trim(),
-        timestamp: new Date().toISOString()
-      };
-      // Add new message to the end of the array (newest at bottom)
-      setMessages(prev => [...prev, newMsg]);
+      const result = await sendChatMessage(nodeId, authenticatedAddress, newMessage.trim());
+      
+      // Add new message to the UI based on the API response
+      if (result.success && result.message) {
+        // Use the message from API response
+        const newMsg = result.message;
+        // Add new message to the end of the array (newest at bottom)
+        setMessages(prev => [...prev, newMsg]);
+      } else {
+        // Fallback to optimistic UI update if API doesn't return the message
+        const newMsg = {
+          id: `temp-${Date.now()}`,
+          nodeId: nodeId,
+          sender: authenticatedAddress,
+          content: newMessage.trim(),
+          timestamp: new Date().toISOString()
+        };
+        // Add new message to the end of the array (newest at bottom)
+        setMessages(prev => [...prev, newMsg]);
+      }
+      
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
     } finally {
       setIsSending(false);
     }
@@ -180,7 +211,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) =>
                 <Avatar 
                   size="sm" 
                   name={formatAddress(message.sender)} 
-                  bg={message.sender === address ? "purple.500" : "gray.500"}
+                  bg={message.sender === authenticatedAddress ? "purple.500" : "gray.500"}
                 />
                 <Box>
                   <HStack spacing={2}>
@@ -192,7 +223,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) =>
                         _hover={{ textDecoration: 'underline' }}
                         onClick={() => copyAddressToClipboard(message.sender)}
                       >
-                        {message.sender === address ? 'You' : formatAddress(message.sender)}
+                        {message.sender === authenticatedAddress ? 'You' : formatAddress(message.sender)}
                       </Text>
                     </Tooltip>
                     <Text fontSize="xs" color="gray.500">
@@ -217,24 +248,29 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, nodeData, userAddress }) =>
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               bg={inputBg}
-              disabled={!address || isSending || !isMember}
+              disabled={!authenticatedAddress || isSending || !isMember || !authenticated}
             />
             <Button
               colorScheme="purple"
               type="submit"
               isLoading={isSending}
               loadingText="Sending"
-              disabled={!address || !newMessage.trim() || isSending || !isMember}
+              disabled={!authenticatedAddress || !newMessage.trim() || isSending || !isMember || !authenticated}
             >
               Send
             </Button>
           </HStack>
-          {!address && (
+          {!authenticatedAddress && (
             <Text fontSize="sm" color="red.500" mt={2}>
               Please connect your wallet to send messages
             </Text>
           )}
-          {address && !isMember && (
+          {authenticatedAddress && !authenticated && (
+            <Text fontSize="sm" color="red.500" mt={2}>
+              Please authenticate with Privy to send messages
+            </Text>
+          )}
+          {authenticatedAddress && authenticated && !isMember && (
             <Text fontSize="sm" color="red.500" mt={2}>
               Only node members can send messages in this chat
             </Text>
