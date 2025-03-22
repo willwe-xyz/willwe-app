@@ -1,11 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Text, VStack, Alert, AlertIcon, AlertTitle, AlertDescription, Heading, Button, HStack, Center, Spinner } from '@chakra-ui/react';
+import React from 'react';
+import { Box, Text, VStack, Alert, AlertIcon, Heading, Button, HStack, Center, Spinner } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { SignalHistory } from './SignalHistory';
 import { UserSignal } from '../../types/chainData';
-import { ActivityItem } from '../ActivityFeed/ActivityItem';
-import { transformActivities } from '../../utils/activityTransformers';
-import { ActivityLogEntry, ActivityItem as ActivityItemType } from '../../types/activity';
+import { usePonderData } from '../../hooks/usePonderData';
 
 interface ActivitySectionProps {
   signals?: UserSignal[];
@@ -15,105 +13,41 @@ interface ActivitySectionProps {
 
 export const ActivitySection: React.FC<ActivitySectionProps> = ({
   signals = [],
-  isLoading = false,
+  isLoading: signalsLoading = false,
   nodeId
 }) => {
-  const [activities, setActivities] = useState<ActivityItemType[]>([]);
-  const [activityLoading, setActivityLoading] = useState(false);
-  const [activityError, setActivityError] = useState<Error | null>(null);
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncResult, setSyncResult] = useState<any | null>(null);
+  const { getNodeActivities, isLoading, error, syncActivities } = usePonderData();
+  const [activities, setActivities] = React.useState<any[]>([]);
+  const [syncLoading, setSyncLoading] = React.useState(false);
+  const [syncError, setSyncError] = React.useState<string | null>(null);
 
-  const fetchActivities = async () => {
+  const fetchActivities = React.useCallback(async () => {
     if (!nodeId) return;
     
-    setActivityLoading(true);
     try {
-      console.log(`Fetching activities for node ${nodeId} (type: ${typeof nodeId})`);
-      
-      const response = await fetch(`/api/ponder/activities?nodeId=${nodeId}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Error response from server: ${errorText}`);
-        throw new Error(`Failed to fetch activities: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log(`Retrieved ${data.length} activities for node ${nodeId}`);
-      
-      if (data.length === 0) {
-        console.log(`No activities found for node ${nodeId}. Checking database...`);
-        // Try to insert a test activity for this node to check if the database is working
-        try {
-          const testResponse = await fetch(`/api/ponder/debug-database?action=test-insert&nodeId=${nodeId}`);
-          if (testResponse.ok) {
-            console.log('Test activity inserted successfully');
-            // Try to fetch activities again
-            const retryResponse = await fetch(`/api/ponder/activities?nodeId=${nodeId}`);
-            if (retryResponse.ok) {
-              const retryData = await retryResponse.json();
-              console.log(`After test insert: Retrieved ${retryData.length} activities for node ${nodeId}`);
-              if (retryData.length > 0) {
-                console.log('Database is working, but no real activities were found');
-              }
-            }
-          }
-        } catch (testError) {
-          console.error('Error inserting test activity:', testError);
-        }
-      }
-      
-      console.log('Activity types:', data.map((a: any) => a.event_type).join(', '));
-      
-      // Transform the data using the utility function
-      const transformedActivities = transformActivities(data, false);
-      console.log('Transformed activities:', transformedActivities);
-      
-      setActivities(transformedActivities);
+      const data = await getNodeActivities(nodeId);
+      setActivities(data);
     } catch (error) {
       console.error('Error fetching activities:', error);
-      setActivityError(error instanceof Error ? error : new Error('Unknown error'));
-    } finally {
-      setActivityLoading(false);
     }
-  };
+  }, [nodeId, getNodeActivities]);
 
-  useEffect(() => {
-    if (nodeId) {
-      console.log(`ActivitySection: Initializing with node ID ${nodeId} (type: ${typeof nodeId})`);
-      fetchActivities();
-    }
-  }, [nodeId]);
+  React.useEffect(() => {
+    fetchActivities();
+  }, [fetchActivities]);
 
-  /**
-   * Sync activities from Ponder to our database
-   */
-  const syncActivitiesFromPonder = async () => {
+  const handleSync = async () => {
+    if (!nodeId) return;
+    
+    setSyncLoading(true);
+    setSyncError(null);
+    
     try {
-      setSyncLoading(true);
-      setSyncError(null);
-      
-      console.log(`[ActivitySection] Syncing activities for node ${nodeId}`);
-      
-      const response = await fetch(`/api/ponder/sync-activities?nodeId=${nodeId}&limit=100`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to sync activities: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log(`[ActivitySection] Sync result:`, data);
-      
-      // If we synced any activities, refresh the list
-      if (data.synced > 0) {
-        fetchActivities();
-      }
-      
-      setSyncResult(data);
+      await syncActivities(nodeId);
+      await fetchActivities(); // Refresh activities after sync
     } catch (error) {
-      console.error('[ActivitySection] Error syncing activities:', error);
-      setSyncError(error instanceof Error ? error.message : String(error));
+      console.error('Error syncing activities:', error);
+      setSyncError(error instanceof Error ? error.message : 'Failed to sync activities');
     } finally {
       setSyncLoading(false);
     }
@@ -128,7 +62,7 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
             <Button
               size="sm"
               leftIcon={<RepeatIcon />}
-              onClick={syncActivitiesFromPonder}
+              onClick={handleSync}
               isLoading={syncLoading}
               colorScheme="teal"
             >
@@ -138,30 +72,28 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
               size="sm"
               leftIcon={<RepeatIcon />}
               onClick={fetchActivities}
-              isLoading={activityLoading}
+              isLoading={isLoading}
             >
               Refresh
             </Button>
           </HStack>
         </HStack>
         
-        {activityError && (
+        {error && (
           <Alert status="error" mb={4}>
             <AlertIcon />
-            <AlertTitle>Error loading activities</AlertTitle>
-            <AlertDescription>{activityError.message}</AlertDescription>
+            <Text>Error loading activities: {error.message}</Text>
           </Alert>
         )}
-        
+
         {syncError && (
           <Alert status="error" mb={4}>
             <AlertIcon />
-            <AlertTitle>Error syncing activities</AlertTitle>
-            <AlertDescription>{syncError}</AlertDescription>
+            <Text>Error syncing activities: {syncError}</Text>
           </Alert>
         )}
         
-        {activityLoading ? (
+        {isLoading ? (
           <Center py={8}>
             <Spinner size="lg" />
           </Center>
@@ -171,10 +103,10 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
             <Button 
               mt={4} 
               size="sm" 
-              onClick={syncActivitiesFromPonder}
+              onClick={handleSync}
               colorScheme="teal"
             >
-              Sync Activities from Ponder
+              Sync Activities
             </Button>
           </Box>
         ) : (
@@ -191,9 +123,57 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
           <Heading as="h3" size="md" mb={4}>
             Signal History
           </Heading>
-          <SignalHistory signals={signals} isLoading={isLoading} />
+          <SignalHistory signals={signals} isLoading={signalsLoading} />
         </Box>
       )}
     </VStack>
+  );
+};
+
+// ActivityItem component
+const ActivityItem: React.FC<{ activity: any }> = ({ activity }) => {
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'success':
+        return 'green';
+      case 'pending':
+        return 'yellow';
+      case 'failed':
+        return 'red';
+      default:
+        return 'gray';
+    }
+  };
+
+  const formatTimestamp = (timestamp: string | number) => {
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    } catch {
+      return 'Unknown time';
+    }
+  };
+
+  return (
+    <Box p={4} borderWidth="1px" borderRadius="md" shadow="sm">
+      <HStack spacing={3} align="start">
+        <Box>
+          <Text fontWeight="bold">{activity.event_type}</Text>
+          <Text fontSize="sm" color="gray.500">{formatTimestamp(activity.timestamp)}</Text>
+          <Text mt={2}>{activity.description || activity.content}</Text>
+          {activity.transactionHash && (
+            <Text fontSize="sm" color="blue.500" mt={1}>
+              <a 
+                href={`https://etherscan.io/tx/${activity.transactionHash}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                View Transaction
+              </a>
+            </Text>
+          )}
+        </Box>
+      </HStack>
+    </Box>
   );
 };

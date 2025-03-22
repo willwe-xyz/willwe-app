@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAccount } from 'wagmi';
+
+// Environment variable for the Ponder API server URL with fallback to empty string (resolved at build time)
+const PONDER_SERVER_URL = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || '';
 
 /**
  * Hook to fetch and interact with data indexed by Ponder
@@ -6,6 +10,24 @@ import { useState, useEffect, useCallback } from 'react';
 export function usePonderData() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  
+  // Get user address from wallet
+  const { address } = useAccount();
+
+  /**
+   * Helper function to build full API URLs
+   */
+  const apiUrl = useCallback((endpoint: string) => {
+    // If endpoint already starts with http, assume it's a complete URL
+    if (endpoint.startsWith('http')) {
+      return endpoint;
+    }
+    
+    // Ensure endpoint starts with a slash
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    
+    return `${PONDER_SERVER_URL}${normalizedEndpoint}`;
+  }, []);
 
   /**
    * Fetch membranes for a specific node
@@ -17,153 +39,167 @@ export function usePonderData() {
     setError(null);
     
     try {
-      const response = await fetch(`/api/ponder/membranes?nodeId=${nodeId}`);
+      // Use node/:nodeId directly as shown in server implementation
+      const response = await fetch(apiUrl(`/node/${nodeId}`));
       if (!response.ok) {
         throw new Error(`Error fetching membranes: ${response.statusText}`);
       }
       const data = await response.json();
       setIsLoading(false);
-      return data;
+      
+      // Return the membranes from the response data
+      return data.node?.membrane || [];
     } catch (err) {
       console.error('Error fetching node membranes:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
    * Fetch all membranes
    */
-  const getAllMembranes = useCallback(async () => {
+  const getAllMembranes = useCallback(async (networkId: string) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch('/api/ponder/membranes');
+      const response = await fetch(apiUrl(`/membranes?networkId=${networkId}`));
       if (!response.ok) {
         throw new Error(`Error fetching membranes: ${response.statusText}`);
       }
       const data = await response.json();
       setIsLoading(false);
-      return data;
+      return data.membranes || [];
     } catch (err) {
       console.error('Error fetching all membranes:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
    * Fetch movements for a specific node
    */
-  const getNodeMovements = useCallback(async (nodeId: string) => {
+  const getNodeMovements = useCallback(async (nodeId: string, networkId: string) => {
     if (!nodeId) return [];
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/ponder/movements?nodeId=${encodeURIComponent(nodeId)}`);
+      const response = await fetch(apiUrl(`/movements?nodeId=${encodeURIComponent(nodeId)}&networkId=${networkId}`));
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
         throw new Error(`Error fetching movements: ${errorData.error || response.statusText}`);
       }
       const data = await response.json();
-      if (!Array.isArray(data)) {
-        throw new Error('Invalid response format: expected an array of movements');
+      if (!data.movements) {
+        throw new Error('Invalid response format: expected movements property');
       }
       setIsLoading(false);
-      return data;
+      return data.movements;
     } catch (err) {
       console.error('Error fetching node movements:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
    * Fetch signatures for a specific movement
    */
-  const getMovementSignatures = useCallback(async (movementId: string) => {
+  const getMovementSignatures = useCallback(async (movementId: string, networkId: string) => {
     if (!movementId) return [];
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/ponder/signatures?movementId=${movementId}`);
+      // Get the signatures from the movements endpoint - they're included in the response
+      const response = await fetch(apiUrl(`/movements?movementId=${movementId}&networkId=${networkId}`));
       if (!response.ok) {
         throw new Error(`Error fetching signatures: ${response.statusText}`);
       }
       const data = await response.json();
+      
+      // Extract signatures from the movement's signature queue
+      const movement = data.movements?.[0];
+      if (!movement || !movement.signatureQueues) {
+        return [];
+      }
+      
+      // Flatten signatures from all queues
+      const signatures = movement.signatureQueues.flatMap(queue => queue.signatures || []);
+      
       setIsLoading(false);
-      return data;
+      return signatures;
     } catch (err) {
       console.error('Error fetching movement signatures:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
    * Fetch activity logs for a specific node
    */
-  const getNodeActivityLogs = useCallback(async (nodeId: string, limit = 50) => {
+  const getNodeActivityLogs = useCallback(async (nodeId: string, networkId: string, limit = 50) => {
     if (!nodeId) return [];
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/ponder/activity-logs?nodeId=${nodeId}&limit=${limit}`);
+      const response = await fetch(apiUrl(`/events?nodeId=${nodeId}&limit=${limit}&networkId=${networkId}`));
       if (!response.ok) {
         throw new Error(`Error fetching activity logs: ${response.statusText}`);
       }
       const data = await response.json();
       setIsLoading(false);
-      return data.map(log => ({
-        ...log,
-        data: JSON.parse(log.data || '{}')
-      }));
+      return data.events || [];
     } catch (err) {
       console.error('Error fetching node activity logs:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
    * Fetch activity logs for a specific user
    */
-  const getUserActivityLogs = useCallback(async (userAddress: string, limit = 50) => {
+  const getUserActivityLogs = useCallback(async (userAddress: string, networkId: string, limit = 50) => {
     if (!userAddress) return [];
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/ponder/activity-logs?userAddress=${userAddress}&limit=${limit}`);
+      // Use direct user/:address endpoint as shown in server implementation
+      const response = await fetch(apiUrl(`/user/${userAddress.toLowerCase()}?limit=${limit}&networkId=${networkId}`));
+      
       if (!response.ok) {
+        console.error(`Error response status: ${response.status} ${response.statusText}`);
         throw new Error(`Error fetching activity logs: ${response.statusText}`);
       }
+      
       const data = await response.json();
       setIsLoading(false);
-      return data.map(log => ({
-        ...log,
-        data: JSON.parse(log.data || '{}')
-      }));
+      
+      // Combine events and signals
+      return [...(data.events || []), ...(data.signals || [])];
     } catch (err) {
       console.error('Error fetching user activity logs:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
    * Fetch chat messages for a specific node
@@ -175,77 +211,165 @@ export function usePonderData() {
     setError(null);
     
     try {
+      // Use correct chat endpoint
+      const response = await fetch(apiUrl(`/chat/messages?nodeId=${nodeId}&limit=${limit}`));
       
-      const response = await fetch(`/api/ponder/chat-messages?nodeId=${nodeId}&limit=${limit}`);
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Error response from server: ${errorText}`);
         throw new Error(`Error fetching chat messages: ${response.statusText}`);
       }
       
       const data = await response.json();
-      
       setIsLoading(false);
-      return data;
+      
+      // Return messages from the response
+      return data.messages || [];
     } catch (err) {
       console.error('Error fetching node chat messages:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
+      
+      // Try falling back to localStorage if server fails
+      try {
+        if (typeof window !== 'undefined') {
+          const storageKey = `chat_messages_${nodeId}`;
+          const existingMessagesJSON = localStorage.getItem(storageKey);
+          
+          if (existingMessagesJSON) {
+            return JSON.parse(existingMessagesJSON);
+          }
+        }
+      } catch (localError) {
+        console.warn('Error fetching messages from localStorage fallback:', localError);
+      }
+      
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
    * Send a chat message for a specific node
    */
-  const sendChatMessage = useCallback(async (nodeId: string, sender: string, content: string) => {
+  const sendChatMessage = useCallback(async (nodeId: string, content: string, networkId: string) => {
+    if (!nodeId || !content || !address) {
+      throw new Error('Missing required parameters: nodeId, content, or sender address');
+    }
+    
+
     setIsLoading(true);
     setError(null);
     
     try {
-      console.log(`Sending chat message for node ${nodeId} from ${sender}`);
+      const messageData = {
+        nodeId,
+        sender: address,
+        content,
+        networkId
+      };
       
-      const response = await fetch('/api/ponder/chat-messages', {
+      // Send message to the server API with correct endpoint
+      const response = await fetch(apiUrl('/chat/messages'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ nodeId, sender, content }),
+        body: JSON.stringify(messageData),
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Error response from server: ${errorText}`);
         throw new Error(`Error sending chat message: ${response.statusText}`);
       }
       
       const data = await response.json();
-      console.log('Chat message sent successfully:', data);
-      
       setIsLoading(false);
-      return data;
+      return data.message;
     } catch (err) {
       console.error('Error sending chat message:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
+      
+      // Try storing in localStorage as fallback if server fails
+      try {
+        if (typeof window !== 'undefined') {
+          const storageKey = `chat_messages_${nodeId}`;
+          const existingMessagesJSON = localStorage.getItem(storageKey) || '[]';
+          const existingMessages = JSON.parse(existingMessagesJSON);
+          
+          const newMessage = {
+            id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            nodeId,
+            sender: address,
+            content,
+            timestamp: Date.now(),
+            networkId
+          };
+          
+          const updatedMessages = [...existingMessages, newMessage];
+          localStorage.setItem(storageKey, JSON.stringify(updatedMessages));
+          
+          return newMessage;
+        }
+      } catch (localError) {
+        console.warn('Error storing message in localStorage fallback:', localError);
+      }
+      
       throw err;
     }
-  }, []);
+  }, [apiUrl, address]);
 
   /**
-   * Store a movement signature
+   * Validate chat message content
    */
-  const storeMovementSignature = useCallback(async (signatureData: any) => {
-    setIsLoading(true);
-    setError(null);
-    
+  const validateChatMessage = useCallback(async (content: string) => {
     try {
-      const response = await fetch('/api/ponder/signatures', {
+      const response = await fetch(apiUrl('/chat/validate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(signatureData),
+        body: JSON.stringify({ content }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error validating message: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (err) {
+      console.error('Error validating chat message:', err);
+      
+      // Fall back to client-side validation if server is unavailable
+      return {
+        isValid: content.trim().length > 0 && content.length <= 1000,
+        validations: {
+          tooLong: content.length > 1000,
+          isEmpty: content.trim().length === 0,
+          hasInvalidChars: /[\u0000-\u001F]/.test(content)
+        },
+        content
+      };
+    }
+  }, [apiUrl]);
+
+  /**
+   * Submit a signature for a node or movement
+   */
+  const storeMovementSignature = useCallback(async (signatureData: any, networkId: string) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const dataWithNetwork = {
+        ...signatureData,
+        networkId
+      };
+      
+      // Use events/signature endpoint as shown in server implementation
+      const response = await fetch(apiUrl('/events/signature'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dataWithNetwork),
       });
       
       if (!response.ok) {
@@ -261,96 +385,35 @@ export function usePonderData() {
       setIsLoading(false);
       return null;
     }
-  }, []);
+  }, [apiUrl]);
 
   /**
-   * Get user feed based on nodes they are members of or own tokens for
+   * Get user feed based on nodes they are members of
    */
-  const getUserFeed = useCallback(async (userAddress: string, limit = 50) => {
+  const getUserFeed = useCallback(async (userAddress: string, networkId: string, limit = 50) => {
+    if (!userAddress) return [];
+    
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/ponder/user-feed?userAddress=${userAddress}&limit=${limit}`);
+      // Use user/:address endpoint with includeNodes param as shown in server implementation
+      const response = await fetch(apiUrl(`/user/${userAddress.toLowerCase()}?includeNodes=true&limit=${limit}&networkId=${networkId}`));
       if (!response.ok) {
         throw new Error(`Error fetching user feed: ${response.statusText}`);
       }
       const data = await response.json();
       setIsLoading(false);
-      return data.map(log => ({
-        ...log,
-        data: JSON.parse(log.data || '{}')
-      }));
+      return data;
     } catch (err) {
       console.error('Error fetching user feed:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [apiUrl]);
 
-  /**
-   * Get user redistributive preferences
-   */
-  const getUserPreferences = useCallback(async (userAddress: string) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(`/api/ponder/user-preferences?userAddress=${userAddress}`);
-      if (!response.ok) {
-        throw new Error(`Error fetching user preferences: ${response.statusText}`);
-      }
-      const data = await response.json();
-      setIsLoading(false);
-      return {
-        ...data,
-        redistributive_preferences: JSON.parse(data.redistributive_preferences || '{}'),
-        supported_movements: JSON.parse(data.supported_movements || '[]')
-      };
-    } catch (err) {
-      console.error('Error fetching user preferences:', err);
-      setError(err instanceof Error ? err : new Error(String(err)));
-      setIsLoading(false);
-      return null;
-    }
-  }, []);
-
-  /**
-   * Update user redistributive preferences
-   */
-  const updateUserPreferences = useCallback(async (
-    userAddress: string, 
-    redistributivePreferences: any, 
-    supportedMovements: string[]
-  ) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('/api/ponder/user-preferences', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ userAddress, redistributivePreferences, supportedMovements }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error updating user preferences: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      setIsLoading(false);
-      return data;
-    } catch (err) {
-      console.error('Error updating user preferences:', err);
-      setError(err instanceof Error ? err : new Error(String(err)));
-      setIsLoading(false);
-      return null;
-    }
-  }, []);
-
+  // Return the hook functions
   return {
     isLoading,
     error,
@@ -362,9 +425,8 @@ export function usePonderData() {
     getUserActivityLogs,
     getNodeChatMessages,
     sendChatMessage,
+    validateChatMessage,
     storeMovementSignature,
-    getUserFeed,
-    getUserPreferences,
-    updateUserPreferences
+    getUserFeed
   };
 }

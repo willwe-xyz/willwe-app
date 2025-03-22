@@ -9,7 +9,8 @@ import {
   Spinner, 
   Button, 
   HStack,
-  useColorModeValue
+  useColorModeValue,
+  Tooltip
 } from '@chakra-ui/react';
 import { 
   Activity, 
@@ -31,32 +32,67 @@ import {
   ArrowLeftRight,
   Repeat
 } from 'lucide-react';
-import { formatDistance } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ActivityItem } from '../../types/activity';
+import { usePonderData } from '../../hooks/usePonderData';
 
 interface ActivityFeedProps {
-  activities: ActivityItem[];
-  isLoading?: boolean;
-  error?: Error | string | null;
-  onRefresh?: () => void;
+  nodeId?: string;
   selectedToken?: string;
   emptyStateMessage?: string;
 }
 
 export function ActivityFeed({
-  activities = [],
-  isLoading = false,
-  error = null,
-  onRefresh,
+  nodeId,
   selectedToken,
   emptyStateMessage = "No activities to display"
 }: ActivityFeedProps) {
+  const { getUserActivities, getNodeActivities, isLoading, error, syncActivities } = usePonderData();
+  const [activities, setActivities] = React.useState<ActivityItem[]>([]);
+  const [syncLoading, setSyncLoading] = React.useState(false);
+
   // Theme colors
   const bgColor = useColorModeValue('gray.50', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const textColor = useColorModeValue('gray.600', 'gray.400');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
   const emptyStateBg = useColorModeValue('gray.50', 'gray.700');
+
+  const fetchActivities = React.useCallback(async () => {
+    try {
+      let data;
+      if (nodeId) {
+        data = await getNodeActivities(nodeId);
+      } else if (selectedToken) {
+        data = await getUserActivities(selectedToken);
+      }
+      if (data) {
+        setActivities(data);
+      }
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+    }
+  }, [nodeId, selectedToken, getNodeActivities, getUserActivities]);
+
+  React.useEffect(() => {
+    fetchActivities();
+  }, [fetchActivities]);
+
+  const handleSync = async () => {
+    setSyncLoading(true);
+    try {
+      if (nodeId) {
+        await syncActivities(nodeId);
+      } else if (selectedToken) {
+        await syncActivities(selectedToken);
+      }
+      await fetchActivities();
+    } catch (error) {
+      console.error('Error syncing activities:', error);
+    } finally {
+      setSyncLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -117,7 +153,6 @@ export function ActivityFeed({
       return [];
     }
     
-    // Convert string timestamps to Date objects for sorting
     return [...activities].sort((a, b) => {
       const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
       const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -154,18 +189,16 @@ export function ActivityFeed({
       >
         <VStack spacing={4} align="center">
           <Text color="red.500" fontWeight="medium">
-            Error loading activities: {typeof error === 'string' ? error : error.message}
+            Error loading activities: {error instanceof Error ? error.message : String(error)}
           </Text>
-          {onRefresh && (
-            <Button
-              leftIcon={<RefreshCw size={16} />}
-              onClick={onRefresh}
-              colorScheme="purple"
-              size="sm"
-            >
-              Retry
-            </Button>
-          )}
+          <Button
+            leftIcon={<RefreshCw size={16} />}
+            onClick={fetchActivities}
+            colorScheme="purple"
+            size="sm"
+          >
+            Retry
+          </Button>
         </VStack>
       </Box>
     );
@@ -188,66 +221,103 @@ export function ActivityFeed({
         <Text color={textColor} mb={4} textAlign="center">
           {emptyStateMessage}
         </Text>
-        {onRefresh && (
+        <HStack spacing={2}>
           <Button
             leftIcon={<RefreshCw size={16} />}
-            onClick={onRefresh}
+            onClick={fetchActivities}
             colorScheme="purple"
             size="sm"
           >
             Refresh
           </Button>
-        )}
+          <Button
+            leftIcon={<RefreshCw size={16} />}
+            onClick={handleSync}
+            colorScheme="teal"
+            size="sm"
+            isLoading={syncLoading}
+          >
+            Sync
+          </Button>
+        </HStack>
       </Box>
     );
   }
 
   return (
     <VStack spacing={0} align="stretch" bg={bgColor} borderRadius="xl" border="1px solid" borderColor={borderColor} overflow="hidden">
-      {sortedActivities.map((activity, index) => (
-        <Box
-          key={activity.id || index}
-          p={4}
-          borderBottom={index < sortedActivities.length - 1 ? "1px solid" : "none"}
-          borderColor={borderColor}
-          _hover={{ bg: hoverBg }}
-          transition="background-color 0.2s"
-        >
-          <HStack spacing={4} align="flex-start">
-            <Box
-              p={2}
-              borderRadius="full"
-              bg={`${getStatusColor(activity.status || 'success')}.100`}
-              color={`${getStatusColor(activity.status || 'success')}.500`}
+      <Box p={4} borderBottom="1px solid" borderColor={borderColor}>
+        <HStack justify="space-between">
+          <Text fontSize="lg" fontWeight="bold">Activity Feed</Text>
+          <HStack spacing={2}>
+            <Button
+              size="sm"
+              leftIcon={<RefreshCw size={16} />}
+              onClick={fetchActivities}
+              variant="ghost"
             >
-              {getActivityIcon(activity.type)}
-            </Box>
-            <VStack align="start" spacing={1} flex={1}>
-              <Text fontWeight="medium">{activity.description}</Text>
-              <HStack spacing={2}>
-                <Badge colorScheme={getStatusColor(activity.status || 'success')} variant="subtle">
-                  {activity.status || 'success'}
-                </Badge>
-                {activity.timestamp && (
-                  <Text fontSize="sm" color={textColor}>
-                    {formatDistance(new Date(activity.timestamp), new Date(), { addSuffix: true })}
-                  </Text>
-                )}
-                {activity.nodeId && (
-                  <Badge colorScheme="purple" variant="outline">
-                    Node {activity.nodeId}
-                  </Badge>
-                )}
-                {activity.eventType && (
-                  <Badge colorScheme="blue" variant="outline">
-                    {activity.eventType}
-                  </Badge>
-                )}
-              </HStack>
-            </VStack>
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              leftIcon={<RefreshCw size={16} />}
+              onClick={handleSync}
+              isLoading={syncLoading}
+              colorScheme="teal"
+              variant="ghost"
+            >
+              Sync
+            </Button>
           </HStack>
-        </Box>
-      ))}
+        </HStack>
+      </Box>
+
+      <VStack spacing={0} align="stretch" maxH="600px" overflowY="auto">
+        {sortedActivities.map((activity, index) => (
+          <Box
+            key={activity.id || index}
+            p={4}
+            borderBottom={index < sortedActivities.length - 1 ? "1px solid" : "none"}
+            borderColor={borderColor}
+            _hover={{ bg: hoverBg }}
+            transition="background-color 0.2s"
+          >
+            <HStack spacing={4} align="flex-start">
+              <Box
+                p={2}
+                borderRadius="full"
+                bg={`${getStatusColor(activity.status || 'success')}.100`}
+                color={`${getStatusColor(activity.status || 'success')}.500`}
+              >
+                {getActivityIcon(activity.type)}
+              </Box>
+              <VStack align="start" spacing={1} flex={1}>
+                <Text fontWeight="medium">{activity.description}</Text>
+                <HStack spacing={2} flexWrap="wrap">
+                  <Badge colorScheme={getStatusColor(activity.status || 'success')} variant="subtle">
+                    {activity.status || 'success'}
+                  </Badge>
+                  {activity.timestamp && (
+                    <Text fontSize="sm" color={textColor}>
+                      {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                    </Text>
+                  )}
+                  {activity.nodeId && (
+                    <Badge colorScheme="purple" variant="outline">
+                      Node {activity.nodeId}
+                    </Badge>
+                  )}
+                  {activity.type && (
+                    <Badge colorScheme="blue" variant="outline">
+                      {activity.type}
+                    </Badge>
+                  )}
+                </HStack>
+              </VStack>
+            </HStack>
+          </Box>
+        ))}
+      </VStack>
     </VStack>
   );
 }
