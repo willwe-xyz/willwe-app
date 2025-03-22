@@ -12,17 +12,17 @@ import {
   Badge,
   HStack,
   Tabs, TabList, TabPanels, Tab, TabPanel,
-  ButtonGroup,
-  IconButton,
-  Tooltip,
+  Container,
   Divider,
+  Flex,
+  Heading,
+  Spacer,
 } from "@chakra-ui/react";
 import { usePrivy } from '@privy-io/react-auth';
 import { useNodeData } from '../hooks/useNodeData';
 import { NodeOperations } from './Node/NodeOperations';
 import SignalForm from './Node/SignalForm/index';
 import NodeInfo from './Node/NodeInfo';
-import { SignalHistory } from './Node/SignalHistory';
 import { Movements } from './Node/Movements';
 import { ActivitySection } from './Node/ActivitySection';
 import NodeChat from './NodeChat';
@@ -40,6 +40,7 @@ import {
   ArrowRight,
   GitBranch,
   Monitor,
+  Info,
 } from 'lucide-react';
 import { nodeIdToAddress } from '../utils/formatters';
 
@@ -62,76 +63,114 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
-  const permissionsBg = useColorModeValue('gray.50', 'gray.900');
+  const headerBg = useColorModeValue('gray.50', 'gray.900');
   
   const refetch = useCallback(() => {
     fetchNodeData();
   }, [fetchNodeData]);
 
-  console.log('NodeData:', nodeData);
-  // Add check for endpoint
+  // Check if node is an endpoint
   const isEndpoint = nodeData?.basicInfo && 
-    nodeData.rootPath[0].slice(0, 12) !== nodeData.basicInfo[0].slice(0, 12); // root node id
+    nodeData.rootPath[0].slice(0, 12) !== nodeData.basicInfo[0].slice(0, 12);
 
+  // Loading state
   if (isLoading) {
     return (
-      <VStack spacing={4} align="stretch" p={6}>
-        <Skeleton height="60px" />
-        <Skeleton height="200px" />
-        <Skeleton height="100px" />
-      </VStack>
+      <Box p={6}>
+        <VStack spacing={4} align="stretch">
+          <Skeleton height="60px" borderRadius="md" />
+          <Skeleton height="40px" borderRadius="md" />
+          <Skeleton height="200px" borderRadius="md" />
+          <Skeleton height="100px" borderRadius="md" />
+        </VStack>
+      </Box>
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <Alert status="error">
-        <AlertIcon />
-        <Text>Error loading node data: {error.message || 'Unknown error'}</Text>
-      </Alert>
+      <Box p={6}>
+        <Alert status="error" borderRadius="md">
+          <AlertIcon />
+          <Text>Error loading node data: {error.message || 'Unknown error'}</Text>
+        </Alert>
+      </Box>
     );
   }
 
+  // No data state
   if (!nodeData?.basicInfo) {
     return (
-      <Alert status="warning">
-        <AlertIcon />
-        <Text>No data available for this node</Text>
-      </Alert>
+      <Box p={6}>
+        <Alert status="warning" borderRadius="md">
+          <AlertIcon />
+          <Text>No data available for this node</Text>
+        </Alert>
+      </Box>
     );
   }
 
-  return (
-    <Box
-      borderRadius="xl"
-      bg={bgColor}
-      border="1px solid"
-      borderColor={borderColor}
-      overflow="hidden"
-      maxHeight="calc(100vh - 200px)"
-      display="flex"
-      flexDirection="column"
-      shadow="md"
-    >
-      <Box 
-        borderBottom="1px solid" 
-        borderColor={borderColor}
-        bg={useColorModeValue('gray.50', 'gray.900')}
-        p={6}
-        position="sticky"
-        top={0}
-        zIndex={1}
-      >
-        <NodeInfo 
-          node={nodeData} 
-          chainId={chainId}
-        />
+  // Main content - Endpoint view
+  if (isEndpoint) {
+    return (
+      <Box p={6}>
+        <Box
+          borderRadius="lg"
+          bg={bgColor}
+          borderWidth="1px"
+          borderColor={borderColor}
+          overflow="hidden"
+          shadow="sm"
+        >
+          <Box 
+            p={6}
+            bg={headerBg}
+            borderBottomWidth="1px"
+            borderColor={borderColor}
+          >
+            <NodeInfo node={nodeData} chainId={chainId} />
+          </Box>
+          
+          <Box p={6}>
+            <EndpointComponent 
+              parentNodeId={nodeData.rootPath[nodeData.rootPath.length - 1]} 
+              chainId={chainId} 
+              nodeData={nodeData} 
+              userAddress={user?.wallet?.address} 
+            />
+          </Box>
+        </Box>
       </Box>
+    );
+  }
 
-      {isEndpoint ? (
-        <EndpointComponent parentNodeId={nodeData.rootPath[nodeData.rootPath.length - 1]} chainId={chainId} nodeData={nodeData} userAddress={user?.wallet?.address} />
-      ) : (
-        <>
+  // Main content - Regular node view
+  return (
+    <Box p={6}>
+      <Box
+        borderRadius="lg"
+        bg={bgColor}
+        borderWidth="1px"
+        borderColor={borderColor}
+        shadow="sm"
+      >
+        {/* Node header with basic info */}
+        <Box 
+          p={6}
+          bg={headerBg}
+          borderBottomWidth="1px"
+          borderColor={borderColor}
+        >
+          <NodeInfo node={nodeData} chainId={chainId} />
+        </Box>
+        
+        {/* Node operations toolbar */}
+        <Box 
+          borderBottomWidth="1px"
+          borderColor={borderColor}
+          bg={headerBg}
+        >
           <NodeOperations
             nodeId={nodeId}
             chainId={chainId}
@@ -142,103 +181,116 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             isOpen={isOpen}
             onClose={onClose}
           />
+        </Box>
+        
+        {/* Main tab navigation */}
+        <Tabs
+          variant="enclosed-colored"
+          colorScheme="blue"
+          isFitted
+          isLazy
+          className="tabs"
+        >
+          <TabList
+            px={6}
+            pt={2}
+            borderBottomColor={borderColor}
+            bg={headerBg}
+          >
+            <Tab><HStack spacing={2}><ArrowUpDown size={16} /><Text>Signal</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><ArrowRight size={16} /><Text>Moves</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><Activity size={16} /><Text>Activity</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><MessageCircle size={16} /><Text>Chat</Text></HStack></Tab>
+            <Tab><HStack spacing={2}><Monitor size={16} /><Text>Endpoint</Text></HStack></Tab>
+          </TabList>
 
-          <Box flex="1" overflow="auto">
-            <Tabs 
-              className="tabs"
-              sx={{
-                '.chakra-tabs__tab-panel': {
-                  p: 0
-                }
-              }}
-            >
-              <TabList 
-                px={6} 
-                borderBottomColor={borderColor}
-                bg={useColorModeValue('gray.50', 'gray.900')}
-              >
-                <Tab><HStack spacing={2}><ArrowUpDown size={14} /><Text>Signal</Text></HStack></Tab>
-                <Tab><HStack spacing={2}><ArrowRight size={14} /><Text>Moves</Text></HStack></Tab>
-                <Tab><HStack spacing={2}><Activity size={14} /><Text>Activity</Text></HStack></Tab>
-                <Tab><HStack spacing={2}><MessageCircle size={14} /><Text>Chat</Text></HStack></Tab>
-                <Tab><HStack spacing={2}><Monitor size={14} /><Text>Endpoint</Text></HStack></Tab>
-              </TabList>
+          <TabPanels>
+            {/* Signal tab */}
+            <TabPanel p={6}>
+              <Box>
+                <SignalForm
+                  chainId={cleanChainId}
+                  nodeId={nodeId}
+                  parentNodeData={nodeData}
+                  onSuccess={refetch}
+                />
+              </Box>
+            </TabPanel>
 
-              <TabPanels>
-                <TabPanel p={6}>
-                  <VStack align="stretch" spacing={8} maxW="900px" mx="auto">
-                    {nodeData?.basicInfo && (
-                      <>
-                        <SignalForm
-                          chainId={cleanChainId}
-                          nodeId={nodeId}
-                          parentNodeData={nodeData}
-                          onSuccess={refetch}
-                        />
-                       
-                      </>
-                    )}
-                  </VStack>
-                </TabPanel>
-
-                <TabPanel p={6}>
-                  <Box mx="auto">
-                    <MovementsErrorBoundary>
-                      <Movements nodeId={nodeData.basicInfo[0]} chainId={cleanChainId} nodeData={nodeData} userAddress={user?.wallet?.address || ethers.ZeroAddress} />
-                    </MovementsErrorBoundary>
-                  </Box>
-                </TabPanel>
-
-                <TabPanel p={6}>
-                  <Box maxW="900px" mx="auto">
-                  <ActivitySection 
-                    signals={nodeData.signals} 
-                    selectedTokenColor={selectedTokenColor}
-                    nodeId={nodeId}
+            {/* Movements tab */}
+            <TabPanel p={6}>
+              <Box>
+                <MovementsErrorBoundary>
+                  <Movements 
+                    nodeId={nodeData.basicInfo[0]} 
+                    chainId={cleanChainId} 
+                    nodeData={nodeData} 
+                    userAddress={user?.wallet?.address || ethers.ZeroAddress} 
                   />
+                </MovementsErrorBoundary>
+              </Box>
+            </TabPanel>
 
+            {/* Activity tab */}
+            <TabPanel p={6}>
+              <Box>
+                <ActivitySection 
+                  selectedTokenColor={selectedTokenColor}
+                  nodeId={nodeId}
+                />
+              </Box>
+            </TabPanel>
 
-                  </Box>
-                </TabPanel>
+            {/* Chat tab */}
+            <TabPanel p={6}>
+              <Box>
+                <NodeChat 
+                  nodeId={nodeId} 
+                  nodeData={nodeData} 
+                  chainId={chainId} 
+                  userAddress={user?.wallet?.address || ethers.ZeroAddress} 
+                />
+              </Box>
+            </TabPanel>
 
-                <TabPanel p={6}>
-                  <Box maxW="900px" mx="auto">
-                    <NodeChat nodeId={nodeId} nodeData={nodeData} chainId={chainId} userAddress={user?.wallet?.address || ethers.ZeroAddress} />
-                  </Box>
-                </TabPanel>
-
-                <TabPanel p={6}>
-                  <Box maxW="900px" mx="auto">
-                    <MyEndpoint nodeData={nodeData} chainId={chainId} userAddress={user?.wallet?.address || ethers.ZeroAddress} onSuccess={refetch} />
-                  </Box>
-                </TabPanel>
-              </TabPanels>
-            </Tabs>
-          </Box>
-
-          {user?.wallet?.address && (
-            <Box 
-              p={6} 
-              bg={permissionsBg}
-              borderTop="1px solid"
-              borderColor={borderColor}
-              position="sticky"
-              bottom={0}
-              zIndex={1}
-            >
-              <HStack justify="space-between" align="center">
-                <Text fontWeight="medium">Permissions</Text>
-                <HStack spacing={2} wrap="wrap">
-                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Mint</Badge>
-                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Burn</Badge>
-                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Signal</Badge>
-                  <Badge colorScheme="green" variant="subtle" px={3} py={1} borderRadius="full">Redistribute</Badge>
-                </HStack>
+            {/* Endpoint tab */}
+            <TabPanel p={6}>
+              <Box>
+                <MyEndpoint 
+                  nodeData={nodeData} 
+                  chainId={chainId} 
+                  userAddress={user?.wallet?.address || ethers.ZeroAddress} 
+                  onSuccess={refetch} 
+                />
+              </Box>
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+        
+        {/* Permissions footer */}
+        {user?.wallet?.address && (
+          <Box 
+            p={4}
+            borderTopWidth="1px"
+            borderColor={borderColor}
+            bg={headerBg}
+          >
+            <Flex align="center" wrap="wrap" gap={2}>
+              <HStack>
+                <Info size={14} />
+                <Text fontSize="sm" fontWeight="medium">Permissions:</Text>
               </HStack>
-            </Box>
-          )}
-        </>
-      )}
+              <Spacer display={["none", "block"]} />
+              <HStack spacing={2} flexWrap="wrap">
+                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Mint</Badge>
+                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Burn</Badge>
+                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Signal</Badge>
+                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Redistribute</Badge>
+              </HStack>
+            </Flex>
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 };

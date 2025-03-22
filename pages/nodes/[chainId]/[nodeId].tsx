@@ -49,7 +49,7 @@ const NodePage = () => {
 
   return (
     <MainLayout headerProps={headerProps}>
-      <Box flex={1} overflow="auto" bg="gray.50" p={6}>
+      <Box flex={1} bg="gray.50" p={0}>
         <NodeDetails
           chainId={chainId as string}
           nodeId={nodeId.toString()}

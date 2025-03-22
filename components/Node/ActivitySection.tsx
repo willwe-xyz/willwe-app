@@ -15,22 +15,16 @@ import {
   useColorModeValue
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
-import { SignalHistory } from './SignalHistory';
-import { UserSignal } from '../../types/chainData';
 import { usePonderData } from '../../hooks/usePonderData';
 // Using native date formatting instead of date-fns
 import { ActivityType } from '../../types/activity';
 
 interface ActivitySectionProps {
-  signals?: UserSignal[];
-  isLoading?: boolean;
   nodeId?: string;
   selectedTokenColor?: string;
 }
 
 export const ActivitySection: React.FC<ActivitySectionProps> = ({
-  signals = [],
-  isLoading: signalsLoading = false,
   nodeId,
   selectedTokenColor = 'blue.500'
 }) => {
@@ -109,15 +103,6 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
           </VStack>
         )}
       </Box>
-      
-      {signals && signals.length > 0 && (
-        <Box>
-          <Heading as="h3" size="md" mb={4}>
-            Signal History
-          </Heading>
-          <SignalHistory signals={signals} isLoading={signalsLoading} />
-        </Box>
-      )}
     </VStack>
   );
 };

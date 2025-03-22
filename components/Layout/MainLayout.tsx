@@ -51,7 +51,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
   }, [selectToken, router]);
 
   return (
-    <Box height="100vh" display="flex" flexDirection="column" overflow="hidden">
+    <Box height="100vh" display="flex" flexDirection="column">
       {/* Header */}
       {headerProps && <Header {...headerProps} />}
       
@@ -74,7 +74,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
       {/* Main Content */}
       <Box 
         flex={1} 
-        overflow="hidden"
+        overflow="auto"
         bg="gray.50"
       >
         {children}

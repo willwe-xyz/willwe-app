@@ -1,12 +1,7 @@
-/* Container styles */
-.container {
-  transition: all 0.2s ease-in-out;
-}
-
 /* Custom scrollbar styles */
 .tabs :global(*::-webkit-scrollbar) {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 .tabs :global(*::-webkit-scrollbar-track) {
@@ -15,7 +10,7 @@
 
 .tabs :global(*::-webkit-scrollbar-thumb) {
   background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 /* Dark mode scrollbar */
@@ -25,28 +20,21 @@
   }
 }
 
-/* Tab panel animations */
-.tabs :global(.chakra-tabs__tab-panel) {
-  transition: opacity 0.2s ease-in-out;
-}
-
-.tabs :global(.chakra-tabs__tab-panel[hidden]) {
-  opacity: 0;
-}
-
-.tabs :global(.chakra-tabs__tab-panel:not([hidden])) {
-  opacity: 1;
-}
-
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .container {
-    margin: 0;
-    border-radius: 0;
-  }
-  
   .tabs :global(.chakra-tabs__tablist) {
     overflow-x: auto;
     scrollbar-width: none;
+  }
+  
+  .tabs :global(.chakra-tabs__tablist::-webkit-scrollbar) {
+    display: none;
+  }
+  
+  .tabs :global(.chakra-tabs__tab) {
+    white-space: nowrap;
+    min-width: auto;
+    padding-left: 10px;
+    padding-right: 10px;
   }
 }
