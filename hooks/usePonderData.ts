@@ -11,8 +11,7 @@ export function usePonderData() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   
-  // Get user address from wallet
-  const { address } = useAccount();
+
 
   /**
    * Helper function to build full API URLs
@@ -250,7 +249,7 @@ export function usePonderData() {
    * Send a chat message for a specific node
    */
   const sendChatMessage = useCallback(async (nodeId: string, content: string, networkId: string) => {
-    if (!nodeId || !content || !address) {
+    if (!nodeId || !content) {
       throw new Error('Missing required parameters: nodeId, content, or sender address');
     }
     
