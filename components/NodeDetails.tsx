@@ -203,7 +203,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 
                 <TabPanel p={6}>
                   <Box maxW="900px" mx="auto">
-                    <NodeChat nodeId={nodeId} nodeData={nodeData} userAddress={user?.wallet?.address || ethers.ZeroAddress} />
+                    <NodeChat nodeId={nodeId} nodeData={nodeData} chainId={chainId} userAddress={user?.wallet?.address || ethers.ZeroAddress} />
                   </Box>
                 </TabPanel>
 

@@ -15,7 +15,6 @@ import {
 import { MainLayout } from '../components/Layout/MainLayout';
 import { RootNodeDetails } from '../components/RootNodeDetails';
 import { UserActivityFeed } from '../components/UserActivityFeed';
-import { useNode } from '../contexts/NodeContext';
 import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
 import { useState } from 'react';

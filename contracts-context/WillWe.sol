@@ -25,11 +25,11 @@ import {Fun} from "./Fun.sol";
 contract WillWe is Fun {
     constructor(address Execution, address Membrane) Fun(Execution, Membrane) {}
 
-    event MembershipMinted(uint256 indexed branchId, address indexed member);
-    event InflationMinted(uint256 indexed branchId, uint256 amount);
+    event MembershipMinted(uint256 indexed NodeId, address indexed member);
+    event InflationMinted(uint256 indexed NodeId, uint256 amount);
 
-    function spawnBranch(uint256 fid_) public virtual override returns (uint256 newID) {
-        newID = super.spawnBranch(fid_);
+    function spawnNode(uint256 fid_) public virtual override returns (uint256 newID) {
+        newID = super.spawnNode(fid_);
     }
 
     function mintMembership(uint256 fid_) public virtual override {

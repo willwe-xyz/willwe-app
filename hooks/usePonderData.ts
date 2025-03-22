@@ -248,7 +248,7 @@ export function usePonderData() {
   /**
    * Send a chat message for a specific node
    */
-  const sendChatMessage = useCallback(async (nodeId: string, content: string, networkId: string) => {
+  const sendChatMessage = useCallback(async (nodeId: string, userAddress: string, content: string, networkId: string) => {
     if (!nodeId || !content) {
       throw new Error('Missing required parameters: nodeId, content, or sender address');
     }
@@ -260,13 +260,17 @@ export function usePonderData() {
     try {
       const messageData = {
         nodeId,
-        sender: address,
+        userAddress,
         content,
         networkId
       };
       
       // Send message to the server API with correct endpoint
-      const response = await fetch(apiUrl('/chat/messages'), {
+      // Log the message data for debugging
+      console.log('Sending chat message data:', messageData);
+      
+      // Use fetch with our Next.js API endpoint (not directly to Ponder)
+      const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -275,36 +279,40 @@ export function usePonderData() {
       });
       
       if (!response.ok) {
-        throw new Error(`Error sending chat message: ${response.statusText}`);
+        const errorText = await response.text().catch(() => response.statusText);
+        console.error('Chat error response:', errorText);
+        throw new Error(`Error sending chat message: ${errorText}`);
       }
       
       const data = await response.json();
       setIsLoading(false);
-      return data.message;
+      
+      console.log('Message sent successfully:', data);
+      return data;
     } catch (err) {
       console.error('Error sending chat message:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       
-      // Try storing in localStorage as fallback if server fails
+      // Local storage fallback is removed since we're just using the Ponder server directly
+      console.log("Using Ponder server directly for chat messages");
+      
+      // For backwards compatibility, keep this stub
       try {
         if (typeof window !== 'undefined') {
-          const storageKey = `chat_messages_${nodeId}`;
-          const existingMessagesJSON = localStorage.getItem(storageKey) || '[]';
-          const existingMessages = JSON.parse(existingMessagesJSON);
-          
+          console.log("Local storage fallback is disabled"); 
           const newMessage = {
-            id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            id: `remote-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
             nodeId,
-            sender: address,
+            sender: userAddress,
             content,
             timestamp: Date.now(),
             networkId
           };
           
-          const updatedMessages = [...existingMessages, newMessage];
-          localStorage.setItem(storageKey, JSON.stringify(updatedMessages));
-          
+          // Don't actually modify localStorage, just log for debugging
+          console.log("Would have added message:", newMessage);
+          // Don't actually store in localStorage
           return newMessage;
         }
       } catch (localError) {
@@ -313,7 +321,7 @@ export function usePonderData() {
       
       throw err;
     }
-  }, [apiUrl, address]);
+  }, [apiUrl]);
 
   /**
    * Validate chat message content

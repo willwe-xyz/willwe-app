@@ -18,6 +18,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { formatDistanceToNow } from 'date-fns';
 import { NodeState } from '../types/chainData';
 import { usePonderData } from '@/hooks/usePonderData';
+import { limits } from 'chroma-js';
 
 interface NodeChatProps {
   nodeId: string;
@@ -56,7 +57,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     
     const fetchMessages = async () => {
       try {
-        const data = await getNodeChatMessages(nodeId, chainId);
+        const data = await getNodeChatMessages(nodeId, 200);
         const sortedMessages = data.sort((a: ChatMessage, b: ChatMessage) => 
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
@@ -103,8 +104,12 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     setIsSending(true);
     
     try {
-      const result = await sendChatMessage(nodeId, newMessage.trim());
-      setMessages(prev => [result, ...prev]);
+      const result = await sendChatMessage(nodeId, authenticatedAddress, newMessage.trim(), chainId);
+      console.log('Chat message result:', result);
+      
+      // Handle different response formats from the Ponder server
+      const messageToAdd = result.message || result;
+      setMessages(prev => [messageToAdd, ...prev]);
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);

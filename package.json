@@ -18,9 +18,7 @@
     "ponder:dev": "ponder dev",
     "ponder:build": "ponder build",
     "ponder:start": "ponder start",
-    "ponder:codegen": "ponder codegen",
-    "init-sqlite": "node scripts/init-sqlite.js",
-    "test-sqlite": "node scripts/test-sqlite.js"
+    "ponder:codegen": "ponder codegen"
   },
   "dependencies": {
     "@airstack/airstack-react": "^0.6.3",
@@ -71,8 +69,6 @@
     "react-force-graph-3d": "^1.24.3",
     "react-icons": "^5.2.1",
     "react-plotly.js": "^2.6.0",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
     "swr": "^2.2.5",
     "tailwind-scrollbar": "^3.1.0",
     "three": "^0.167.1",

@@ -54,6 +54,10 @@ contract Membranes is IMembrane {
     /// @inheritdoc IMembrane
     function gCheck(address who_, uint256 membraneID_) public view returns (bool s) {
         Membrane memory M = membraneById[membraneID_];
+        return _membershipInspect(M, who_);
+    }
+
+    function _membershipInspect(Membrane memory M, address who_) private view returns (bool s) {
         s = true;
         for (uint256 i = 0; i < M.tokens.length; i++) {
             if (M.tokens[i] == address(willWe)) {
@@ -76,6 +80,16 @@ contract Membranes is IMembrane {
 
             if (!s) break;
         }
+    }
+
+    function integrityCheck(uint256 nodeId) public view returns (bool s, uint256 i) {
+        address[] memory members = willWe.allMembersOf(nodeId);
+        Membrane memory M = membraneById[willWe.getMembraneOf(nodeId)];
+
+        for (i; i < members.length; i++) {
+            if (!_membershipInspect(M, members[i])) return (false, i);
+        }
+        return (true, i);
     }
 
     function getMembraneById(uint256 id_) public view returns (Membrane memory) {

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getDatabase, getNodeActivityLogs, getUserActivityLogs } from '../../../lib/ponder-client';
+import { getNodeActivityLogs, getUserActivityLogs } from '../../../lib/ponder-client';
 
 /**
  * API endpoint to get activities for a node or user
@@ -8,9 +8,6 @@ import { getDatabase, getNodeActivityLogs, getUserActivityLogs } from '../../../
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // Initialize the database if it's not already initialized
-    await getDatabase();
-    
     if (req.method === 'GET') {
       const { nodeId, userAddress, limit = '50', forceSync = 'false' } = req.query;
       const shouldForceSync = forceSync === 'true';
@@ -77,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({
           activities,
           debug: {
-            source: 'database',
+            source: 'ponder-remote',
             count: activities.length
           }
         });
@@ -148,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         activities,
         debug: {
-          source: 'database',
+          source: 'ponder-remote',
           count: activities.length
         }
       });

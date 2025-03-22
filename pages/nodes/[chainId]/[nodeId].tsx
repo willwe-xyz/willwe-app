@@ -6,7 +6,6 @@ import NodeDetails from '../../../components/NodeDetails';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { useColorManagement } from '../../../hooks/useColorManagement';
 import { usePrivy } from '@privy-io/react-auth';
-import { useNode } from '../../../contexts/NodeContext';
 import { useActivityFeed } from '../../../hooks/useActivityFeed';
 import { MainLayout } from '../../../components/Layout/MainLayout';
 
@@ -15,7 +14,6 @@ const NodePage = () => {
   const { colorState, cycleColors } = useColorManagement();
   const toast = useToast();
   const { user, ready, authenticated, logout, login } = usePrivy();
-  const { selectedToken, selectToken } = useNode();
   
   const { chainId, nodeId } = router.query;
 

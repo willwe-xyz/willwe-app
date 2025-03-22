@@ -19,8 +19,7 @@ import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from '../config/wagmi';
 import { TransactionProvider } from '../contexts/TransactionContext';
-import { NodeProvider } from '../contexts/NodeContext';
-import { ErrorBoundary } from '../components/ErrorBoundary';
+import { ErrorBoundary } from '../components/shared/ErrorBoundary';
 import { customTheme } from '../config/theme';
 
 // Create a client
@@ -34,9 +33,7 @@ function AppContent({ Component, pageProps }: AppProps) {
   return (
     <ErrorBoundary>
       <TransactionProvider>
-        <NodeProvider>
           <Component {...pageProps} />
-        </NodeProvider>
       </TransactionProvider>
     </ErrorBoundary>
   );

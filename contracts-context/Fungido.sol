@@ -6,7 +6,6 @@ import {ERC1155} from "solady/tokens/ERC1155.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/IExecution.sol";
-import {IWill} from "will/contracts/interfaces/IWill.sol";
 import {NodeState} from "./interfaces/IExecution.sol";
 import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 import {PureUtils} from "./components/PureUtils.sol";
@@ -73,14 +72,14 @@ contract Fungido is ERC1155, PureUtils {
 
     error BaseOrNonFungible();
     error AlreadyMember();
-    error BranchNotFound();
+    error NodeNotFound();
     error Unqualified();
     error MintE20TransferFailed();
     error BurnE20TransferFailed();
     error UnregisteredFungible();
     error EOA();
     error RootExists();
-    error BranchAlreadyExists();
+    error NodeAlreadyExists();
     error UnsupportedTransfer();
     error NotMember();
     error MembershipOp();
@@ -100,9 +99,14 @@ contract Fungido is ERC1155, PureUtils {
     //////________EVENTS________///////////////////
 
     event SelfControlAtAddress(address AgencyLocus);
-    event NewRootBranch(uint256 indexed rootBranchId);
-    event NewBranch(uint256 indexed newId, uint256 indexed parentId, address indexed creator);
-
+    event NewRootNode(uint256 indexed rootNodeId);
+    event NewNode(uint256 indexed newId, uint256 indexed parentId, address indexed creator);
+    event MemberRemoved(address indexed userAddress, uint256 indexed nodeId);
+    event Burned(address indexed fromAddressOrNode, uint256 indexed nodeId, uint256 amount);
+    event Minted(address indexed fromAddressOrNode, uint256 indexed nodeId, uint256 amount);
+    event SharesGenerated(uint256 indexed nodeId, uint256 amount);
+    event InflationRateChanged(uint256 indexed nodeId, uint256 oldInflationRate, uint256 newInflationRate);
+    event MembraneChanged(uint256 indexed nodeId, uint256 previousMembrane, uint256 newMembrane);
     ////////////////////////////////////////////////
     //////________MODIFIER________/////////////////
 
@@ -124,7 +128,7 @@ contract Fungido is ERC1155, PureUtils {
     //// @return address of agency of controling extremity
     function initSelfControl() external returns (address) {
         if (control[0] != address(0)) revert isControled();
-        control[0] = IExecution(executionAddress).createInitWillWeEndpoint(this.spawnBranch(toID(Will)));
+        control[0] = IExecution(executionAddress).createInitWillWeEndpoint(this.spawnNode(toID(Will)));
 
         M.setInitWillWe();
         emit SelfControlAtAddress(control[0]);
@@ -134,11 +138,11 @@ contract Fungido is ERC1155, PureUtils {
     ////////////////////////////////////////////////
     //////______EXTERNAL______/////////////////////
 
-    /// @notice spawns core branch for a token
+    /// @notice spawns core Node for a token
     /// @notice acts as port for token value
     /// @notice nests all token specific contexts
     /// @param fungible20_ address of ERC20 token
-    function spawnRootBranch(address fungible20_) public virtual returns (uint256 fID) {
+    function spawnRootNode(address fungible20_) public virtual returns (uint256 fID) {
         if (fungible20_.code.length == 0) revert EOA();
 
         fID = toID(fungible20_);
@@ -147,14 +151,14 @@ contract Fungido is ERC1155, PureUtils {
         _localizeNode(fID, fID);
         ++entityCount;
 
-        emit NewRootBranch(fID);
+        emit NewRootNode(fID);
     }
 
     /// @notice creates new context nested under a parent node id
     /// @notice agent spawning a new underlink needs to be a member in containing context
     /// @param fid_ context node id
-    function spawnBranch(uint256 fid_) public virtual returns (uint256 newID) {
-        if (parentOf[fid_] == 0) spawnRootBranch(toAddress(fid_));
+    function spawnNode(uint256 fid_) public virtual returns (uint256 newID) {
+        if (parentOf[fid_] == 0) spawnRootNode(toAddress(fid_));
         if (!isMember(_msgSender(), fid_) && (parentOf[fid_] != fid_)) revert NotMember();
         if (totalSupplyOf[fid_] == type(uint256).max) revert Endpoint();
 
@@ -165,16 +169,16 @@ contract Fungido is ERC1155, PureUtils {
         _localizeNode(newID, fid_);
         if (msg.sender != address(this)) _giveMembership(_msgSender(), newID);
 
-        emit NewBranch(newID, fid_, msg.sender);
+        emit NewNode(newID, fid_, msg.sender);
     }
-    /// @notice spawns branch with an enforceable membership mechanism and creates new membrane
+    /// @notice spawns Node with an enforceable membership mechanism and creates new membrane
     /// @param fid_ context (parent) node
     /// @param tokens_ array of token addresses for membrane conditions
     /// @param balances_ array of required balances for each token
     /// @param meta_ metadata string (e.g. IPFS hash) for membrane details
-    /// @param inflationRate_ rate for new branch token shares in gwei per second
+    /// @param inflationRate_ rate for new Node token shares in gwei per second
 
-    function spawnBranchWithMembrane(
+    function spawnNodeWithMembrane(
         uint256 fid_,
         address[] memory tokens_,
         uint256[] memory balances_,
@@ -182,16 +186,18 @@ contract Fungido is ERC1155, PureUtils {
         uint256 inflationRate_
     ) public virtual returns (uint256 newID) {
         uint256 membraneID = M.createMembrane(tokens_, balances_, meta_);
-        newID = spawnBranch(fid_);
+        newID = spawnNode(fid_);
         inUseMembraneId[newID][0] = membraneID;
         inUseMembraneId[newID][1] = block.timestamp;
         inflSec[newID][0] = inflationRate_ == 0 ? 1_000 gwei : inflationRate_ * 1 gwei;
+        emit MembraneChanged(newID, 0, membraneID);
+        emit InflationRateChanged(newID, 0, inflSec[newID][0]);
     }
 
     /// @notice mints membership to calling address if it satisfies membership conditions
     /// @param fid_ node for which to mint membership
     function mintMembership(uint256 fid_) public virtual {
-        if (parentOf[fid_] == 0) revert BranchNotFound();
+        if (parentOf[fid_] == 0) revert NodeNotFound();
         if (parentOf[fid_] == fid_) revert BaseOrNonFungible();
         if (totalSupplyOf[fid_] == type(uint256).max) revert Endpoint();
         if (isMember(_msgSender(), fid_)) revert AlreadyMember();
@@ -274,6 +280,7 @@ contract Fungido is ERC1155, PureUtils {
         fid_ = membershipID(fid_);
 
         if (s) _burn(target, fid_, 1);
+        emit MemberRemoved(target, fid_);
     }
 
     /// @notice mints the inflation of a specific context token
@@ -286,6 +293,7 @@ contract Fungido is ERC1155, PureUtils {
         inflSec[node][2] = block.timestamp;
 
         _mint(address(uint160(node)), node, amount, abi.encodePacked("inflation"));
+        emit SharesGenerated(node, amount);
     }
 
     function _giveMembership(address to, uint256 id) private {
@@ -305,7 +313,7 @@ contract Fungido is ERC1155, PureUtils {
     }
 
     function _localizeNode(uint256 newID, uint256 parentId) internal {
-        if (parentOf[newID] != 0) revert BranchAlreadyExists();
+        if (parentOf[newID] != 0) revert NodeAlreadyExists();
         parentOf[newID] = parentId;
         if (parentId != newID) {
             childrenOf[parentId].push(newID);
@@ -403,8 +411,8 @@ contract Fungido is ERC1155, PureUtils {
                 if (
                     !(
                         (msg.sig != this.mintMembership.selector) || (msg.sig != this.membershipEnforce.selector)
-                            || (msg.sig != this.spawnRootBranch.selector)
-                            || (msg.sig != this.spawnBranchWithMembrane.selector) || (msg.sig != this.spawnBranch.selector)
+                            || (msg.sig != this.spawnRootNode.selector) || (msg.sig != this.spawnNodeWithMembrane.selector)
+                            || (msg.sig != this.spawnNode.selector)
                     )
                 ) revert MembershipOp();
 
@@ -432,6 +440,7 @@ contract Fungido is ERC1155, PureUtils {
     function _mint(address to, uint256 id, uint256 amount, bytes memory data) internal override {
         super._mint(to, id, amount, data);
         totalSupplyOf[id] += amount;
+        emit Minted(to, id, amount);
     }
 
     function _burn(address from, uint256 id, uint256 amount) internal override {
@@ -444,6 +453,7 @@ contract Fungido is ERC1155, PureUtils {
         } else {
             super._burn(from, id, amount);
         }
+        emit Burned(from, id, amount);
     }
 
     function _msgSender() internal view virtual returns (address) {

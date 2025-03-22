@@ -9,12 +9,7 @@ export const ponderConfig = {
   /**
    * URL of the Ponder server
    */
-  serverUrl: process.env.PONDER_SERVER_URL || 'http://localhost:8080',
-  
-  /**
-   * Path to the local database
-   */
-  localDbPath: process.env.LOCAL_DB_PATH || './db/local.db'
+  serverUrl: process.env.PONDER_SERVER_URL || 'http://localhost:8080'
 };
 
 /**
