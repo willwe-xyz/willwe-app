@@ -21,11 +21,11 @@ export default function ActivityLog({ nodeId, userAddress, limit = 10 }: Activit
       try {
         let logs = [];
         if (view === 'node' && nodeId) {
-          logs = await getNodeActivityLogs(nodeId, limit);
+          logs = await getNodeActivityLogs(nodeId, '1', limit);
         } else if (view === 'user' && (userAddress || address)) {
-          logs = await getUserActivityLogs(userAddress || address as string, limit);
+          logs = await getUserActivityLogs(userAddress || address as string, '1', limit);
         } else if (view === 'feed' && address) {
-          logs = await getUserFeed(address, limit);
+          logs = await getUserFeed(address, '1', limit);
         }
         setActivityLogs(logs);
       } catch (err) {

@@ -30,6 +30,7 @@ export interface ActivityItem {
   data: any;
   timestamp: string;
   isUserFocused?: boolean;
+  status?: 'success' | 'pending' | 'failed';
 }
 
 /**

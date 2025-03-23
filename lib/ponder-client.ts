@@ -105,10 +105,9 @@ function formatActivityLog(log: any): ActivityLogEntry {
   };
 }
 
-// These functions are kept as no-ops to maintain API compatibility, but they no longer use local storage
+// These functions forward operations to the Ponder server
 export async function getDatabase(): Promise<any> {
-  console.log('SQLite database removed - using remote Ponder server only');
-  return null;
+  throw new Error('Direct database access not supported - use remote Ponder server APIs instead');
 }
 
 export async function storeActivityLog(
@@ -117,6 +116,32 @@ export async function storeActivityLog(
   eventType: string,
   data: any
 ): Promise<string> {
-  console.log('Local activity log storage removed - sending directly to Ponder server');
-  return `remote-${Date.now()}`;
+  const config = defaultConfig;
+  const endpoint = `${config.serverUrl}/api/activities`;
+  
+  try {
+    // Post activity to remote server
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        nodeId,
+        userAddress,
+        eventType,
+        data
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to store activity log: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result.id || `remote-${Date.now()}`;
+  } catch (error) {
+    console.error('Error storing activity log:', error);
+    return `error-${Date.now()}`;
+  }
 }

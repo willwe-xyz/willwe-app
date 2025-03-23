@@ -184,7 +184,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           'function allowance(address,address) view returns (uint256)',
           'function decimals() view returns (uint8)'
         ],
-        signer
+        signer as unknown as ethers.ContractRunner
       );
   
       const [currentAllowance, decimals] = await Promise.all([
@@ -621,7 +621,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                   'function allowance(address,address) view returns (uint256)',
                   'function decimals() view returns (uint8)'
                 ],
-                signer
+                signer as unknown as ethers.ContractRunner
               );
 
               const [currentAllowance, decimals] = await Promise.all([

@@ -14,6 +14,7 @@ interface TransactionContextType {
       successMessage?: string;
       errorMessage?: string;
       onSuccess?: () => void;
+      handleError?: (error: any) => string;
     }
   ) => Promise<void>;
 }
@@ -24,6 +25,7 @@ interface TransactionOptions {
   successMessage?: string;
   errorMessage?: string;
   onSuccess?: () => void;
+  handleError?: (error: any) => string;
 }
 
 export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -71,7 +73,9 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         // Execute transaction with gas estimate
         const tx = await transactionFn();
         
-        setCurrentHash(tx.hash);
+        // Get hash property from transaction, using type assertion for ethers v6 compatibility
+        const txHash = (tx as any).hash;
+        setCurrentHash(txHash);
 
         if (toastId) {
           toast.update(toastId, {
@@ -82,7 +86,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
 
         // Wait for confirmation with more blocks
-        const receipt = await provider.waitForTransaction(tx.hash, 2);
+        const receipt = await provider.waitForTransaction(txHash, 2);
 
         if (toastId) {
           toast.close(toastId);
@@ -115,6 +119,8 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         
         if (error?.message?.includes('user rejected')) {
           errorMessage = 'Transaction rejected by user';
+        } else if (options?.handleError) {
+          errorMessage = options.handleError(error);
         }
 
         setError(error instanceof Error ? error : new Error(errorMessage));

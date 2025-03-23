@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
 import { getRPCUrl } from '../config/contracts';
+import {NodeState} from '../types/chainData';
 
 interface WillWeContract extends ethers.BaseContract {
   totalSupply: (nodeId: string) => Promise<bigint>;

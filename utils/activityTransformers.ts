@@ -119,7 +119,7 @@ export function transformActivities(
     console.log(`Processing activity: ${activity.id}, type: ${activity.eventType || activity.event_type}, node: ${activity.nodeId || activity.node_id}`);
     
     // Get the event type - handle both camelCase and snake_case
-    const eventType = activity.event_type || activity.eventType;
+    const eventType = activity.event_type || activity.eventType || '';
     
     // Get the timestamp
     const timestamp = activity.timestamp;

@@ -513,7 +513,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
               <SignalSlider
                 nodeId={nodeId}
                 parentId={child.nodeId}
-                childId={child.nodeId}
                 value={sliderValues[child.nodeId]}
                 lastSignal={(child.currentSignal).toString()}
                 balance={child.eligibilityPerSecond}

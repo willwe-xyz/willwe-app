@@ -1,7 +1,10 @@
+// Note: ponder:registry import will be resolved at runtime
+// @ts-ignore - These imports are resolved by Ponder at runtime
 import { ponder } from "ponder:registry";
+// @ts-ignore - These imports are resolved by Ponder at runtime
 import { User, Node, ActivityLog } from "ponder:schema";
 
-ponder.on('WillWe:MembershipMinted', async ({ event, context }) => {
+ponder.on('WillWe:MembershipMinted', async ({ event, context }: { event: any, context: any }) => {
   const { branchId, member } = event.args;
   const { db } = context;
 

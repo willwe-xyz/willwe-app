@@ -64,9 +64,13 @@ export const DEFAULT_FORM_STATE: FormState = {
   }
 };
 
-export const validateFormField = (name: keyof FormState | string, value: string): boolean => {
+export const validateFormField = (name: keyof FormState | string, value: string | number | CIDObject | any): boolean => {
+  // Convert value to string for validation
+  const stringValue = typeof value === 'object' && value !== null && 'cid' in value
+    ? value.cid
+    : String(value);
   // Handle empty values appropriately
-  if (!value) {
+  if (!stringValue) {
     if (name === 'value' || name === 'amount') return true; // These default to 0
     return true; // Allow empty during editing
   }
@@ -75,14 +79,14 @@ export const validateFormField = (name: keyof FormState | string, value: string)
   switch (name) {
     case 'target':
     case 'to':
-      return /^0x[a-fA-F0-9]{40}$/.test(value);
+      return /^0x[a-fA-F0-9]{40}$/.test(stringValue);
     case 'calldata':
-      return /^0x([a-fA-F0-9]{8,})?$/.test(value); // Allow empty or valid calldata
+      return /^0x([a-fA-F0-9]{8,})?$/.test(stringValue); // Allow empty or valid calldata
     case 'value':
     case 'amount':
-      return !isNaN(Number(value));
+      return !isNaN(Number(stringValue));
     case 'description':
-      return value.length >= 10;
+      return stringValue.length >= 10;
     default:
       return true;
   }
@@ -99,7 +103,11 @@ export const validateFormForSubmission = (formData: FormState): Record<string, b
       ...baseValidation,
       target: true, // Token transfer target is always valid (root token)
       calldata: true, // Calldata is generated automatically
-      to: formData.params?.to ? /^0x[a-fA-F0-9]{40}$/.test(formData.params.to) : false
+      to: formData.params?.to ? /^0x[a-fA-F0-9]{40}$/.test(
+          typeof formData.params.to === 'object' && 'cid' in (formData.params.to || {}) 
+            ? (formData.params.to as {cid: string}).cid
+            : String(formData.params.to)
+        ) : false
     };
   }
 

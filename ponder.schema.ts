@@ -120,7 +120,7 @@ export const MovementSignatureRelations = relations(MovementSignature, ({ one })
 }));
 
 export const UserRelations = relations(User, ({ many }) => ({
-  preferences: many(UserPreference, { fields: [User.id], references: [UserPreference.userId] }),
+  preferences: many(UserPreference),
 }));
 
 export const ActivityLogRelations = relations(ActivityLog, ({ one }) => ({

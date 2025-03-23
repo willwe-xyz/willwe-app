@@ -11,14 +11,22 @@ export const fetchIPFSMetadata = async (cid: string): Promise<MembraneMetadata> 
     }
     const data = await response.json();
     return {
-      title: data.title || 'Untitled',
-      description: data.description
+      name: data.title || 'Untitled',
+      id: data.id || cid,
+      description: data.description,
+      characteristics: data.characteristics || [],
+      membershipConditions: data.membershipConditions || [],
+      createdAt: data.createdAt || new Date().toISOString()
     };
   } catch (error) {
     console.error('Error fetching IPFS metadata:', error);
     return {
-      title: 'Untitled',
-      description: 'No description available'
+      name: 'Untitled',
+      id: cid,
+      description: 'No description available',
+      characteristics: [],
+      membershipConditions: [],
+      createdAt: new Date().toISOString()
     };
   }
 };

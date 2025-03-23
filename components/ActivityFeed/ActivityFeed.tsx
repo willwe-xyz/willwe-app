@@ -40,16 +40,26 @@ interface ActivityFeedProps {
   nodeId?: string;
   selectedToken?: string;
   emptyStateMessage?: string;
+  activities?: ActivityItem[];
+  isLoading?: boolean;
+  error?: string | Error | null;
 }
 
 export function ActivityFeed({
   nodeId,
   selectedToken,
-  emptyStateMessage = "No activities to display"
+  emptyStateMessage = "No activities to display",
+  activities: externalActivities,
+  isLoading: externalIsLoading,
+  error: externalError
 }: ActivityFeedProps) {
-  const { getUserActivities, getNodeActivities, isLoading, error, syncActivities } = usePonderData();
-  const [activities, setActivities] = React.useState<ActivityItem[]>([]);
+  const { getNodeActivityLogs, getUserActivityLogs, isLoading: ponderIsLoading, error: ponderError } = usePonderData();
+  const [activities, setActivities] = React.useState<ActivityItem[]>(externalActivities || []);
   const [syncLoading, setSyncLoading] = React.useState(false);
+  
+  // Use external state if provided, otherwise use internal state
+  const isLoading = externalIsLoading !== undefined ? externalIsLoading : ponderIsLoading;
+  const error = externalError !== undefined ? externalError : ponderError;
 
   // Theme colors
   const bgColor = useColorModeValue('gray.50', 'gray.800');
@@ -61,31 +71,36 @@ export function ActivityFeed({
   const fetchActivities = React.useCallback(async () => {
     try {
       let data;
+      const networkId = '1'; // Using Ethereum mainnet as default
       if (nodeId) {
-        data = await getNodeActivities(nodeId);
+        data = await getNodeActivityLogs(nodeId, networkId);
       } else if (selectedToken) {
-        data = await getUserActivities(selectedToken);
+        data = await getUserActivityLogs(selectedToken, networkId);
       }
       if (data) {
-        setActivities(data);
+        // Transform the activity logs into ActivityItem format
+        import('../../utils/activityTransformers').then(({ transformActivities }) => {
+          const transformedActivities = transformActivities(data);
+          setActivities(transformedActivities);
+        });
       }
     } catch (error) {
       console.error('Error fetching activities:', error);
     }
-  }, [nodeId, selectedToken, getNodeActivities, getUserActivities]);
+  }, [nodeId, selectedToken, getNodeActivityLogs, getUserActivityLogs]);
 
   React.useEffect(() => {
-    fetchActivities();
-  }, [fetchActivities]);
+    if (externalActivities) {
+      setActivities(externalActivities);
+    } else {
+      fetchActivities();
+    }
+  }, [fetchActivities, externalActivities]);
 
   const handleSync = async () => {
     setSyncLoading(true);
     try {
-      if (nodeId) {
-        await syncActivities(nodeId);
-      } else if (selectedToken) {
-        await syncActivities(selectedToken);
-      }
+      // Directly fetch the latest activities instead of calling a sync function
       await fetchActivities();
     } catch (error) {
       console.error('Error syncing activities:', error);
@@ -286,16 +301,16 @@ export function ActivityFeed({
               <Box
                 p={2}
                 borderRadius="full"
-                bg={`${getStatusColor(activity.status || 'success')}.100`}
-                color={`${getStatusColor(activity.status || 'success')}.500`}
+                bg={`${getStatusColor('success')}.100`}
+                color={`${getStatusColor('success')}.500`}
               >
                 {getActivityIcon(activity.type)}
               </Box>
               <VStack align="start" spacing={1} flex={1}>
                 <Text fontWeight="medium">{activity.description}</Text>
                 <HStack spacing={2} flexWrap="wrap">
-                  <Badge colorScheme={getStatusColor(activity.status || 'success')} variant="subtle">
-                    {activity.status || 'success'}
+                  <Badge colorScheme={getStatusColor('success')} variant="subtle">
+                    success
                   </Badge>
                   {activity.timestamp && (
                     <Text fontSize="sm" color={textColor}>

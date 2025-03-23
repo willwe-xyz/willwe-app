@@ -18,6 +18,13 @@ interface UseMovementsState {
   isLoading: boolean;
 }
 
+interface TransactionOptions {
+  successMessage?: string;
+  errorMessage?: string;
+  onSuccess?: () => void;
+  handleError?: (error: any) => string;
+}
+
 export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps) => {
   const [state, setState] = useState<UseMovementsState>({
     movements: [],
@@ -48,14 +55,14 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
 
       // Process only valid movements
       const processedMovements = rawMovements
-        .filter(rm => {
+        .filter((rm: any) => {
           if (!rm || !rm.movement || !rm.signatureQueue) {
             console.warn('Invalid movement structure:', rm);
             return false;
           }
           return true;
         })
-        .map(rm => {
+        .map((rm: any) => {
           try {
             return processMovementData(rm);
           } catch (error) {
@@ -63,13 +70,13 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
             return null;
           }
         })
-        .filter(m => m !== null && m.signatureQueue.state !== SignatureQueueState.Stale);
+        .filter((m: any) => m !== null && m.signatureQueue.state !== SignatureQueueState.Stale);
 
       console.log('Processed movements:', processedMovements);
 
       // Calculate signature progress for each movement
       const signatureDetails = await Promise.all(
-        processedMovements.map(async (movement) => {
+        processedMovements.map(async (movement: LatentMovement) => {
           try {
             const willWeContract = new ethers.Contract(
               deployments.WillWe[chainId],
@@ -80,7 +87,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
             let currentPower = 0;
             let requiredPower = 0;
 
-// ...existing code...
             for (const signer of movement.signatureQueue.Signers) {
               // Skip zero addresses and their corresponding empty signatures
               if (signer === ethers.ZeroAddress) continue;
@@ -92,7 +98,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
                 currentPower += 1;
               }
             }
-// ...existing code...
 
             if (movement.movement.category === MovementType.EnergeticMajority) {
               const totalSupply = await willWeContract.totalSupply(movement.movement.viaNode);
@@ -131,7 +136,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
       console.error('Error fetching movement data:', error);
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [nodeId, chainId, chainId, ready, authenticated]);
+  }, [nodeId, chainId, ready, authenticated]);
 
   useEffect(() => {
     let mounted = true;
@@ -160,7 +165,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           const contract = new ethers.Contract(
             deployments.Execution[chainId],
             ABIs.Execution,
-            signer
+            signer as unknown as ethers.Signer
           );
           
           return contract.startMovement(
@@ -180,7 +185,13 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
             if (error?.code === 4001 || error?.message?.includes('User rejected')) {
               return 'Transaction was cancelled';
             }
-            return 'Failed to create movement. Please try again.';
+            if (error?.data?.message?.includes('EXE_InvalidMovement')) {
+              return 'Invalid movement parameters';
+            }
+            if (error?.data?.message?.includes('EXE_Unauthorized')) {
+              return 'Not authorized to create movement';
+            }
+            return `Failed to create movement: ${error?.message || 'Unknown error'}`;
           }
         }
       );
@@ -299,26 +310,20 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           const executionContract = new ethers.Contract(
             deployments.Execution[chainId],
             ABIs.Execution,
-            signer
+            signer as unknown as ethers.Signer
           );
           
           return executionContract.submitSignatures(
             movement.movementHash,
             signers,
             signatures,
-            { gasLimit: 500000 } // Add explicit gas limit for safety
+            { gasLimit: 5000000 }
           );
         },
         {
           successMessage: 'Movement signed successfully',
           onSuccess: fetchMovementData,
-          errorMessage: 'Failed to sign movement',
-          handleError: (error: any) => {
-            if (error?.code === 4001 || error?.message?.includes('User rejected')) {
-              return 'Transaction was cancelled';
-            }
-            return 'Failed to sign movement. Please try again.';
-          }
+          errorMessage: 'Failed to sign movement'
         }
       );
     } catch (error: any) {
@@ -356,7 +361,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           const executionContract = new ethers.Contract(
             deployments.Execution[chainId],
             ABIs.Execution,
-            signer
+            signer as unknown as ethers.Signer
           );
 
           console.log('Removing signature:', {
@@ -415,7 +420,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           const contract = new ethers.Contract(
             deployments.Execution[chainId],
             ABIs.Execution,
-            signer
+            signer as unknown as ethers.Signer
           );
 
           // Get the current nonce for the transaction
@@ -478,10 +483,10 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         state: Number(rawMovement.signatureQueue.state || 0),
         Action: rawMovement.signatureQueue.Action || movement,
         Signers: Array.isArray(rawMovement.signatureQueue.Signers)
-          ? rawMovement.signatureQueue.Signers.map(s => s?.toString() || ethers.ZeroAddress)
+          ? rawMovement.signatureQueue.Signers.map((s: any) => s?.toString() || ethers.ZeroAddress)
           : [],
         Sigs: Array.isArray(rawMovement.signatureQueue.Sigs)
-          ? rawMovement.signatureQueue.Sigs.map(s => s?.toString() || '0x')
+          ? rawMovement.signatureQueue.Sigs.map((s: any) => s?.toString() || '0x')
           : []
       },
       movementHash: rawMovement.movementHash

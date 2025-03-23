@@ -12,7 +12,8 @@ async function fetchIPFSData(cid: string): Promise<MembraneMetadata | null> {
       name: data?.name || '',
       id: data?.id || '',
       characteristics: Array.isArray(data?.characteristics) ? data.characteristics : [],
-      membershipConditions: Array.isArray(data?.membershipConditions) ? data.membershipConditions : []
+      membershipConditions: Array.isArray(data?.membershipConditions) ? data.membershipConditions : [],
+      createdAt: data?.createdAt || new Date().toISOString()
     };
   } catch (error) {
     console.error(`Error fetching IPFS data for CID ${cid}:`, error);
@@ -54,7 +55,8 @@ export async function getMembraneData(chainId: string, nodeIds: string[] = []) {
         name: data?.name || '',
         id: data?.id || '',
         characteristics: data?.characteristics || [],
-        membershipConditions: data?.membershipConditions || []
+        membershipConditions: data?.membershipConditions || [],
+        createdAt: data?.createdAt || new Date().toISOString()
       }));
 
     const getMembraneName = (id: string): string => {

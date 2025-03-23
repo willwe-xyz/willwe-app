@@ -132,7 +132,7 @@ export function usePonderData() {
       }
       
       // Flatten signatures from all queues
-      const signatures = movement.signatureQueues.flatMap(queue => queue.signatures || []);
+      const signatures = movement.signatureQueues.flatMap((queue: { signatures?: string[] }) => queue.signatures || []);
       
       setIsLoading(false);
       return signatures;

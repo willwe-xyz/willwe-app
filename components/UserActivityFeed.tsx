@@ -16,13 +16,23 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({ userAddress,
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<any>({});
+  interface DebugInfo {
+    fetchStarted?: string;
+    fetchCompleted?: string;
+    activityCount?: number;
+    userAddress?: string;
+    forceSync?: boolean;
+    error?: string;
+    [key: string]: any;
+  }
+  
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
   const toast = useToast();
 
   /**
    * Fetch user activities from the API
    */
-  const fetchUserActivities = async (forceSync: boolean = false) => {
+  const fetchUserActivities = React.useCallback(async (forceSync: boolean = false) => {
     if (!userAddress) {
       setError('No user address provided');
       return;
@@ -33,7 +43,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({ userAddress,
     
     try {
       // Update debug info
-      setDebugInfo(prev => ({
+      setDebugInfo((prev: DebugInfo) => ({
         ...prev,
         fetchStarted: new Date().toISOString(),
         userAddress,
@@ -52,7 +62,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({ userAddress,
       const data = await response.json();
       
       // Update debug info with API response
-      setDebugInfo(prev => ({
+      setDebugInfo((prev: DebugInfo) => ({
         ...prev,
         fetchCompleted: new Date().toISOString(),
         apiResponse: data,
@@ -72,7 +82,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({ userAddress,
       const transformedActivities = transformActivities(data.activities || [], true);
       
       // Update debug info
-      setDebugInfo(prev => ({
+      setDebugInfo((prev: DebugInfo) => ({
         ...prev,
         transformedActivities,
         transformedCount: transformedActivities.length
@@ -84,7 +94,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({ userAddress,
       setError(err instanceof Error ? err.message : 'Unknown error');
       
       // Update debug info
-      setDebugInfo(prev => ({
+      setDebugInfo((prev: DebugInfo) => ({
         ...prev,
         error: err instanceof Error ? err.message : 'Unknown error'
       }));
@@ -99,14 +109,14 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({ userAddress,
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userAddress, toast]);
 
   // Fetch activities on component mount
   useEffect(() => {
     if (userAddress) {
       fetchUserActivities();
     }
-  }, [userAddress]);
+  }, [userAddress, fetchUserActivities]);
 
   // Function to manually refresh activities
   const handleRefresh = () => {

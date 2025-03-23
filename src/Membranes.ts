@@ -1,7 +1,10 @@
+// Note: ponder:registry import will be resolved at runtime
+// @ts-ignore - These imports are resolved by Ponder at runtime
 import { ponder } from "ponder:registry";
+// @ts-ignore - These imports are resolved by Ponder at runtime
 import { Membrane, ActivityLog } from "ponder:schema";
 
-ponder.on('Membranes:MembraneCreated', async ({ event, context }) => {
+ponder.on('Membranes:MembraneCreated', async ({ event, context }: { event: any, context: any }) => {
   const { membraneId, creator, CID } = event.args;
   const { db } = context;
 

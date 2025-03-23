@@ -32,14 +32,7 @@ export const MovementDetails = React.memo(({
   const decodeCalls = (executedPayload: string) => {
     try {
       const decoded = ethers.AbiCoder.defaultAbiCoder().decode(
-        [{
-          type: 'tuple[]',
-          components: [
-            { name: 'target', type: 'address' },
-            { name: 'callData', type: 'bytes' },
-            { name: 'value', type: 'uint256' }
-          ]
-        }],
+        ['tuple(address target, bytes callData, uint256 value)[]'],
         executedPayload
       );
 

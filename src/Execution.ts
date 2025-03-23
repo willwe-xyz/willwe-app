@@ -1,7 +1,10 @@
+// Note: ponder:registry import will be resolved at runtime
+// @ts-ignore - These imports are resolved by Ponder at runtime
 import { ponder } from "ponder:registry";
+// @ts-ignore - These imports are resolved by Ponder at runtime
 import { Movement, ActivityLog } from "ponder:schema";
 
-ponder.on('Execution:QueueExecuted', async ({ event, context }) => {
+ponder.on('Execution:QueueExecuted', async ({ event, context }: { event: any, context: any }) => {
   const { nodeId, queueHash } = event.args;
   const { db } = context;
   

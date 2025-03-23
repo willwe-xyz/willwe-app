@@ -53,7 +53,8 @@ export function useNodeDataLoading(chainId: string | undefined, nodeId: string |
         childrenNodes: nodeData.childrenNodes || [],
         rootPath: nodeData.rootPath || [],
         signals: nodeData.signals || [],
-        membraneMeta: nodeData.membraneMeta || null
+        membraneMeta: nodeData.membraneMeta || null,
+        movementEndpoints: nodeData.movementEndpoints || []
       };
 
       setData(transformedData);

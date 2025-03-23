@@ -133,7 +133,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
     const clickedPoint = event.points?.[0];
     if (!clickedPoint) return;
 
-    const label = clickedPoint.label;
+    const label = (clickedPoint as any).label;
     if (label) {
       const nodeId = labelToId.get(label);
       if (nodeId) {

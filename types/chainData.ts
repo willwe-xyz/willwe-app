@@ -18,6 +18,12 @@ export interface UserSignal {
   lastRedistSignal: string[];           
 }
 
+export interface MembraneCharacteristic {
+  name: string;
+  value: string;
+  description?: string;
+}
+
 export interface MembraneMetadata {
   name: string;
   id: string;

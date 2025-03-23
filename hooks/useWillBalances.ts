@@ -27,7 +27,7 @@ export function useWillBalances(chainId: string) {
       const formattedBalances = await Promise.all(
         nonZeroBalances.map(async (token) => {
           const metadata = await alchemy.core.getTokenMetadata(token.contractAddress);
-          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals);
+          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
           
           return {
             contractAddress: token.contractAddress,

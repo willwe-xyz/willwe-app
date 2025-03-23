@@ -63,7 +63,24 @@ const EligibilityImpact = memo(({
 
 EligibilityImpact.displayName = 'EligibilityImpact';
 
-const SignalSlider = ({
+interface SignalSliderProps {
+  nodeId: string;
+  parentId: string;
+  value: number;
+  lastSignal: string;
+  balance: string;
+  eligibilityPerSecond: string;
+  totalInflationPerSecond: string;
+  onChange: (value: number) => void;
+  onChangeEnd?: (value: number) => void;
+  isDisabled?: boolean;
+  selectedTokenColor: string;
+  chainId: string;
+  nodeName?: string;
+  totalAllocation: number;
+}
+
+const SignalSlider: React.FC<SignalSliderProps> = ({
   nodeId,
   parentId,
   value: externalValue,
@@ -94,7 +111,7 @@ const SignalSlider = ({
       setLocalValue(newValue);
       setTempTotalAllocation(newTotal);
       onChange(newValue);
-      onChangeEnd(newValue);
+      if (onChangeEnd) onChangeEnd(newValue);
     }
   }, [localValue, totalAllocation, onChange, onChangeEnd]);
 
@@ -103,7 +120,7 @@ const SignalSlider = ({
     setLocalValue(newValue);
     setTempTotalAllocation(totalAllocation - localValue + newValue);
     onChange(newValue);
-    onChangeEnd(newValue);
+    if (onChangeEnd) onChangeEnd(newValue);
   }, [localValue, totalAllocation, onChange, onChangeEnd]);
 
   const calculateEligibilityImpact = useCallback(async (newValue: number) => {
@@ -147,7 +164,7 @@ const SignalSlider = ({
   const handleChangeEnd = useCallback((v: number) => {
     setLocalValue(v);
     onChange(v);
-    onChangeEnd(v);
+    if (onChangeEnd) onChangeEnd(v);
     calculateEligibilityImpact(v);
   }, [onChange, onChangeEnd, calculateEligibilityImpact]);
 

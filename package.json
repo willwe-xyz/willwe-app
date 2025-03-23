@@ -6,19 +6,12 @@
   },
   "scripts": {
     "dev": "next dev",
-    "dev:full": "concurrently \"next dev\" \"ponder dev\"",
     "build": "next build",
-    "build:full": "next build && ponder build",
     "start": "next start",
-    "start:full": "concurrently \"next start\" \"ponder start\"",
     "format": "npx prettier --write \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\"",
     "lint": "next lint && npx prettier --check \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\" && npx tsc --noEmit",
     "context": "./create-context.sh",
-    "find:unused": "next-unused",
-    "ponder:dev": "ponder dev",
-    "ponder:build": "ponder build",
-    "ponder:start": "ponder start",
-    "ponder:codegen": "ponder codegen"
+    "find:unused": "next-unused"
   },
   "dependencies": {
     "@airstack/airstack-react": "^0.6.3",
@@ -82,6 +75,7 @@
     "@types/color": "^3.0.6",
     "@types/d3": "^7.4.3",
     "@types/node": "^18",
+    "@types/pg": "^8.11.11",
     "@types/plotly.js-dist-min": "^2.3.4",
     "@types/react": "18.2.0",
     "@types/react-dom": "^18.3.1",

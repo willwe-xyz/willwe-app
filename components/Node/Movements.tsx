@@ -39,12 +39,13 @@ interface MovementsProps {
   nodeId: string;
   nodeData: NodeState;
   chainId: string;
+  userAddress?: string;
 }
 
-export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId }) => {
+export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId, userAddress: propsUserAddress }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { user } = usePrivy();
-  const userAddress = user?.wallet?.address;
+  const userAddress = propsUserAddress || user?.wallet?.address;
 
   const {
     movements = [],
@@ -91,7 +92,7 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId 
     return (
       <Alert status="error">
         <AlertIcon />
-        <Text>Error: {error?.message || endpointsError?.message}</Text>
+        <Text>Error: {error ? (typeof error === 'object' && error !== null && 'message' in error ? (error as {message: string}).message : String(error)) : endpointsError ? (typeof endpointsError === 'object' && endpointsError !== null && 'message' in endpointsError ? (endpointsError as {message: string}).message : String(endpointsError)) : "Unknown error"}</Text>
       </Alert>
     );
   }

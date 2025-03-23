@@ -74,6 +74,7 @@ export function useNodeData(
         membraneMeta: nodeData.membraneMeta || '',
         membersOfNode: nodeData.membersOfNode || [],
         childrenNodes: (nodeData.childrenNodes || []).map((node: any) => node.toString()),
+        movementEndpoints: nodeData.movementEndpoints || [],
         rootPath: (nodeData.rootPath || []).map((path: any) => path.toString()),
         signals: (nodeData.signals || []).map((signal: any) => ({
           MembraneInflation: (signal.MembraneInflation || []).map((mi: any[]) => 

@@ -588,7 +588,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
               );
               if (!action) return;
               
-              const callData = action.getCallData(currentCall.params || {});
+              const callData = action.getCallData(currentCall.params || {}, rootTokenAddress || '');
               setCalls([...calls, callData]);
               setCurrentCall({
                 target: '',

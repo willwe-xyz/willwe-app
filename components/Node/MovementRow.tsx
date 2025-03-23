@@ -127,14 +127,7 @@ const MovementRow: React.FC<MovementRowProps> = ({
       // Decode just the first tuple array to get the target
       const abiCoder = new ethers.AbiCoder();
       const decoded = abiCoder.decode(
-        [{
-          type: 'tuple[]',
-          components: [
-            { name: 'target', type: 'address' },
-            { name: 'callData', type: 'bytes' },
-            { name: 'value', type: 'uint256' }
-          ]
-        }],
+        ['tuple(address target, bytes callData, uint256 value)[]'],
         executedPayload
       );
 

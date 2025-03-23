@@ -93,7 +93,7 @@ export default function DashboardPage() {
         
       </Box> */}
 
-        <UserActivityFeed userAddress={userAddress} chainId={cleanChainId} tokenAddress={tokenAddress} />
+        <UserActivityFeed userAddress={userAddress || ''} chainId={cleanChainId} tokenAddress={tokenAddress || ''} />
 
     </Box>
   );
@@ -142,7 +142,7 @@ export default function DashboardPage() {
             </GridItem>
             <GridItem>
               <UserActivityFeed 
-                userAddress={user?.wallet?.address}
+                userAddress={user?.wallet?.address || ''}
                 selectedTokenColor={colorState.contrastingColor}
               />
             </GridItem>

@@ -34,6 +34,7 @@ const NodePage = () => {
 
   const { data: nodeData, isLoading, error } = useNodeData(
     chainId as string,
+    undefined,
     nodeId as string
   );
 

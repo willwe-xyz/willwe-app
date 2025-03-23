@@ -71,7 +71,7 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
   const endpointOptions = useMemo(() => {
     if (!nodeData?.movementEndpoints?.length) return [];
     
-    return nodeData.movementEndpoints.map(endpoint => ({
+    return nodeData.movementEndpoints.map((endpoint: string) => ({
       value: endpoint,
       label: `${endpoint.slice(0, 6)}...${endpoint.slice(-4)}`,
       authType: nodeData.childrenNodes.includes(endpoint) ? 
@@ -83,7 +83,7 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
 
   // Update the handleEndpointChange to allow movement type selection for new endpoints
   const handleEndpointChange = (endpoint: string) => {
-    const selectedEndpoint = endpointOptions.find(opt => opt.value === endpoint);
+    const selectedEndpoint = endpointOptions.find((opt: {value: string, label: string, authType: number, balance: string}) => opt.value === endpoint);
     setFormData(prev => ({
       ...prev,
       endpoint,
@@ -239,9 +239,9 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
             callData: transferCalldata,
             value: ethers.parseEther('0').toString() // Ensure value is string
           };
-        } catch (error) {
+        } catch (error: unknown) {
           console.error('Error encoding token transfer:', error);
-          throw new Error('Invalid token transfer parameters: ' + error.message);
+          throw new Error('Invalid token transfer parameters: ' + (error instanceof Error ? error.message : String(error)));
         }
       } else {
         try {
@@ -312,11 +312,12 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
 
       await onSubmit(submissionData);
       onClose();
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
       toast({
         title: 'Error creating movement',
-        description: err.message,
+        description: errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -392,7 +393,13 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
         <FormLabel>{field.label}</FormLabel>
         <Input
           type={field.type || 'text'}
-          value={formData.params?.[field.name] || ''}
+          value={(() => {
+            const fieldValue = formData.params?.[field.name];
+            if (typeof fieldValue === 'object' && fieldValue !== null && 'cid' in fieldValue) {
+              return (fieldValue as {cid: string}).cid;
+            }
+            return (fieldValue as string | number) || '';
+          })()}
           onChange={(e) => {
             const value = e.target.value;
             setFormData(prev => ({
@@ -432,6 +439,14 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
     ));
   };
 
+  // Create a properly typed version of the endpoint options
+  type EndpointOption = {
+    value: string;
+    label: string;
+    authType: number;
+    balance: string;
+  };
+
   return (
     <VStack spacing={4}>
       <FormControl>
@@ -441,9 +456,9 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
           onChange={(e) => handleEndpointChange(e.target.value)}
         >
           <option value="new">Create New Execution Endpoint</option>
-          {endpointOptions.map(({ value, label, authType, balance }) => (
-            <option key={value} value={value}>
-              {label} {authType === MovementType.AgentMajority ? '(Agent)' : '(Value)'} - {ethers.formatEther(balance || '0')} tokens
+          {endpointOptions.map((option: EndpointOption) => (
+            <option key={option.value} value={option.value}>
+              {option.label} {option.authType === MovementType.AgentMajority ? '(Agent)' : '(Value)'} - {ethers.formatEther(option.balance || '0')} tokens
             </option>
           ))}
         </Select>
@@ -474,7 +489,7 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
       <FormControl isInvalid={touchedFields.description && !validation.description}>
         <FormLabel>Description</FormLabel>
         <Textarea
-          value={formData.description}
+          value={typeof formData.description === 'string' ? formData.description : JSON.stringify(formData.description)}
           onChange={(e) => handleInputChange('description', e.target.value)}
           onBlur={() => setTouchedFields(prev => ({ ...prev, description: true }))}
           placeholder="Describe the purpose of this movement..."

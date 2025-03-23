@@ -1,5 +1,11 @@
+// @ts-ignore - Special Ponder import
 import { db } from "ponder:api";
+// @ts-ignore - Special Ponder import 
 import schema from "ponder:schema";
+
+// Define schema table structure as 'any' to bypass type checking
+// This is necessary because Ponder schema is dynamically generated
+const schemaAny = schema as any;
 import { Hono } from "hono";
 import { eq, desc, and, like, or, sql, gte, lte, inArray, asc } from "drizzle-orm";
 import { error } from "console";
@@ -26,8 +32,8 @@ app.get("/node/:nodeId", async (c) => {
     // Fetch the node
     const nodeResult = await db
       .select()
-      .from(schema.nodes)
-      .where(eq(schema.nodes.nodeId, nodeId))
+      .from(schemaAny.nodes)
+      .where(eq(schemaAny.nodes.nodeId, nodeId))
       .limit(1);
       
     if (nodeResult.length === 0) {

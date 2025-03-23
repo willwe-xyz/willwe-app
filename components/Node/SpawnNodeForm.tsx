@@ -176,7 +176,7 @@ const SpawnNodeForm = ({
         const contract = new ethers.Contract(
           contractAddress,
           ABIs.WillWe,
-          signer
+          signer as unknown as ethers.ContractRunner
         );
 
         let transaction;
