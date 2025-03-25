@@ -3,10 +3,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { usePrivy } from "@privy-io/react-auth";
 import { useTransaction } from '../contexts/TransactionContext';
+import { usePonderData } from './usePonderData';
 
 export interface ActivityItem {
   id: string;
-  type: 'mint' | 'burn' | 'transfer' | 'signal' | 'spawn' | 'membership';
+  type: 'mint' | 'burn' | 'transfer' | 'signal' | 'spawn' | 'membership' | string;
   timestamp: number;
   description: string;
   account: string;
@@ -24,13 +25,12 @@ interface UseActivityFeedResult {
   refresh: () => Promise<void>;
 }
 
-export function useActivityFeed(chainId: string): UseActivityFeedResult {
+export function useActivityFeed(chainId: string, userAddress: string): UseActivityFeedResult {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   
-  const { user } = usePrivy();
-  const { currentHash, isTransacting } = useTransaction();
+  const { getUserActivityLogs, getUserFeed } = usePonderData();
 
   // Add new activity
   const addActivity = useCallback((activity: ActivityItem) => {
@@ -48,59 +48,107 @@ export function useActivityFeed(chainId: string): UseActivityFeedResult {
     );
   }, []);
 
-  // Watch for new transactions
-  useEffect(() => {
-    if (currentHash && isTransacting) {
-      addActivity({
-        id: currentHash,
-        type: 'transfer',
-        timestamp: Date.now(),
-        description: 'Transaction pending...',
-        account: user?.wallet?.address || '',
-        status: 'pending',
-        transactionHash: currentHash
-      });
-    }
-  }, [currentHash, isTransacting, addActivity, user?.wallet?.address]);
 
-  // Fetch activities
+
+  // Convert Ponder activity data to our ActivityItem format
+  const convertPonderActivity = useCallback((ponderActivity: any): ActivityItem => {
+    // Generate a unique ID if one doesn't exist
+    const id = ponderActivity.id || 
+               ponderActivity.transactionHash || 
+               `${ponderActivity.eventType}-${ponderActivity.timestamp || Date.now()}`;
+    
+    // Determine activity type
+    const type = ponderActivity.eventType || 
+                 ponderActivity.event_type || 
+                 'unknown';
+    
+    // Get timestamp, ensuring it's a number
+    let timestamp = Date.now();
+    if (ponderActivity.timestamp) {
+      timestamp = typeof ponderActivity.timestamp === 'number' 
+        ? ponderActivity.timestamp 
+        : Number(ponderActivity.timestamp);
+      
+      // Convert seconds to milliseconds if needed
+      if (timestamp < 10000000000) {
+        timestamp *= 1000;
+      }
+    } else if (ponderActivity.when) {
+      timestamp = new Date(ponderActivity.when).getTime();
+    }
+    
+    // Extract description
+    const description = ponderActivity.description || 
+                         ponderActivity.content || 
+                         `${type} event`;
+    
+    // Get account information
+    const account = ponderActivity.who || 
+                    ponderActivity.userAddress || 
+                    ponderActivity.user_address || 
+                    user?.wallet?.address || '';
+    
+    // Extract nodeId if available
+    const nodeId = ponderActivity.nodeId || 
+                   ponderActivity.node_id || 
+                   undefined;
+    
+    // Format our standardized activity item
+    return {
+      id,
+      type,
+      timestamp,
+      description,
+      account,
+      nodeId,
+      status: ponderActivity.status || 'success',
+      transactionHash: ponderActivity.transactionHash || undefined
+    };
+  }, [userAddress]);
+
+  // Fetch activities from both user logs and member nodes
   const fetchActivities = useCallback(async () => {
-    if (!user?.wallet?.address || !chainId) return;
+    if (!userAddress || !chainId) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      // Simulate fetching activities - replace with actual API call
-      const mockActivities: ActivityItem[] = [
-        {
-          id: '1',
-          type: 'mint',
-          timestamp: Date.now() - 1000 * 60 * 5,
-          description: 'Minted 100 tokens',
-          account: user.wallet.address,
-          amount: '100',
-          tokenSymbol: 'TKN',
-          status: 'success'
-        },
-        {
-          id: '2',
-          type: 'signal',
-          timestamp: Date.now() - 1000 * 60 * 30,
-          description: 'Redistributive preference signaled by Johanna',
-          account: user.wallet.address,
-          nodeId: '123',
-          status: 'success'
-        }
-      ];
-
-      setActivities(mockActivities);
+      // Use Optimism Sepolia Chain ID as the default network
+      const networkId = chainId;
+      
+      
+      // Get user's direct activity logs
+      const userActivities = await getUserActivityLogs(userAddress, networkId);
+      console.log('Fetched user activities:', userActivities);
+      
+      // Get user's feed which includes nodes they're members of
+      const userFeed = await getUserFeed(userAddress, networkId);
+      console.log('Fetched user feed:', userFeed);
+      
+      // Extract events from user feed
+      const feedEvents = userFeed.events || [];
+      
+      // Extract nodes where user is a member
+      const memberNodes = userFeed.nodes || [];
+      console.log('User is member of nodes:', memberNodes);
+      
+      // Combine all activities and convert to our format
+      const allPonderActivities = [...userActivities, ...feedEvents];
+      const formattedActivities = allPonderActivities.map(convertPonderActivity);
+      
+      // Sort by timestamp (newest first)
+      formattedActivities.sort((a, b) => b.timestamp - a.timestamp);
+      
+      // Update state with all activities
+      setActivities(formattedActivities);
     } catch (err) {
+      console.error('Error fetching user activities:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch activities'));
     } finally {
       setIsLoading(false);
     }
-  }, [user?.wallet?.address, chainId]);
+  }, [userAddress, chainId, getUserActivityLogs, getUserFeed, convertPonderActivity]);
 
   // Initial fetch
   useEffect(() => {

@@ -8,33 +8,32 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-//   Will: 0x5654F05d67446400d799C30930f5325d51fDD223
-//   Membrane: 0x3A04ae1Ae1961558C96E3Bef64945BC88bb8f302
-//   Execution: 0xAa06764b39ABCDCa4a3FC801d05b88ff8Cecdc32
-//   WillWe: 0x6698FB299B268d03630597bd45e8A7754BB7dc01
+//   Will: 0x205dDa630dbB6Dbc1351fBff530E8aB715055813
+//   Membrane: 0xF86F2e3e43ad01C0aBE28D878d2Db578503ac9c3
+//   Execution: 0x00E4442a551E83D594B167431D938956580C3fB8
+//   WillWe: 0x7Ce5f9ac91F6C3141d89f701795d30c6A53ebade
 //   Kibern Director: 0x0000000000000000000000000000000000000000
-//   Control [0,1]: 0x6DB94CA9EdfFf4adD0aB75f87733542d214F076C 0x0000000000000000000000000000000000000000
-//   Will Price in ETH: 1000000000
+//   Control [0,1]: 0xd87b810Dc7171E239a925132Cb8Da605a96573e3 0x0000000000000000000000000000000000000000
 
 export const deployments: Deployments = {
     "Will": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x5654F05d67446400d799C30930f5325d51fDD223",
+        "11155420": "0x205dDa630dbB6Dbc1351fBff530E8aB715055813",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0x3A04ae1Ae1961558C96E3Bef64945BC88bb8f302",
+        "11155420": "0xF86F2e3e43ad01C0aBE28D878d2Db578503ac9c3",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0xAa06764b39ABCDCa4a3FC801d05b88ff8Cecdc32",
+        "11155420": "0x00E4442a551E83D594B167431D938956580C3fB8",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0x6698FB299B268d03630597bd45e8A7754BB7dc01",
+        "11155420": "0x7Ce5f9ac91F6C3141d89f701795d30c6A53ebade",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -1436,25 +1435,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "InflationMinted",
-            "inputs": [
-                {
-                    "name": "NodeId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "indexed": false,
-                    "internalType": "uint256"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
             "name": "InflationRateChanged",
             "inputs": [
                 {
@@ -1527,16 +1507,16 @@ export const ABIs: ABIKP = {
             "name": "MembershipMinted",
             "inputs": [
                 {
-                    "name": "NodeId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "member",
+                    "name": "who",
                     "type": "address",
                     "indexed": true,
                     "internalType": "address"
+                },
+                {
+                    "name": "nodeId",
+                    "type": "uint256",
+                    "indexed": true,
+                    "internalType": "uint256"
                 }
             ],
             "anonymous": false
@@ -2035,7 +2015,7 @@ export const ABIs: ABIKP = {
             "inputs": []
         }
     ],
-    "Execution" : [
+    "Execution" :[
         {
             "type": "constructor",
             "inputs": [

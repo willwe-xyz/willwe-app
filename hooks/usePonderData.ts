@@ -179,7 +179,6 @@ export function usePonderData() {
     setError(null);
     
     try {
-      // Use direct user/:address endpoint as shown in server implementation
       const response = await fetch(apiUrl(`/user/${userAddress.toLowerCase()}?limit=${limit}&networkId=${networkId}`));
       
       if (!response.ok) {
@@ -398,13 +397,15 @@ export function usePonderData() {
    * Get user feed based on nodes they are members of
    */
   const getUserFeed = useCallback(async (userAddress: string, networkId: string, limit = 50) => {
+    console.log('Fetching user feed for address:', userAddress, 'and networkId:', networkId);
     if (!userAddress) return [];
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Use user/:address endpoint with includeNodes param as shown in server implementation
+      console.log('Fetching from url:', apiUrl(`/user/${userAddress.toLowerCase()}?includeNodes=true&limit=${limit}&networkId=${networkId}`));
+
       const response = await fetch(apiUrl(`/user/${userAddress.toLowerCase()}?includeNodes=true&limit=${limit}&networkId=${networkId}`));
       if (!response.ok) {
         throw new Error(`Error fetching user feed: ${response.statusText}`);

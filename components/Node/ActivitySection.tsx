@@ -16,7 +16,6 @@ import {
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { usePonderData } from '../../hooks/usePonderData';
-// Using native date formatting instead of date-fns
 import { ActivityType } from '../../types/activity';
 
 interface ActivitySectionProps {

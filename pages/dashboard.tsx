@@ -17,7 +17,8 @@ import { RootNodeDetails } from '../components/RootNodeDetails';
 import { UserActivityFeed } from '../components/UserActivityFeed';
 import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { deployments } from '../config/deployments';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -34,19 +35,50 @@ export default function DashboardPage() {
   // Get token from URL or context
   const tokenAddress = router.query.token as string || selectedToken;
   
-  // Add proper null checks and default chainId
-  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '1';
-  const chainId = router.query.chainId as string || wallets[0]?.chainId || defaultChainId;
-  const cleanChainId = chainId.replace('eip155:', '');
+  // Find supported networks from deployments
+  const supportedChainIds = Object.keys(deployments.WillWe);
+  
+  // Default to a valid chain ID where WillWe is deployed (e.g. Optimism Sepolia)
+  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '11155420';
+  
+  // Get chain ID from URL, wallet, or default to a supported chain
+  let chainId = router.query.chainId as string || wallets[0]?.chainId?.replace('eip155:', '');
+  
+  // Validate the chain ID is supported
+  const cleanChainId = chainId?.replace('eip155:', '') || '';
+  const isValidChain = supportedChainIds.includes(cleanChainId);
+  
+  // If the current chain is not supported, default to a valid one
+  const effectiveChainId = isValidChain ? cleanChainId : defaultChainId;
+  
+  // Update URL if needed to reflect the correct chain
+  useEffect(() => {
+    if (ready && !isValidChain && router.isReady) {
+      router.replace({
+        pathname: router.pathname,
+        query: { 
+          ...router.query,
+          chainId: defaultChainId 
+        }
+      }, undefined, { shallow: true });
+      
+      console.log({
+        title: "Network Changed",
+        description: `Switched to supported network (Chain ID: ${defaultChainId})`,
+        status: "info",
+        duration: 5000,
+      });
+    }
+  }, [chainId, isValidChain, router, defaultChainId, toast]);
 
-  // Fetch nodes data
+  // Fetch nodes data (using the validated chainId)
   const { 
     data: nodes, 
     isLoading: nodesLoading, 
     error: nodesError, 
     refetch: refreshNodes 
   } = useRootNodes(
-    cleanChainId,
+    effectiveChainId,
     tokenAddress,
     user?.wallet?.address || ''
   );
@@ -56,19 +88,22 @@ export default function DashboardPage() {
     setSelectedToken(tokenAddress);
     router.push({
       pathname: '/dashboard',
-      query: { token: tokenAddress }
+      query: { 
+        token: tokenAddress,
+        chainId: effectiveChainId 
+      }
     }, undefined, { shallow: true });
   };
 
   // Handle node selection
   const handleNodeSelect = (nodeId: string) => {
-    router.push(`/nodes/${cleanChainId}/${nodeId}`);
+    router.push(`/nodes/${effectiveChainId}/${nodeId}`);
   };
 
   // Prepare header props
   const headerProps = {
     userAddress: user?.wallet?.address || null,
-    chainId: cleanChainId,
+    chainId: effectiveChainId,
     logout,
     login,
     isTransacting: false,
@@ -83,20 +118,30 @@ export default function DashboardPage() {
   // Empty dashboard state
   const renderEmptyDashboard = () => (
     <Box className="flex flex-col mx-auto w-full p-1">
-      {/* <Box className="w-full bg-white rounded-lg shadow-sm p-8 border border-gray-100">
-        <Text className="text-2xl font-semibold mb-6 text-center">
-          Welcome to WillWe
-        </Text>
-        <Text className="text-gray-600 text-center mb-8">
-          Select a token from above to explore its value network
-        </Text>
-        
-      </Box> */}
-
-        <UserActivityFeed userAddress={userAddress || ''} chainId={cleanChainId} tokenAddress={tokenAddress || ''} />
-
+      <UserActivityFeed 
+        userAddress={userAddress || ''} 
+        chainId={effectiveChainId} 
+        tokenAddress={tokenAddress || ''} 
+      />
     </Box>
   );
+
+  // Display notification when using a different chain than user's wallet
+  const renderChainMismatchWarning = () => {
+    const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
+    if (walletChainId && walletChainId !== effectiveChainId) {
+      return (
+        <Alert status="warning" mb={4}>
+          <AlertIcon />
+          <Text>
+            Your wallet is connected to a different network (Chain ID: {walletChainId}). 
+            This dashboard is displaying data for Chain ID: {effectiveChainId}.
+          </Text>
+        </Alert>
+      );
+    }
+    return null;
+  };
 
   // Loading state
   if (!ready || nodesLoading) {
@@ -124,6 +169,8 @@ export default function DashboardPage() {
   return (
     <MainLayout headerProps={headerProps}>
       <Box flex={1} overflow="auto" bg="gray.50" p={6}>
+        {renderChainMismatchWarning()}
+        
         {!tokenAddress ? (
           renderEmptyDashboard()
         ) : (
@@ -135,7 +182,7 @@ export default function DashboardPage() {
                 error={nodesError}
                 onRefresh={refreshNodes}
                 selectedTokenColor={colorState.contrastingColor}
-                chainId={cleanChainId}
+                chainId={effectiveChainId}
                 selectedToken={tokenAddress}
                 onNodeSelect={headerProps.onNodeSelect}
               />
@@ -143,6 +190,7 @@ export default function DashboardPage() {
             <GridItem>
               <UserActivityFeed 
                 userAddress={user?.wallet?.address || ''}
+                chainId={effectiveChainId}
                 selectedTokenColor={colorState.contrastingColor}
               />
             </GridItem>
