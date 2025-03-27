@@ -15,6 +15,7 @@ import {
 import { MainLayout } from '../components/Layout/MainLayout';
 import { RootNodeDetails } from '../components/RootNodeDetails';
 import { UserActivityFeed } from '../components/UserActivityFeed';
+import { RootActivityFeed } from '../components/RootActivityFeed';
 import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
 import { useState, useEffect } from 'react';
@@ -121,7 +122,6 @@ export default function DashboardPage() {
       <UserActivityFeed 
         userAddress={userAddress || ''} 
         chainId={effectiveChainId} 
-        tokenAddress={tokenAddress || ''} 
       />
     </Box>
   );
@@ -188,9 +188,10 @@ export default function DashboardPage() {
               />
             </GridItem>
             <GridItem>
-              <UserActivityFeed 
-                userAddress={user?.wallet?.address || ''}
+              <RootActivityFeed 
+                tokenAddress={tokenAddress}
                 chainId={effectiveChainId}
+                showDebug={process.env.NODE_ENV === 'development'}
                 selectedTokenColor={colorState.contrastingColor}
               />
             </GridItem>

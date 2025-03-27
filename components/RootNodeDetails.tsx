@@ -29,8 +29,6 @@ import {
   Copy
 } from 'lucide-react';
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { ethers } from 'ethers';
-import { deployments, ABIs } from '../config/contracts';
 import { NodeState } from '../types/chainData';
 import { formatBalance, addressToNodeId } from '../utils/formatters';
 import { useTransaction } from '../contexts/TransactionContext';

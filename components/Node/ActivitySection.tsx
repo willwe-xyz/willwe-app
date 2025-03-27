@@ -16,7 +16,7 @@ import {
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { usePonderData } from '../../hooks/usePonderData';
-import { ActivityType } from '../../types/activity';
+import { ActivityType } from '../../types/chainData';
 
 interface ActivitySectionProps {
   nodeId?: string;

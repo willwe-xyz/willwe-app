@@ -6,7 +6,6 @@ import NodeDetails from '../../../components/NodeDetails';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { useColorManagement } from '../../../hooks/useColorManagement';
 import { usePrivy } from '@privy-io/react-auth';
-import { useActivityFeed } from '../../../hooks/useActivityFeed';
 import { MainLayout } from '../../../components/Layout/MainLayout';
 
 const NodePage = () => {

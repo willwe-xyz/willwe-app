@@ -13,6 +13,18 @@ export interface NodeBasicInfo {
   totalSupply: string;              
 }
 
+// Add ActivityType enum
+export enum ActivityType {
+  MINT = 'mint',
+  BURN = 'burn',
+  SIGNAL = 'signal',
+  RESIGNAL = 'resignal',
+  MEMBERSHIP = 'membership',
+  CONFIG_SIGNAL = 'configSignal',
+  NEW_MOVEMENT = 'newMovement',
+  TRANSFER = 'transfer'
+}
+
 export interface UserSignal {
   MembraneInflation: [string, string][];
   lastRedistSignal: string[];           
@@ -183,6 +195,38 @@ export interface MovementSignatureStatus {
   current: number;
   required: number;
   hasUserSigned: boolean;
+}
+
+
+export interface ActivityLogEntry {
+  id: string;
+  nodeId?: string;
+  node_id?: string;
+  userAddress?: string;
+  user_address?: string;
+  eventType?: string;
+  event_type?: string;
+  data: string | Record<string, any>;
+  timestamp: string;
+}
+
+/**
+ * Activity item for display in the UI
+ */
+export interface ActivityItem {
+  id: string; // Primary key
+  nodeId: string; // Node ID
+  who: string; // Actor
+  eventName: string; // Event name
+  eventType: string; // Event type
+  when: string; // Timestamp
+  createdBlockNumber: number; // Block number
+  network: string; // Network name
+  networkId: string; // Network ID
+  amount?: string; // Optional amount
+  tokenSymbol?: string; // Optional token symbol
+  description?: string; // Description of the activity
+  status?: 'pending' | 'success' | 'failed'; // Status of the activity
 }
 
 ///////////////////////////////////////////

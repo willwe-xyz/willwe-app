@@ -396,28 +396,95 @@ export function usePonderData() {
   /**
    * Get user feed based on nodes they are members of
    */
-  const getUserFeed = useCallback(async (userAddress: string, networkId: string, limit = 50) => {
+  const getUserFeed = useCallback(async (userAddress: string, networkId: string, limit = 50, offset = 0) => {
     console.log('Fetching user feed for address:', userAddress, 'and networkId:', networkId);
-    if (!userAddress) return [];
+    if (!userAddress) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     
     setIsLoading(true);
     setError(null);
     
     try {
-      console.log('Fetching from url:', apiUrl(`/user/${userAddress.toLowerCase()}?includeNodes=true&limit=${limit}&networkId=${networkId}`));
+      // Use the new userFeed endpoint
+      const url = apiUrl(`/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`);
+      console.log('Fetching from url:', url);
 
-      const response = await fetch(apiUrl(`/user/${userAddress.toLowerCase()}?includeNodes=true&limit=${limit}&networkId=${networkId}`));
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Error fetching user feed: ${response.statusText}`);
       }
+      
       const data = await response.json();
+      
+      // Validate the data format based on new endpoint structure
+      if (!data.events) {
+        console.warn('Unexpected response format from userFeed endpoint:', data);
+        data.events = [];
+      }
+      
+      // Ensure data.meta exists
+      if (!data.meta) {
+        data.meta = {
+          total: data.events.length,
+          limit,
+          offset,
+          nodeCount: 0
+        };
+      }
+      
       setIsLoading(false);
       return data;
     } catch (err) {
       console.error('Error fetching user feed:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
-      return [];
+      return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
+    }
+  }, [apiUrl]);
+
+  /**
+   * Get events for a root node and all its derived nodes
+   */
+  const getRootNodeEvents = useCallback(async (rootNodeId: string, networkId: string, limit = 50, offset = 0) => {
+    console.log('Fetching root node events for rootNodeId:', rootNodeId, 'and networkId:', networkId);
+    if (!rootNodeId) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const url = apiUrl(`/getrootnode-events?nodeId=${rootNodeId}&limit=${limit}&offset=${offset}&networkId=${networkId}`);
+      console.log('Fetching from url:', url);
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Error fetching root node events: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Validate the data format
+      if (!data.events) {
+        console.warn('Unexpected response format from getRootNodeEvents endpoint:', data);
+        data.events = [];
+      }
+      
+      // Ensure data.meta exists
+      if (!data.meta) {
+        data.meta = {
+          total: data.events.length,
+          limit,
+          offset,
+          nodeCount: 0
+        };
+      }
+      
+      setIsLoading(false);
+      return data;
+    } catch (err) {
+      console.error('Error fetching root node events:', err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      setIsLoading(false);
+      return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     }
   }, [apiUrl]);
 
@@ -435,6 +502,7 @@ export function usePonderData() {
     sendChatMessage,
     validateChatMessage,
     storeMovementSignature,
-    getUserFeed
+    getUserFeed,
+    getRootNodeEvents
   };
 }
