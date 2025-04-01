@@ -38,7 +38,7 @@ module.exports = {
       },
       {
         source: '/ipfs/:path*',
-        destination: `${process.env.IPFS_GATEWAY}:path*`
+        destination: `${process.env.IPFS_GATEWAY || 'https://ipfs.io/ipfs/'}:path*`
       }
     ];
   },
