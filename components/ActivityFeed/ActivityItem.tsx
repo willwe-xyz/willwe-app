@@ -1,10 +1,15 @@
 import React from 'react';
 import { Box, Text, Flex, Badge, Icon, Tooltip, HStack } from '@chakra-ui/react';
 import { FiArrowUp, FiArrowDown, FiSettings, FiUsers, FiStar, FiZap, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
-import { ActivityItem as ActivityItemType } from '../../types/activity';
+import { ActivityItem as ActivityItemType } from '../../types/chainData';
 
 interface ActivityItemProps {
   activity: ActivityItemType;
+  getActivityIcon: (type: string) => {
+    icon: React.ElementType;
+    color: string;
+    label: string;
+  };
 }
 
 export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
@@ -40,7 +45,7 @@ export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
     }
   };
 
-  const { icon, color, label } = getActivityIcon(activity.type);
+  const { icon, color, label } = getActivityIcon(activity.eventType);
   
   // Format date
   const formatDate = (timestamp: string) => {

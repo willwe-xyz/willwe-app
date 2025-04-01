@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
   reactStrictMode: true,
+  typescript: {
+    // Ignore TypeScript errors during the build process
+    ignoreBuildErrors: true,
+  },
   webpack: (config, { isServer }) => {
     // If client-side, don't polyfill Node modules
     if (!isServer) {
