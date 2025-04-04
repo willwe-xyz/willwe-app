@@ -388,7 +388,21 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
             // Continue with default membraneName
           }
 
-          const currentSignalBasisPoints = Number(existingSignals[index]?.[0] || 0);
+          // Safely handle signal value
+          let currentSignalBasisPoints = '0';
+          try {
+            if (existingSignals && existingSignals[index]) {
+              // existingSignals[index] is a [uint256, uint256] pair
+              // The first element (index 0) is the signal value
+              // Use ethers.js to safely handle the big number
+              const signalValue = existingSignals[index][0];
+              // Convert to string using ethers.js utilities with no decimals
+              currentSignalBasisPoints = ethers.formatUnits(signalValue, 0);
+            }
+          } catch (error) {
+            console.error('Error processing signal value:', error);
+            // Keep default value of '0'
+          }
 
           return {
             nodeId: node.basicInfo[0],
@@ -410,18 +424,33 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
       setChildrenData(validChildren);
       
-      // Initialize sliders
+      // Initialize sliders with safe number conversion
       const initialValues = Object.fromEntries(
-        validChildren.map(child => [
-          child.nodeId,
-          child.currentSignal / 100
-        ])
+        validChildren.map(child => {
+          try {
+            // Convert basis points to percentage (divide by 100)
+            // Use ethers.js to safely handle the big number
+            const basisPoints = ethers.parseUnits(child.currentSignal, 0);
+            const percentageValue = Number(ethers.formatUnits(basisPoints, 2));
+            return [child.nodeId, percentageValue];
+          } catch (error) {
+            console.error('Error converting signal value:', error);
+            return [child.nodeId, 0];
+          }
+        })
       );
       
       setSliderValues(initialValues);
       
-      // Calculate initial total with explicit typing
-      const initialTotal = Object.values(initialValues).reduce((sum: number, val: unknown) => sum + (Number(val) || 0), 0);
+      // Calculate initial total with safe number conversion
+      const initialTotal = Object.values(initialValues).reduce((sum: number, val: unknown) => {
+        try {
+          return sum + (Number(val) || 0);
+        } catch (error) {
+          console.error('Error calculating total:', error);
+          return sum;
+        }
+      }, 0);
       setTotalAllocation(Number(initialTotal));
 
     } catch (error) {

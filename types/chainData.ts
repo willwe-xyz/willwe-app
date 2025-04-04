@@ -49,26 +49,13 @@ export interface MembraneMetadata {
 }
 
 export interface NodeState {
-  basicInfo: [
-    nodeId: string,
-    inflation: string,
-    reserve: string, 
-    budget: string,
-    rootValuationBudget: string,
-    rootValuationReserve: string,
-    membraneId: string,
-    eligibilityPerSec: string,
-    lastRedistributionTime: string,
-    balanceOfUser: string,
-    endpointOfUserForNode: string,
-    totalSupply: string
-  ];
-  membraneMeta: string;          
-  membersOfNode: string[];       
-  childrenNodes: string[];
-  movementEndpoints: string[];       
-  rootPath: string[];            
-  signals: UserSignal[];         
+  basicInfo: NodeBasicInfo;
+  membraneMeta: string;             // Membrane Metadata CID
+  membersOfNode: string[];          // Array of member addresses
+  childrenNodes: string[];          // Array of children node IDs
+  movementEndpoints: string[];      // Array of node specific execution endpoints
+  rootPath: string[];               // Path from root to current node
+  signals: string[];                // Array of uint256 signals
 }
 
 
@@ -259,17 +246,17 @@ export const isValidUserSignal = (data: any): data is UserSignal => {
 
 export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
   return {
-    nodeId: nodeData.basicInfo[0],
-    inflation: nodeData.basicInfo[1],
-    balanceAnchor: nodeData.basicInfo[2],
-    balanceBudget: nodeData.basicInfo[3],
-    rootValuationBudget: nodeData.basicInfo[4],
-    rootValuationReserve: nodeData.basicInfo[5],
-    membraneId: nodeData.basicInfo[6],
-    eligibilityPerSec: nodeData.basicInfo[7],
-    lastRedistribution: nodeData.basicInfo[8],
-    balanceOfUser: nodeData.basicInfo[9],
-    endpointOfUserForNode: nodeData.basicInfo[10],
-    totalSupply: nodeData.basicInfo[11]
+    nodeId: nodeData.basicInfo.nodeId,
+    inflation: nodeData.basicInfo.inflation,
+    balanceAnchor: nodeData.basicInfo.balanceAnchor,
+    balanceBudget: nodeData.basicInfo.balanceBudget,
+    rootValuationBudget: nodeData.basicInfo.rootValuationBudget,
+    rootValuationReserve: nodeData.basicInfo.rootValuationReserve,
+    membraneId: nodeData.basicInfo.membraneId,
+    eligibilityPerSec: nodeData.basicInfo.eligibilityPerSec,
+    lastRedistribution: nodeData.basicInfo.lastRedistribution,
+    balanceOfUser: nodeData.basicInfo.balanceOfUser,
+    endpointOfUserForNode: nodeData.basicInfo.endpointOfUserForNode,
+    totalSupply: nodeData.basicInfo.totalSupply
   };
 };

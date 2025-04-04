@@ -103,7 +103,7 @@ export default function DashboardPage() {
 
   // Prepare header props
   const headerProps = {
-    userAddress: user?.wallet?.address || null,
+    userAddress: user?.wallet?.address,
     chainId: effectiveChainId,
     logout,
     login,
