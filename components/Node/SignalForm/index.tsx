@@ -346,15 +346,27 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
       }
 
       const childNodes = await contract.getNodes(parentNodeData.childrenNodes);
-      const existingSignals = await contract.getUserNodeSignals(
-        user.wallet.address,
-        nodeId
-      );
 
       // Add validation for childNodes
       if (!childNodes || childNodes.length === 0) {
         throw new Error('No child nodes returned from contract');
       }
+
+      // Get signals one by one instead of all at once
+      const existingSignals = await Promise.all(
+        parentNodeData.childrenNodes.map(async (childNodeId: string) => {
+          try {
+            const signals = await contract.getUserNodeSignals(
+              user?.wallet?.address,
+              nodeId
+            );
+          
+          } catch (error) {
+            console.error('Error fetching signals for node:', childNodeId, error);
+            return [['0', '0']]; // Return default value on error
+          }
+        })
+      );
 
       const childrenWithMetadata = await Promise.all(
         childNodes.map(async (node: any, index: number) => {
@@ -369,11 +381,10 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
           
           try {
             if (node.membraneMeta && typeof node.membraneMeta === 'string' && node.membraneMeta.trim() !== '') {
-              // Hardcode the IPFS gateway URL and use CID directly
               const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
               const metadataUrl = `${IPFS_GATEWAY}${node.membraneMeta.trim()}`;
               
-              console.log('Fetching metadata from:', metadataUrl); // Debug log
+              console.log('Fetching metadata from:', metadataUrl);
               
               const response = await fetch(metadataUrl);
               if (response.ok) {
@@ -385,23 +396,18 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
             }
           } catch (error) {
             console.error('Error fetching membrane metadata:', error);
-            // Continue with default membraneName
           }
 
           // Safely handle signal value
           let currentSignalBasisPoints = '0';
           try {
-            if (existingSignals && existingSignals[index]) {
-              // existingSignals[index] is a [uint256, uint256] pair
-              // The first element (index 0) is the signal value
-              // Use ethers.js to safely handle the big number
-              const signalValue = existingSignals[index][0];
-              // Convert to string using ethers.js utilities with no decimals
-              currentSignalBasisPoints = ethers.formatUnits(signalValue, 0);
+            const nodeSignals = existingSignals[index];
+            if (nodeSignals && nodeSignals[0] && nodeSignals[0][0]) {
+              // The signal value is already converted to a string
+              currentSignalBasisPoints = nodeSignals[0][0];
             }
           } catch (error) {
             console.error('Error processing signal value:', error);
-            // Keep default value of '0'
           }
 
           return {
@@ -410,7 +416,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
             membraneId: node.basicInfo[5],
             membraneName,
             currentSignal: currentSignalBasisPoints,
-            eligibilityPerSecond: '0' // Default to 0 if calculation fails
+            eligibilityPerSecond: '0'
           };
         })
       );
@@ -428,10 +434,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
       const initialValues = Object.fromEntries(
         validChildren.map(child => {
           try {
-            // Convert basis points to percentage (divide by 100)
-            // Use ethers.js to safely handle the big number
-            const basisPoints = ethers.parseUnits(child.currentSignal, 0);
-            const percentageValue = Number(ethers.formatUnits(basisPoints, 2));
+            const percentageValue = Number(child.currentSignal) / 100;
             return [child.nodeId, percentageValue];
           } catch (error) {
             console.error('Error converting signal value:', error);

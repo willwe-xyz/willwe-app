@@ -3,20 +3,23 @@ import { ethers } from 'ethers';
 import { NodeState } from '../types/chainData';
 import { deployments, ABIs, getRPCUrl } from '../config/contracts';
 
-export function useRootNodes(chainId: string, tokenAddress: string, userAddress: string) {
+export function useRootNodes(chainId: string, tokenAddress: string, userAddress?: string) {
   const [data, setData] = useState<NodeState[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!chainId || !tokenAddress || !userAddress) {
+    if (!chainId || !tokenAddress) {
       setIsLoading(false);
       return;
     }
 
+    // Use ZeroAddress if no user address is provided
+    const addressToUse = userAddress || ethers.ZeroAddress;
+
     try {
       setIsLoading(true);
-      console.log('Fetching nodes for:', { chainId, tokenAddress, userAddress });
+      console.log('Fetching nodes for:', { chainId, tokenAddress, userAddress: addressToUse });
       
       const cleanChainId = chainId.replace('eip155:', '');
       const willWeAddress = deployments.WillWe[cleanChainId];
@@ -28,7 +31,7 @@ export function useRootNodes(chainId: string, tokenAddress: string, userAddress:
       const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       const contract = new ethers.Contract(willWeAddress, ABIs.WillWe, provider);
 
-      const nodesData = await contract.getAllNodesForRoot(tokenAddress, userAddress);
+      const nodesData = await contract.getAllNodesForRoot(tokenAddress, addressToUse);
       console.log('Received nodes data:', nodesData);
 
       setData(nodesData);

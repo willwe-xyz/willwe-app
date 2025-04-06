@@ -20,6 +20,7 @@ import { useColorManagement } from '../hooks/useColorManagement';
 import { useRootNodes } from '../hooks/useRootNodes';
 import { useState, useEffect } from 'react';
 import { deployments } from '../config/deployments';
+import { ethers } from 'ethers';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -81,7 +82,7 @@ export default function DashboardPage() {
   } = useRootNodes(
     effectiveChainId,
     tokenAddress,
-    user?.wallet?.address || ''
+    userAddress
   );
 
   // Handle token selection
@@ -154,17 +155,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Authentication check
-  if (!authenticated) {
-    return (
-      <MainLayout headerProps={headerProps}>
-        <Alert status="warning" variant="subtle">
-          <AlertIcon />
-          Please connect your wallet to continue
-        </Alert>
-      </MainLayout>
-    );
-  }
 
   return (
     <MainLayout headerProps={headerProps}>

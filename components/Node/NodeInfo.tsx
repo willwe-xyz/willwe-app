@@ -47,19 +47,37 @@ interface MemberData {
 }
 
 const calculateMetrics = (node: NodeState): NodeMetrics => {
+  // Safely handle null or undefined values
+  if (!node || !node.basicInfo) {
+    return {
+      dailyUnlock: '0',
+      TVL: '0',
+      totalValue: '0',
+      availableShares: '0',
+      inflow: '0',
+      value: '0',
+      memberCount: 0,
+      membersList: [],
+      userOwnedShares: '0'
+    };
+  }
+
   // Per-second rates in gwei, multiply by seconds in a day
-  const dailyUnlockedValue =  BigInt(Number(node.basicInfo[1]) * 86400);
+  const dailyUnlockedValue = node.basicInfo.inflation ? 
+    BigInt(Number(node.basicInfo.inflation) * 86400) : 
+    BigInt(0);
+  
   console.log('childParentEligibilityinRoot:', node);
   return {
     dailyUnlock: ethers.formatUnits(dailyUnlockedValue, 'ether'),
-    TVL: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
-    totalValue: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
-    availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'ether'),
-    inflow: ethers.formatUnits(node.basicInfo[7], 'ether'), // Keep this as per-second rate
-    value: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
-    memberCount: node.membersOfNode.length,
-    membersList: node.membersOfNode,
-    userOwnedShares: ethers.formatUnits(node.basicInfo[9] || '0', 'gwei')
+    TVL: ethers.formatUnits(node.basicInfo.rootValuationBudget || '0', 'ether'),
+    totalValue: ethers.formatUnits(node.basicInfo.rootValuationBudget || '0', 'ether'),
+    availableShares: ethers.formatUnits(node.basicInfo.balanceBudget || '0', 'ether'),
+    inflow: ethers.formatUnits(node.basicInfo.eligibilityPerSec || '0', 'ether'), // Keep this as per-second rate
+    value: ethers.formatUnits(node.basicInfo.rootValuationReserve || '0', 'ether'),
+    memberCount: node.membersOfNode?.length || 0,
+    membersList: node.membersOfNode || [],
+    userOwnedShares: ethers.formatUnits(node.basicInfo.balanceOfUser || '0', 'gwei')
   };
 };
 
@@ -73,11 +91,14 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const bgColor = useColorModeValue('white', 'gray.800');
   const mutedColor = useColorModeValue('gray.600', 'gray.400');
 
+  // Safely handle null or undefined values
   const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId), {
     chainId: Number(chainId),
     name: `${chainId}`,
   });
-  const tokenAddress = nodeIdToAddress(node.rootPath[0]);
+  
+  // Safely handle null or undefined values
+  const tokenAddress = node?.rootPath?.[0] ? nodeIdToAddress(node.rootPath[0]) : ethers.ZeroAddress;
 
   const tokenContract = new ethers.Contract(
     tokenAddress,
@@ -102,101 +123,96 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
         setTokenSymbol(symbol);
       } catch (error) {
         console.error('Error fetching token symbol:', error);
-        setTokenSymbol('token');
+        setTokenSymbol('UNKNOWN');
       }
     };
 
     fetchTokenSymbol();
-  }, [node?.rootPath, chainId, tokenAddress, provider]);
+  }, [node, chainId, provider, tokenContract, tokenAddress]);
 
   useEffect(() => {
     const fetchMembraneTitle = async () => {
-      if (!node.membraneMeta) {
+      if (!node?.membraneMeta) {
         setIsLoadingTitle(false);
         return;
       }
 
       try {
+        setIsLoadingTitle(true);
         const response = await fetch(`${IPFS_GATEWAY}${node.membraneMeta}`);
-        if (!response.ok) throw new Error('Failed to fetch membrane metadata');
-        const metadata = await response.json();
-        setMembraneTitle(metadata.name || null);
+        const data = await response.json();
+        setMembraneTitle(data.name || 'Unnamed Membrane');
       } catch (error) {
         console.error('Error fetching membrane title:', error);
-        setMembraneTitle(null);
+        setMembraneTitle('Unknown Membrane');
       } finally {
         setIsLoadingTitle(false);
       }
     };
 
     fetchMembraneTitle();
-  }, [node.membraneMeta]);
+  }, [node]);
 
   const formatCurrency = (value: string): string => {
-    const number = parseFloat(value);
-    if (isNaN(number)) return '0.0000';
-    // Format with appropriate precision based on value size
-    if (number < 0.0001) {
-      return number.toExponential(4);
+    try {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return '0';
+      
+      if (numValue >= 1000000) {
+        return `${(numValue / 1000000).toFixed(2)}M`;
+      } else if (numValue >= 1000) {
+        return `${(numValue / 1000).toFixed(2)}K`;
+      } else {
+        return numValue.toFixed(2);
+      }
+    } catch (error) {
+      console.error('Error formatting currency:', error);
+      return '0';
     }
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 4,
-      maximumFractionDigits: 4,
-      maximumSignificantDigits: 6
-    }).format(number);
   };
 
-  const metrics = useMemo(() => calculateMetrics(node), [node]);
-
   const handleCopyNodeId = () => {
-    navigator.clipboard.writeText(node.basicInfo[0]);
+    if (!node?.basicInfo?.nodeId) return;
+    
+    navigator.clipboard.writeText(node.basicInfo.nodeId);
     toast({
-      title: 'Node ID copied',
+      title: 'Copied',
+      description: 'Node ID copied to clipboard',
       status: 'success',
       duration: 2000,
+      isClosable: true,
     });
   };
 
-  // Add ENS resolution effect
   useEffect(() => {
     const resolveEnsNames = async () => {
-      if (!metrics.membersList.length) return;
+      if (!node?.membersOfNode || node.membersOfNode.length === 0) return;
 
       try {
         // Use Ethereum mainnet for ENS resolution
         const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
 
-        const resolvedMembers = await Promise.all(
-          metrics.membersList.map(async (address) => {
+        const ensNames = await Promise.all(
+          node.membersOfNode.map(async (address) => {
             try {
               const ensName = await mainnetProvider.lookupAddress(address);
-              return {
-                address,
-                ensName
-              };
+              return { address, ensName };
             } catch (error) {
               console.error(`Error resolving ENS for ${address}:`, error);
-              return {
-                address,
-                ensName: null
-              };
+              return { address, ensName: null };
             }
           })
         );
-
-        setMemberData(resolvedMembers);
+        setMemberData(ensNames);
       } catch (error) {
         console.error('Error resolving ENS names:', error);
-        // Fallback to addresses only
-        setMemberData(metrics.membersList.map(address => ({
-          address,
-          ensName: null
-        })));
       }
     };
 
     resolveEnsNames();
-  }, [metrics.membersList]);
+  }, [node]);
+
+  const metrics = useMemo(() => calculateMetrics(node), [node]);
 
   return (
     <Box

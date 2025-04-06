@@ -7,6 +7,7 @@ import { useNodeData } from '../../../hooks/useNodeData';
 import { useColorManagement } from '../../../hooks/useColorManagement';
 import { usePrivy } from '@privy-io/react-auth';
 import { MainLayout } from '../../../components/Layout/MainLayout';
+import { ethers } from 'ethers';
 
 const NodePage = () => {
   const router = useRouter();
@@ -31,9 +32,12 @@ const NodePage = () => {
     },
   };
 
+  // Use ZeroAddress if no user address is available
+  const userAddress = user?.wallet?.address || ethers.ZeroAddress;
+  
   const { data: nodeData, isLoading, error } = useNodeData(
     chainId as string,
-    undefined,
+    userAddress,
     nodeId as string
   );
 

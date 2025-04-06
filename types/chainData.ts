@@ -25,10 +25,7 @@ export enum ActivityType {
   TRANSFER = 'transfer'
 }
 
-export interface UserSignal {
-  MembraneInflation: [string, string][];
-  lastRedistSignal: string[];           
-}
+
 
 export interface MembraneCharacteristic {
   name: string;
@@ -77,7 +74,7 @@ export interface TransformedNodeData {
   membersOfNode: string[];
   childrenNodes: string[];
   rootPath: string[];
-  signals: UserSignal[];
+  signals: string[];
   ancestors: string[];
 }
 
@@ -231,18 +228,7 @@ export const isValidNodeState = (data: any): data is NodeState => {
   );
 };
 
-export const isValidUserSignal = (data: any): data is UserSignal => {
-  return (
-    Array.isArray(data?.MembraneInflation) &&
-    Array.isArray(data?.lastRedistSignal) &&
-    data.MembraneInflation.every((item: any) =>
-      Array.isArray(item) &&
-      item.length === 2 &&
-      typeof item[0] === 'string' &&
-      typeof item[1] === 'string'
-    )
-  );
-};
+
 
 export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
   return {

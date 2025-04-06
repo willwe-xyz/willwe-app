@@ -406,7 +406,6 @@ export function usePonderData() {
     try {
       // Use the new userFeed endpoint
       const url = apiUrl(`/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`);
-      console.log('Fetching from url:', url);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -453,7 +452,6 @@ export function usePonderData() {
     
     try {
       const url = apiUrl(`/getrootnode-events?nodeId=${rootNodeId}&limit=${limit}&offset=${offset}&networkId=${networkId}`);
-      console.log('Fetching from url:', url);
 
       const response = await fetch(url);
       if (!response.ok) {

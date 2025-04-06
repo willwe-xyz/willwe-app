@@ -30,6 +30,7 @@ import { MyEndpoint } from './Node/MyEndpoint';
 import { EndpointComponent } from './Node/EndpointComponent';
 import { MovementsErrorBoundary } from './Node/MovementsErrorBoundary';
 import { ethers } from 'ethers';
+import { NodeState } from '../types/chainData';
 
 import { 
   Signal, 
@@ -59,7 +60,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   const { isOpen, onOpen, onClose } = useDisclosure();
   
   const cleanChainId = chainId?.replace('eip155:', '') || '';
-  const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, user?.wallet?.address, nodeId);
+  // Use ZeroAddress if no user address is available
+  const userAddress = user?.wallet?.address || ethers.ZeroAddress;
+  const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, userAddress, nodeId);
   
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -69,9 +72,12 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     fetchNodeData();
   }, [fetchNodeData]);
 
-  // Check if node is an endpoint
+  // Check if node is an endpoint - with proper null checks
   const isEndpoint = nodeData?.basicInfo && 
-    nodeData.rootPath[0].slice(0, 12) !== nodeData.basicInfo[0].slice(0, 12);
+    nodeData.rootPath && 
+    nodeData.rootPath.length > 0 && 
+    nodeData.basicInfo.nodeId && 
+    nodeData.rootPath[0].slice(0, 12) !== nodeData.basicInfo.nodeId.slice(0, 12);
 
   // Loading state
   if (isLoading) {
@@ -137,7 +143,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
               parentNodeId={nodeData.rootPath[nodeData.rootPath.length - 1]} 
               chainId={chainId} 
               nodeData={nodeData} 
-              userAddress={user?.wallet?.address} 
+              userAddress={userAddress} 
             />
           </Box>
         </Box>
@@ -175,7 +181,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             nodeId={nodeId}
             chainId={chainId}
             selectedTokenColor={selectedTokenColor}
-            userAddress={user?.wallet?.address}
+            userAddress={userAddress}
             onSuccess={refetch}
             showToolbar={true}
             isOpen={isOpen}
@@ -184,61 +190,69 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         </Box>
         
         {/* Main tab navigation */}
-        <Tabs
-          variant="enclosed-colored"
-          colorScheme="blue"
-          isFitted
-          isLazy
-          className="tabs"
-        >
-          <TabList
-            px={6}
-            pt={2}
-            borderBottomColor={borderColor}
-            bg={headerBg}
-          >
-            <Tab><HStack spacing={2}><ArrowUpDown size={16} /><Text>Signal</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><ArrowRight size={16} /><Text>Moves</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><Activity size={16} /><Text>Activity</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><MessageCircle size={16} /><Text>Chat</Text></HStack></Tab>
-            <Tab><HStack spacing={2}><Monitor size={16} /><Text>Endpoint</Text></HStack></Tab>
+        <Tabs variant="enclosed" colorScheme="purple">
+          <TabList>
+            <Tab>
+              <HStack spacing={2}>
+                <Activity size={16} />
+                <Text>Activity</Text>
+              </HStack>
+            </Tab>
+            <Tab>
+              <HStack spacing={2}>
+                <ArrowUpDown size={16} />
+                <Text>Movements</Text>
+              </HStack>
+            </Tab>
+            <Tab>
+              <HStack spacing={2}>
+                <Signal size={16} />
+                <Text>Signals</Text>
+              </HStack>
+            </Tab>
+            <Tab>
+              <HStack spacing={2}>
+                <MessageCircle size={16} />
+                <Text>Chat</Text>
+              </HStack>
+            </Tab>
+            <Tab>
+              <HStack spacing={2}>
+                <GitBranch size={16} />
+                <Text>Endpoint</Text>
+              </HStack>
+            </Tab>
           </TabList>
 
           <TabPanels>
-            {/* Signal tab */}
+            {/* Activity tab */}
             <TabPanel p={6}>
-              <Box>
-                <SignalForm
-                  chainId={cleanChainId}
-                  nodeId={nodeId}
-                  parentNodeData={nodeData}
-                  onSuccess={refetch}
-                />
-              </Box>
+              <ActivitySection 
+                nodeId={nodeId} 
+                selectedTokenColor={selectedTokenColor}
+              />
             </TabPanel>
 
             {/* Movements tab */}
             <TabPanel p={6}>
-              <Box>
-                <MovementsErrorBoundary>
-                  <Movements 
-                    nodeId={nodeData.basicInfo[0]} 
-                    chainId={cleanChainId} 
-                    nodeData={nodeData} 
-                    userAddress={user?.wallet?.address || ethers.ZeroAddress} 
-                  />
-                </MovementsErrorBoundary>
-              </Box>
+              <MovementsErrorBoundary>
+                <Movements 
+                  nodeId={nodeId} 
+                  chainId={chainId} 
+                  nodeData={nodeData}
+                  userAddress={userAddress} 
+                />
+              </MovementsErrorBoundary>
             </TabPanel>
 
-            {/* Activity tab */}
+            {/* Signals tab */}
             <TabPanel p={6}>
-              <Box>
-                <ActivitySection 
-                  selectedTokenColor={selectedTokenColor}
-                  nodeId={nodeId}
-                />
-              </Box>
+              <SignalForm 
+                nodeId={nodeId} 
+                chainId={chainId} 
+                parentNodeData={nodeData}
+                onSuccess={refetch} 
+              />
             </TabPanel>
 
             {/* Chat tab */}
@@ -248,7 +262,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                   nodeId={nodeId} 
                   nodeData={nodeData} 
                   chainId={chainId} 
-                  userAddress={user?.wallet?.address || ethers.ZeroAddress} 
+                  userAddress={userAddress} 
                 />
               </Box>
             </TabPanel>
@@ -259,7 +273,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 <MyEndpoint 
                   nodeData={nodeData} 
                   chainId={chainId} 
-                  userAddress={user?.wallet?.address || ethers.ZeroAddress} 
+                  userAddress={userAddress} 
                   onSuccess={refetch} 
                 />
               </Box>
@@ -267,7 +281,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           </TabPanels>
         </Tabs>
         
-        {/* Permissions footer */}
+        {/* Permissions footer - only show if user is authenticated */}
         {user?.wallet?.address && (
           <Box 
             p={4}
