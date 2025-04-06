@@ -31,8 +31,29 @@ const BackgroundLetter = React.memo<BackgroundLetterProps>(({ children, color, x
       transformStyle: 'preserve-3d',
       transform: `translate3d(${x}px, ${y}px, ${z}px)`,
     }}
+    initial={{ opacity: 0, scale: 0.8 }}
+    animate={{ 
+      opacity: 0.2,
+      scale: 1,
+    }}
+    transition={{
+      duration: 2,
+      repeat: Infinity,
+      repeatType: "reverse",
+      ease: "easeInOut"
+    }}
   >
-    {children}
+    <Box
+      position="relative"
+      sx={{
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 100%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        textShadow: '0 0 40px rgba(255,255,255,0.4)',
+      }}
+    >
+      {children}
+    </Box>
   </motion.div>
 ));
 
@@ -131,9 +152,24 @@ const Home: React.FC = () => {
             className="flex min-h-screen min-w-full bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 overflow-hidden"
             style={{ perspective: 1000 }}
           >
-            <BackgroundLetter color="yellow" {...getTransform(-100 + rightShift, -100, -200, 'Y')}>Y</BackgroundLetter>
-            <BackgroundLetter color="cyan" {...getTransform(100 + rightShift, 100, -300, 'X')}>X</BackgroundLetter>
-            <BackgroundLetter color="magenta" {...getTransform(0 + rightShift, 200, -250, 'Z')}>Z</BackgroundLetter>
+            <BackgroundLetter 
+              color="rgba(255,255,0,0.4)" 
+              {...getTransform(-100 + rightShift, -100, -200, 'Y')}
+            >
+              Y
+            </BackgroundLetter>
+            <BackgroundLetter 
+              color="rgba(0,255,255,0.4)" 
+              {...getTransform(100 + rightShift, 100, -300, 'X')}
+            >
+              X
+            </BackgroundLetter>
+            <BackgroundLetter 
+              color="rgba(255,0,255,0.4)" 
+              {...getTransform(0 + rightShift, 200, -250, 'Z')}
+            >
+              Z
+            </BackgroundLetter>
     
             <motion.div
               style={{
@@ -142,12 +178,22 @@ const Home: React.FC = () => {
                 bottom: '20%',
                 width: '36px',
                 height: '36px',
-                backgroundColor: 'black',
+                background: 'linear-gradient(45deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1))',
+                backdropFilter: 'blur(5px)',
+                border: '1px solid rgba(255,255,255,0.2)',
                 transform: `translate3d(${squareDotPosition.x}px, ${squareDotPosition.y}px, ${squareDotPosition.z}px)`,
               }}
             />
     
-            <Box className="flex flex-1 p-6 justify-center items-center backdrop-blur-sm bg-white/30 relative">
+            <Box 
+              className="flex flex-1 p-6 justify-center items-center relative"
+              sx={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
+                backdropFilter: 'blur(6px)',
+                border: '1px solid rgba(255,255,255,0.18)',
+                boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+              }}
+            >
               <VStack spacing={8} align="center" maxWidth="400px">
                 <Heading 
                   as="h1" 
@@ -155,7 +201,20 @@ const Home: React.FC = () => {
                   mb={4} 
                   color="white" 
                   fontFamily="'Dancing Script', cursive"
-                  textShadow="2px 2px 4px rgba(0,0,0,0.3)"
+                  textShadow="0 0 20px rgba(255,255,255,0.5)"
+                  sx={{
+                    position: 'relative',
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      bottom: '-10px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: '60%',
+                      height: '2px',
+                      background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent)',
+                    }
+                  }}
                 >
                   WillWe
                 </Heading>
@@ -168,15 +227,26 @@ const Home: React.FC = () => {
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center'
+                    alignItems: 'center',
                   }}
                 >
-                  <span style={{ textShadow: '5px 20px 5px rgba(0,0,0,0.4)' }}>a</span>
-                  <span style={{ textShadow: '5px 20px 5px rgba(0,0,0,0.4)' }}>token</span>
-                  <span style={{ textShadow: '5px 20px 5px rgba(0,0,0,0.4)' }}>use pattern</span>
-                  <span style={{ textShadow: '5px 20px 5px rgba(0,0,0,0.4)' }}>enabling safe</span>
-                  <span style={{ textShadow: '5px 20px 5px rgba(0,0,0,0.4)' }}>self-explanatory</span>
-                  <span style={{ textShadow: '5px 20px 5px rgba(0,0,0,0.4)' }}>co-operative efforts</span>
+                  {['a', 'token', 'use pattern', 'enabling safe', 'self-explanatory', 'co-operative efforts'].map((text, index) => (
+                    <motion.span
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      style={{
+                        textShadow: '0 0 15px rgba(255,255,255,0.3)',
+                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
+                        padding: '4px 12px',
+                        borderRadius: '4px',
+                        margin: '2px 0',
+                      }}
+                    >
+                      {text}
+                    </motion.span>
+                  ))}
                 </Text>
     
                 <WideText 
@@ -185,8 +255,13 @@ const Home: React.FC = () => {
                   color="white" 
                   mt={1}
                   fontFamily="'Open Sans', sans-serif"
-                  textShadow="5px 20px 5px rgba(0,0,0,0.4)"
+                  textShadow="0 0 20px rgba(255,255,255,0.4)"
                   letterSpacing="0.2em"
+                  sx={{
+                    background: 'linear-gradient(90deg, #ffffff 0%, #f0f0f0 50%, #ffffff 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
                 >
                   EVIDENTLY NEUTRAL
                 </WideText>
@@ -199,51 +274,49 @@ const Home: React.FC = () => {
                     px={8}
                     py={6}
                     fontSize="lg"
-                    boxShadow="5px 20px 5px rgba(0,0,0,0.4)"
-                    _hover={{ boxShadow: "0 6px 8px rgba(0,0,0,0.4)", bg: "whiteAlpha.400" }}
+                    sx={{
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1))',
+                      backdropFilter: 'blur(5px)',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+                      transition: 'all 0.3s ease',
+                      _hover: {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 12px 40px 0 rgba(31, 38, 135, 0.45)',
+                        background: 'linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0.15))',
+                      }
+                    }}
                     fontFamily="'Open Sans', sans-serif"
                   >
                     Log in
                   </Button>
-                  <Button
-                    colorScheme="whiteAlpha"
-                    size="lg"
+                  <Box
                     width="32%"
-                    px={8}
-                    py={6}
-                    fontSize="lg"
-                    boxShadow="5px 20px 5px rgba(0,0,0,0.4)"
-                    _hover={{ boxShadow: "0 6px 8px rgba(0,0,0,0.4)", bg: "whiteAlpha.400" }}
-                    fontFamily="'Open Sans', sans-serif"
+                    position="relative"
+                    sx={{
+                      background: 'linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.9))',
+                      backdropFilter: 'blur(5px)',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      borderRadius: 'md',
+                      overflow: 'hidden',
+                      boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+                      transition: 'all 0.3s ease',
+                      _hover: {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 12px 40px 0 rgba(31, 38, 135, 0.45)',
+                      }
+                    }}
                   >
-                   
-                  </Button>
-                  <Button
-                    colorScheme="whiteAlpha"
-                    size="lg"
-                    width="32%"
-                    px={8}
-                    py={6}
-                    fontSize="lg"
-                    boxShadow="5px 20px 5px rgba(0,0,0,0.4)"
-                    _hover={{ boxShadow: "0 6px 8px rgba(0,0,0,0.4)", bg: "whiteAlpha.400" }}
-                    fontFamily="'Open Sans', sans-serif"
-                  >
-                    
-                  </Button>
-                  <Button
-                    colorScheme="whiteAlpha"
-                    size="lg"
-                    width="32%"
-                    px={8}
-                    py={6}
-                    fontSize="lg"
-                    boxShadow="5px 20px 5px rgba(0,0,0,0.4)"
-                    _hover={{ boxShadow: "0 6px 8px rgba(0,0,0,0.4)", bg: "whiteAlpha.400" }}
-                    fontFamily="'Open Sans', sans-serif"
-                  >
-                    
-                  </Button>
+                    <img
+                      src="/images/buildbyethereum.gif"
+                      alt="Built on Ethereum"
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        display: 'block'
+                      }}
+                    />
+                  </Box>
                 </VStack>
               </VStack>
             </Box>
