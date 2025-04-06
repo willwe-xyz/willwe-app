@@ -204,74 +204,60 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   }
 
   return (
-    <Flex 
-      direction="column" 
-      h="calc(100vh - 80px)"
+    <Box 
       bg="white" 
-      rounded="xl" 
-      shadow="sm"
+      borderRadius="2xl" 
+      shadow="sm" 
       overflow="hidden"
+      border="1px solid"
+      borderColor="gray.100"
     >
-      <Box p={4} borderBottom="1px" borderColor="gray.100">
-        <HStack justify="space-between" mb={4}>
-          <NodeActions
-            onSpawnNode={() => setShowSpawnModal(true)}
-            isProcessing={isProcessing}
-            selectedToken={selectedToken}
-            userAddress={userAddress}
-            onRefresh={onRefresh}
-          />
-          {selectedToken && (
-            <TokenNameDisplay 
-              tokenAddress={selectedToken}  
-              chainId={chainId}
-            />
-          )}
-        </HStack>
-
+      <Box p={6} borderBottom="1px" borderColor="gray.100">
         <Grid 
-          templateColumns="repeat(5, 1fr)"
-          gap={3}
-          maxW="100%"
-          mx="auto"
+          templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(5, 1fr)' }}
+          gap={4}
         >
           <StatsCard
             title="Total Value"
-            value={Number(formatBalance(totalSupplyValue)).toFixed(3)}
-            icon={<Wallet size={14} />}
-            color="purple"
-            tooltip="Total supply of the token"
+            value={formatBalance(totalSupplyValue.toString())}
+            icon={<Activity size={14} />}
+            color={selectedTokenColor}
+            tooltip="Total value locked in the network"
             size="sm"
           />
+          
           <StatsCard
             title="Members"
-            value={totalMembers}
+            value={totalMembers.toString()}
             icon={<Users size={14} />}
-            color="blue"
+            color={selectedTokenColor}
             tooltip="Total unique members across all nodes"
             size="sm"
           />
+          
           <StatsCard
             title="Max Depth"
-            value={maxDepth}
+            value={maxDepth.toString()}
             icon={<GitBranch size={14} />}
-            color="green"
-            tooltip="Maximum depth of the node hierarchy"
+            color={selectedTokenColor}
+            tooltip="Maximum depth of the node tree"
             size="sm"
           />
+          
           <StatsCard
             title="Active Signals"
-            value={totalSignals}
+            value={totalSignals.toString()}
             icon={<Signal size={14} />}
-            color="orange"
-            tooltip="Total active signals across all nodes"
+            color={selectedTokenColor}
+            tooltip="Total active signals in the network"
             size="sm"
           />
+          
           <StatsCard
             title="Average Expense"
             value={formatBalance(averageExpense.toString())}
             icon={<Wallet size={14} />}
-            color="red"
+            color="red.500"
             tooltip="Average expense per node in ETH/day"
             size="sm"
           />
@@ -279,7 +265,13 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
       </Box>
 
       <Flex direction="column" flex="1" overflow="hidden">
-        <Box px={6} py={4} borderBottom="1px" borderColor="gray.100">
+        <Box 
+          px={6} 
+          py={4} 
+          borderBottom="1px" 
+          borderColor="gray.100"
+          bg="gray.50"
+        >
           <NodeFilters
             nodes={nodes}
             onFilterChange={(filteredNodes) => {
@@ -288,42 +280,67 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           />
         </Box>
 
-        <Box flex="1" overflowY="auto" px={6} py={4} pb={20}>
+        <Box 
+          flex="1" 
+          overflowY="auto" 
+          px={6} 
+          py={4} 
+          pb={20}
+          sx={{
+            '&::-webkit-scrollbar': {
+              width: '4px',
+            },
+            '&::-webkit-scrollbar-track': {
+              width: '6px',
+              bg: 'gray.50',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              bg: 'gray.300',
+              borderRadius: '24px',
+            },
+          }}
+        >
           {nodes.length === 0 ? (
             <Box 
               p={8} 
               bg="gray.50" 
-              rounded="lg" 
+              rounded="xl" 
               textAlign="center"
               border="2px dashed"
               borderColor="gray.200"
             >
               <VStack spacing={4}>
-                <Text color="gray.600">
+                <Text color="gray.600" fontSize="sm">
                   No nodes found. Create a new node to get started.
                 </Text>
 
                 <Button
-  leftIcon={<Plus size={16} />}
-  onClick={() => {
-    if (!selectedToken) {
-      toast({
-        title: "Error",
-        description: "Invalid root token selected",
-        status: "error",
-        duration: 5000,
-      });
-      return;
-    }
-    setShowSpawnModal(true);
-  }}
-  colorScheme="purple"
-  isLoading={isProcessing}
-  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
->
-  Create Node
-</Button>
-
+                  leftIcon={<Plus size={16} />}
+                  onClick={() => {
+                    if (!selectedToken) {
+                      toast({
+                        title: "Error",
+                        description: "Invalid root token selected",
+                        status: "error",
+                        duration: 5000,
+                      });
+                      return;
+                    }
+                    setShowSpawnModal(true);
+                  }}
+                  bg={selectedTokenColor}
+                  color="white"
+                  _hover={{
+                    bg: selectedTokenColor,
+                    opacity: 0.9
+                  }}
+                  isLoading={isProcessing}
+                  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
+                  size="md"
+                  px={6}
+                >
+                  Create Node
+                </Button>
               </VStack>
             </Box>
           ) : (
@@ -353,7 +370,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         onClose={() => setShowSpawnModal(false)}
         showToolbar={false}
       />
-    </Flex>
+    </Box>
   );
 };
 

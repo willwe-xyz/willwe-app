@@ -10,7 +10,8 @@ import {
   Badge,
   Skeleton,
   useToast,
-  useColorModeValue
+  useColorModeValue,
+  Grid
 } from '@chakra-ui/react';
 import { Copy, ChevronRight } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -87,9 +88,12 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const [tokenSymbol, setTokenSymbol] = useState<string>('');
   const toast = useToast();
 
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const borderColor = useColorModeValue('gray.100', 'gray.700');
   const bgColor = useColorModeValue('white', 'gray.800');
   const mutedColor = useColorModeValue('gray.600', 'gray.400');
+  const statsBg = useColorModeValue('gray.50', 'gray.700');
+  const cardBg = useColorModeValue('white', 'gray.800');
+  const hoverBg = useColorModeValue('gray.50', 'gray.700');
 
   // Safely handle null or undefined values
   const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId), {
@@ -106,7 +110,8 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     provider
   );
 
-  const [memberData, setMemberData] = useState<MemberData[]>([]);
+  const [memberData, setMemberData] = useState<Array<{ address: string; ensName: string | null }>>([]);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const fetchTokenSymbol = async () => {
@@ -153,35 +158,27 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
     fetchMembraneTitle();
   }, [node]);
 
-  const formatCurrency = (value: string): string => {
-    try {
-      const numValue = parseFloat(value);
-      if (isNaN(numValue)) return '0';
-      
-      if (numValue >= 1000000) {
-        return `${(numValue / 1000000).toFixed(2)}M`;
-      } else if (numValue >= 1000) {
-        return `${(numValue / 1000).toFixed(2)}K`;
-      } else {
-        return numValue.toFixed(2);
-      }
-    } catch (error) {
-      console.error('Error formatting currency:', error);
-      return '0';
-    }
+  const formatCurrency = (value: string) => {
+    const num = parseFloat(value);
+    if (isNaN(num)) return '0';
+    if (num === 0) return '0';
+    if (num < 0.0001) return '<0.0001';
+    return num.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 4
+    });
   };
 
-  const handleCopyNodeId = () => {
-    if (!node?.basicInfo?.nodeId) return;
-    
-    navigator.clipboard.writeText(node.basicInfo.nodeId);
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
     toast({
-      title: 'Copied',
-      description: 'Node ID copied to clipboard',
-      status: 'success',
+      title: "Copied to clipboard",
+      status: "success",
       duration: 2000,
       isClosable: true,
     });
+    setTimeout(() => setCopied(false), 2000);
   };
 
   useEffect(() => {
@@ -216,128 +213,161 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
 
   return (
     <Box
-      p={6}
       bg={bgColor}
-      borderRadius="lg"
-      border="1px"
-      borderColor={borderColor}
+      borderRadius="xl"
+      overflow="hidden"
     >
-      <Box p={4}>
-        <HStack spacing={4} align="start" w="full" minH="300px">
-          <VStack
-            flex="1"
-            align="stretch"
-            spacing={3}
-            borderRadius="md"
-            borderWidth="1px"
-            borderColor={borderColor}
-            p={4}
+      <HStack spacing={6} align="start" w="full">
+        {/* Left column - Stats */}
+        <VStack
+          flex="1"
+          align="stretch"
+          spacing={4}
+        >
+          {/* Stats grid */}
+          <Grid 
+            templateColumns="repeat(2, 1fr)" 
+            gap={4}
           >
-            <HStack justify="space-between">
+            <Box
+              p={4}
+              bg={statsBg}
+              borderRadius="lg"
+              transition="all 0.2s"
+              _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
+            >
               <Tooltip label="Daily token creation rate for this node" fontSize="sm">
-                <Text fontSize="sm" color={mutedColor} cursor="help">Daily Unlock</Text>
+                <VStack align="start" spacing={1}>
+                  <Text fontSize="sm" color={mutedColor}>Daily Unlock</Text>
+                  <Text fontSize="lg" fontWeight="semibold">
+                    {formatCurrency(metrics.dailyUnlock)} PSC/day
+                  </Text>
+                </VStack>
               </Tooltip>
-              <Text fontWeight="medium">{formatCurrency(metrics.dailyUnlock)} PSC/day</Text>
-            </HStack>
-            <HStack justify="space-between">
+            </Box>
+
+            <Box
+              p={4}
+              bg={statsBg}
+              borderRadius="lg"
+              transition="all 0.2s"
+              _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
+            >
               <Tooltip label="Amount of tokens held in node's own account" fontSize="sm">
-                <Text fontSize="sm" color={mutedColor} cursor="help">Total Node Value</Text>
+                <VStack align="start" spacing={1}>
+                  <Text fontSize="sm" color={mutedColor}>Total Node Value</Text>
+                  <Text fontSize="lg" fontWeight="semibold">
+                    {formatCurrency(metrics.TVL)} PSC
+                  </Text>
+                </VStack>
               </Tooltip>
-              <Text fontWeight="medium">{formatCurrency(metrics.TVL)} PSC</Text>
-            </HStack>
-            <HStack justify="space-between">
+            </Box>
+
+            <Box
+              p={4}
+              bg={statsBg}
+              borderRadius="lg"
+              transition="all 0.2s"
+              _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
+            >
               <Tooltip label="Current per-second inflation rate" fontSize="sm">
-                <Text fontSize="sm" color={mutedColor} cursor="help">Inflow Rate</Text>
+                <VStack align="start" spacing={1}>
+                  <Text fontSize="sm" color={mutedColor}>Inflow Rate</Text>
+                  <Text fontSize="lg" fontWeight="semibold">
+                    {formatCurrency(metrics.inflow)} PSC/sec
+                  </Text>
+                </VStack>
               </Tooltip>
-              <Text fontWeight="medium">{formatCurrency(metrics.inflow)} PSC/sec</Text>
-            </HStack>
-            <HStack justify="space-between">
+            </Box>
+
+            <Box
+              p={4}
+              bg={statsBg}
+              borderRadius="lg"
+              transition="all 0.2s"
+              _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
+            >
               <Tooltip label="Current balance available in the node's budget" fontSize="sm">
-                <Text fontSize="sm" color={mutedColor} cursor="help">Active Shares</Text>
+                <VStack align="start" spacing={1}>
+                  <Text fontSize="sm" color={mutedColor}>Active Shares</Text>
+                  <Text fontSize="lg" fontWeight="semibold">
+                    {formatCurrency(metrics.availableShares)} PSC
+                  </Text>
+                </VStack>
               </Tooltip>
-              <Text fontWeight="medium">{formatCurrency(metrics.availableShares)} PSC</Text>
-            </HStack>
-          </VStack>
+            </Box>
+          </Grid>
 
-          <VStack flex="1" align="stretch" spacing={4}>
-            {metrics.membersList.length > 0 && (
-              <VStack align="stretch">
-                <Text fontSize="sm" color={mutedColor}>Members ({metrics.membersList.length})</Text>
-                <Box
-                  maxH="125px"
+          {/* Members section */}
+          {node.membersOfNode && node.membersOfNode.length > 0 && (
+            <Box
+              mt={4}
+              p={4}
+              bg={cardBg}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={borderColor}
+            >
+              <VStack align="stretch" spacing={3}>
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
+                  <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                    Active
+                  </Badge>
+                </HStack>
+                
+                <Box 
+                  maxH="150px" 
                   overflowY="auto"
-                  borderRadius="md"
-                  borderWidth="1px"
-                  borderColor={borderColor}
-                  p={2}
+                  sx={{
+                    '&::-webkit-scrollbar': {
+                      width: '4px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      width: '6px',
+                      bg: 'transparent',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      bg: 'gray.300',
+                      borderRadius: '24px',
+                    },
+                  }}
                 >
-                  {memberData.map((member, index) => (
-                    <Text 
-                      key={index} 
-                      fontSize="xs" 
-                      isTruncated 
-                      py={1}
-                      display="flex"
-                      alignItems="center"
-                    >
-                      {member.ensName || 
-                        `${member.address.slice(0, 6)}...${member.address.slice(-4)}`
-                      }
-                      {member.ensName && (
-                        <Text 
-                          as="span" 
-                          fontSize="xx-small" 
-                          color="gray.500" 
-                          ml={2}
-                        >
-                          ({`${member.address.slice(0, 6)}...${member.address.slice(-4)}`})
-                        </Text>
-                      )}
-                    </Text>
-                  ))}
-                </Box>
-              </VStack>
-            )}
-
-            {node.childrenNodes.length > 0 && (
-              <VStack align="stretch">
-                <Text fontSize="sm" color={mutedColor}>Sub-Nodes ({node.childrenNodes.length})</Text>
-                <Box
-                  maxH="125px"
-                  overflowY="auto"
-                  borderRadius="md"
-                  borderWidth="1px"
-                  borderColor={borderColor}
-                  p={2}
-                >
-                  {node.childrenNodes.map((childId, index) => (
-                    <Text
+                  {memberData.map(({ address, ensName }, index) => (
+                    <HStack
                       key={index}
-                      fontSize="xs"
-                      isTruncated
-                      py={1}
-                      cursor="pointer"
-                      onClick={() => {
-                      onNodeSelect?.(childId);
-                      router.push(`/nodes/${chainId}/${childId}`);
-                      }}
-                      _hover={{ color: 'purple.500', textDecoration: 'none' }}>
-                      {childId}
-                    </Text>
+                      py={2}
+                      px={3}
+                      borderRadius="md"
+                      _hover={{ bg: hoverBg }}
+                      transition="all 0.2s"
+                    >
+                      <Text fontSize="sm" isTruncated>
+                        {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
+                      </Text>
+                      <IconButton
+                        aria-label="Copy address"
+                        icon={<Copy size={14} />}
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => handleCopy(address)}
+                      />
+                    </HStack>
                   ))}
                 </Box>
               </VStack>
-            )}
-          </VStack>
+            </Box>
+          )}
+        </VStack>
 
-          <Box flex="1">
-            <SunburstChart
-              nodeData={node}
-              chainId={chainId}
-            />
-          </Box>
-        </HStack>
-      </Box>
+        {/* Right column - Chart */}
+        <Box flex="1">
+          <SunburstChart
+            nodeData={node}
+            chainId={chainId}
+          />
+        </Box>
+      </HStack>
     </Box>
   );
 };

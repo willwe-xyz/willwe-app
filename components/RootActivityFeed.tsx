@@ -1,16 +1,22 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner } from '@chakra-ui/react';
+import React, { useEffect, useState, useCallback, ReactElement } from 'react';
+import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner, HStack, Alert, AlertIcon } from '@chakra-ui/react';
 import { formatDistanceToNow } from 'date-fns';
 import { ActivityFeed } from './ActivityFeed/ActivityFeed';
 import { ActivityItem } from '../types/chainData';
 import { transformActivities } from '../utils/activityTransformers';
 import { usePonderData } from '@/hooks/usePonderData';
+import { Activity, RefreshCw } from 'lucide-react';
 
 interface RootActivityFeedProps {
   tokenAddress: string;
   chainId: string;
   showDebug?: boolean;
   selectedTokenColor?: string;
+}
+
+interface ExtendedActivityItem extends ActivityItem {
+  timeAgo: string;
+  when: string;
 }
 
 /**
@@ -23,7 +29,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   selectedTokenColor = 'blue.500'
 }) => {
   const [activities, setActivities] = useState<any[]>([]);
-  const [transformedActivities, setTransformedActivities] = useState<ActivityItem[]>([]);
+  const [transformedActivities, setTransformedActivities] = useState<ExtendedActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [paginationMeta, setPaginationMeta] = useState({ total: 0, limit: 50, offset: 0, nodeCount: 0 });
@@ -193,106 +199,150 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   const combinedError = error || ponderError;
 
   return (
-    <VStack spacing={4} align="stretch" w="100%">
-      <Flex justifyContent="space-between" alignItems="center">
-        <Heading size="md">Root Node Activity</Heading>
-        <Button 
-          size="sm" 
-          colorScheme="blue" 
-          onClick={handleRefresh} 
-          isLoading={isLoading || isPonderLoading}
-          bg={selectedTokenColor}
+    <VStack 
+      spacing={4} 
+      align="stretch" 
+      w="100%" 
+      bg="white" 
+      borderRadius="xl" 
+      shadow="sm" 
+      overflow="hidden"
+    >
+      <Box 
+        p={4} 
+        borderBottom="1px" 
+        borderColor="gray.100"
+        bg="white"
+      >
+        <Flex 
+          justifyContent="space-between" 
+          alignItems="center"
         >
-          Refresh Activities
-        </Button>
-      </Flex>
+          <HStack spacing={3}>
+            <Box
+              p={2}
+              borderRadius="lg"
+              bg={`${selectedTokenColor}10`}
+            >
+              <Activity size={20} color={selectedTokenColor} />
+            </Box>
+            <Heading size="md">Root Node Activity</Heading>
+          </HStack>
+          <Button 
+            size="sm" 
+            onClick={handleRefresh} 
+            isLoading={isLoading || isPonderLoading}
+            bg={selectedTokenColor}
+            color="white"
+            _hover={{
+              bg: selectedTokenColor,
+              opacity: 0.9,
+            }}
+            leftIcon={<RefreshCw size={14} />}
+          >
+            Refresh
+          </Button>
+        </Flex>
+      </Box>
       
       {combinedError && (
-        <Box p={4} bg="red.50" color="red.500" borderRadius="md">
-          <Text fontWeight="bold">Error:</Text>
-          <Text>{combinedError.message}</Text>
-        </Box>
+        <Alert 
+          status="error" 
+          variant="left-accent"
+          borderRadius="none"
+        >
+          <AlertIcon />
+          <Text fontSize="sm">{combinedError.message}</Text>
+        </Alert>
       )}
       
+      <Box flex="1" position="relative" minH="400px">
+        {(isLoading || isPonderLoading) && activities.length === 0 ? (
+          <Flex 
+            direction="column" 
+            align="center" 
+            justify="center" 
+            py={8}
+            h="100%"
+            bg="gray.50"
+          >
+            <Spinner 
+              size="xl" 
+              color={selectedTokenColor} 
+              thickness="3px"
+              speed="0.8s"
+            />
+            <Text mt={4} color="gray.600">Loading activities...</Text>
+          </Flex>
+        ) : (
+          <Box 
+            overflowY="auto" 
+            maxH="calc(100vh - 300px)"
+            sx={{
+              '&::-webkit-scrollbar': {
+                width: '4px',
+              },
+              '&::-webkit-scrollbar-track': {
+                width: '6px',
+                background: 'gray.50',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: 'gray.300',
+                borderRadius: '24px',
+              },
+            }}
+          >
+            <ActivityFeed 
+              activities={activities}
+              isLoading={isLoading || isPonderLoading}
+              error={combinedError ? combinedError.message : null}
+              emptyStateMessage="No activities found for this root node. Activities will appear here when events occur in this node or any of its derived nodes."
+            />
+          </Box>
+        )}
+      </Box>
+
       {showDebug && (
         <Accordion allowToggle>
-          <AccordionItem>
-            <h2>
-              <AccordionButton>
-                <Box flex="1" textAlign="left">
-                  Debug Information
+          <AccordionItem border="none">
+            <AccordionButton 
+              _hover={{ bg: 'gray.50' }}
+              px={4}
+            >
+              <Box flex="1" textAlign="left">
+                <Text fontSize="sm" color="gray.600">Debug Information</Text>
+              </Box>
+              <AccordionIcon />
+            </AccordionButton>
+            <AccordionPanel 
+              pb={4} 
+              bg="gray.50"
+              fontSize="sm"
+            >
+              <VStack align="start" spacing={3}>
+                <Box w="100%">
+                  <Text fontWeight="medium" mb={1}>Root Node ID (Token Address):</Text>
+                  <Code p={2} borderRadius="md" w="100%" fontSize="xs">{tokenAddress}</Code>
                 </Box>
-                <AccordionIcon />
-              </AccordionButton>
-            </h2>
-            <AccordionPanel pb={4}>
-              <VStack align="start" spacing={2}>
-                <Text fontWeight="bold">Root Node ID (Token Address):</Text>
-                <Code p={2} borderRadius="md" w="100%">{tokenAddress}</Code>
                 
-                <Text fontWeight="bold">Chain ID:</Text>
-                <Code p={2} borderRadius="md">{chainId}</Code>
+                <Box w="100%">
+                  <Text fontWeight="medium" mb={1}>Chain ID:</Text>
+                  <Code p={2} borderRadius="md" fontSize="xs">{chainId}</Code>
+                </Box>
                 
-                <Text fontWeight="bold">Activities Count:</Text>
-                <Text>{activities.length} raw / {transformedActivities.length} transformed</Text>
+                <Box w="100%">
+                  <Text fontWeight="medium" mb={1}>Activities Count:</Text>
+                  <Text color="gray.600">{activities.length} activities</Text>
+                </Box>
                 
-                <Text fontWeight="bold">Pagination:</Text>
-                <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-                  {JSON.stringify(paginationMeta, null, 2)}
-                </Code>
-                
-                <Text fontWeight="bold">Loading State:</Text>
-                <Text>{(isLoading || isPonderLoading) ? 'Loading...' : 'Completed'}</Text>
-                
-                <Text fontWeight="bold">Activity Types:</Text>
-                <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-                  {JSON.stringify(
-                    transformedActivities.reduce((acc, activity) => {
-                      acc[activity.type] = (acc[activity.type] || 0) + 1;
-                      return acc;
-                    }, {} as Record<string, number>),
-                    null,
-                    2
-                  )}
-                </Code>
-                
-                <Text fontWeight="bold">First Activity:</Text>
-                <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-                  {transformedActivities.length > 0 
-                    ? JSON.stringify(transformedActivities[0], null, 2) 
-                    : 'No activities found'}
-                </Code>
-                
-                <Text fontWeight="bold">Debug Info:</Text>
-                <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-                  {JSON.stringify(debugInfo, null, 2)}
-                </Code>
+                <Box w="100%">
+                  <Text fontWeight="medium" mb={1}>Loading State:</Text>
+                  <Text color="gray.600">{(isLoading || isPonderLoading) ? 'Loading...' : 'Completed'}</Text>
+                </Box>
               </VStack>
             </AccordionPanel>
           </AccordionItem>
         </Accordion>
-      )}
-      
-      {(isLoading || isPonderLoading) && transformedActivities.length === 0 ? (
-        <Box textAlign="center" py={8}>
-          <Spinner size="xl" color={selectedTokenColor} />
-          <Text mt={4}>Loading activities...</Text>
-        </Box>
-      ) : (
-        <ActivityFeed 
-          activities={transformedActivities.map((activity, index) => ({
-            ...activity,
-            // Ensure each activity has a unique id and valid timestamp to prevent previous errors
-            id: activity.id || `activity-${index}`,
-            when: activity.when || Date.now(),
-            timeAgo: activity.timestamp && !isNaN(new Date(activity.timestamp).getTime()) 
-              ? formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })
-              : 'Unknown time'
-          }))} 
-          isLoading={isLoading || isPonderLoading} 
-          error={combinedError ? combinedError.message : null}
-          emptyStateMessage={`No activities found for this root node. Activities will appear here when events occur in this node or any of its derived nodes.`}
-        />
       )}
     </VStack>
   );

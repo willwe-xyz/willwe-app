@@ -60,19 +60,22 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   const { isOpen, onOpen, onClose } = useDisclosure();
   
   const cleanChainId = chainId?.replace('eip155:', '') || '';
-  // Use ZeroAddress if no user address is available
   const userAddress = user?.wallet?.address || ethers.ZeroAddress;
   const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, userAddress, nodeId);
   
+  // Theme colors
   const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const borderColor = useColorModeValue('gray.100', 'gray.700');
   const headerBg = useColorModeValue('gray.50', 'gray.900');
+  const tabBg = useColorModeValue('gray.50', 'gray.800');
+  const tabActiveBg = useColorModeValue('white', 'gray.700');
+  const tabHoverBg = useColorModeValue('gray.100', 'gray.600');
   
   const refetch = useCallback(() => {
     fetchNodeData();
   }, [fetchNodeData]);
 
-  // Check if node is an endpoint - with proper null checks
+  // Check if node is an endpoint
   const isEndpoint = nodeData?.basicInfo && 
     nodeData.rootPath && 
     nodeData.rootPath.length > 0 && 
@@ -83,11 +86,20 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   if (isLoading) {
     return (
       <Box p={6}>
-        <VStack spacing={4} align="stretch">
-          <Skeleton height="60px" borderRadius="md" />
-          <Skeleton height="40px" borderRadius="md" />
-          <Skeleton height="200px" borderRadius="md" />
-          <Skeleton height="100px" borderRadius="md" />
+        <VStack 
+          spacing={4} 
+          align="stretch"
+          bg={bgColor}
+          borderRadius="xl"
+          shadow="sm"
+          borderWidth="1px"
+          borderColor={borderColor}
+          p={6}
+        >
+          <Skeleton height="60px" borderRadius="lg" />
+          <Skeleton height="40px" borderRadius="lg" />
+          <Skeleton height="200px" borderRadius="lg" />
+          <Skeleton height="100px" borderRadius="lg" />
         </VStack>
       </Box>
     );
@@ -97,7 +109,14 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   if (error) {
     return (
       <Box p={6}>
-        <Alert status="error" borderRadius="md">
+        <Alert 
+          status="error" 
+          borderRadius="xl"
+          bg={bgColor}
+          shadow="sm"
+          borderWidth="1px"
+          borderColor="red.100"
+        >
           <AlertIcon />
           <Text>Error loading node data: {error.message || 'Unknown error'}</Text>
         </Alert>
@@ -109,7 +128,14 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   if (!nodeData?.basicInfo) {
     return (
       <Box p={6}>
-        <Alert status="warning" borderRadius="md">
+        <Alert 
+          status="warning" 
+          borderRadius="xl"
+          bg={bgColor}
+          shadow="sm"
+          borderWidth="1px"
+          borderColor="orange.100"
+        >
           <AlertIcon />
           <Text>No data available for this node</Text>
         </Alert>
@@ -122,7 +148,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     return (
       <Box p={6}>
         <Box
-          borderRadius="lg"
+          borderRadius="xl"
           bg={bgColor}
           borderWidth="1px"
           borderColor={borderColor}
@@ -155,11 +181,12 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   return (
     <Box p={6}>
       <Box
-        borderRadius="lg"
+        borderRadius="xl"
         bg={bgColor}
         borderWidth="1px"
         borderColor={borderColor}
         shadow="sm"
+        overflow="hidden"
       >
         {/* Node header with basic info */}
         <Box 
@@ -176,6 +203,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           borderBottomWidth="1px"
           borderColor={borderColor}
           bg={headerBg}
+          px={6}
+          py={3}
         >
           <NodeOperations
             nodeId={nodeId}
@@ -190,8 +219,27 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         </Box>
         
         {/* Main tab navigation */}
-        <Tabs variant="enclosed" colorScheme="purple">
-          <TabList>
+        <Tabs 
+          variant="enclosed" 
+          colorScheme="purple"
+          isLazy
+          sx={{
+            '.chakra-tabs__tab': {
+              bg: tabBg,
+              borderBottomWidth: '2px',
+              _selected: {
+                bg: tabActiveBg,
+                borderBottomColor: selectedTokenColor,
+                color: selectedTokenColor,
+                fontWeight: 'semibold'
+              },
+              _hover: {
+                bg: tabHoverBg
+              }
+            }
+          }}
+        >
+          <TabList px={6} pt={4}>
             <Tab>
               <HStack spacing={2}>
                 <Activity size={16} />
@@ -224,7 +272,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             </Tab>
           </TabList>
 
-          <TabPanels>
+          <TabPanels bg={tabActiveBg}>
             {/* Activity tab */}
             <TabPanel p={6}>
               <ActivitySection 
@@ -289,17 +337,51 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             borderColor={borderColor}
             bg={headerBg}
           >
-            <Flex align="center" wrap="wrap" gap={2}>
-              <HStack>
-                <Info size={14} />
-                <Text fontSize="sm" fontWeight="medium">Permissions:</Text>
+            <Flex align="center" wrap="wrap" gap={3}>
+              <HStack spacing={2}>
+                <Info size={14} color={selectedTokenColor} />
+                <Text fontSize="sm" fontWeight="medium" color="gray.600">
+                  Permissions:
+                </Text>
               </HStack>
               <Spacer display={["none", "block"]} />
               <HStack spacing={2} flexWrap="wrap">
-                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Mint</Badge>
-                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Burn</Badge>
-                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Signal</Badge>
-                <Badge colorScheme="green" px={2} py={1} borderRadius="full">Redistribute</Badge>
+                <Badge 
+                  colorScheme="green" 
+                  px={3} 
+                  py={1} 
+                  borderRadius="full"
+                  variant="subtle"
+                >
+                  Mint
+                </Badge>
+                <Badge 
+                  colorScheme="green" 
+                  px={3} 
+                  py={1} 
+                  borderRadius="full"
+                  variant="subtle"
+                >
+                  Burn
+                </Badge>
+                <Badge 
+                  colorScheme="green" 
+                  px={3} 
+                  py={1} 
+                  borderRadius="full"
+                  variant="subtle"
+                >
+                  Signal
+                </Badge>
+                <Badge 
+                  colorScheme="green" 
+                  px={3} 
+                  py={1} 
+                  borderRadius="full"
+                  variant="subtle"
+                >
+                  Redistribute
+                </Badge>
               </HStack>
             </Flex>
           </Box>
