@@ -20,42 +20,73 @@ interface BackgroundLetterProps {
   z: number;
 }
 
-const BackgroundLetter = React.memo<BackgroundLetterProps>(({ children, color, x, y, z }) => (
-  <motion.div
-    style={{
-      position: 'absolute',
-      fontSize: '26vw',
-      fontWeight: 'bold',
-      color: color,
-      opacity: 0.2,
-      transformStyle: 'preserve-3d',
-      transform: `translate3d(${x}px, ${y}px, ${z}px)`,
-    }}
-    initial={{ opacity: 0, scale: 0.8 }}
-    animate={{ 
-      opacity: 0.2,
-      scale: 1,
-    }}
-    transition={{
-      duration: 2,
-      repeat: Infinity,
-      repeatType: "reverse",
-      ease: "easeInOut"
-    }}
-  >
-    <Box
-      position="relative"
-      sx={{
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 100%)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        textShadow: '0 0 40px rgba(255,255,255,0.4)',
+const BackgroundLetter = React.memo<BackgroundLetterProps>(({ children, color, x, y, z }) => {
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  return (
+    <motion.div
+      style={{
+        position: 'absolute',
+        fontSize: '26vw',
+        fontWeight: 'bold',
+        color: color,
+        transformStyle: 'preserve-3d',
+        transform: `translate3d(${x}px, ${y}px, ${z}px)`,
+        WebkitTextStroke: '1px rgba(255,255,255,0.1)',
+      }}
+      animate={{ 
+        x: x + mousePosition.x * 0.02,
+        y: y + mousePosition.y * 0.02,
+        rotateX: [-2, 2, -2],
+        rotateY: [2, -2, 2],
+        opacity: [0.15, 0.25, 0.15],
+        scale: [1, 1.05, 1],
+      }}
+      transition={{
+        duration: 8,
+        repeat: Infinity,
+        repeatType: "reverse",
+        ease: "easeInOut",
       }}
     >
-      {children}
-    </Box>
-  </motion.div>
-));
+      <motion.div
+        animate={{
+          filter: [
+            'blur(0px) brightness(1)',
+            'blur(2px) brightness(1.2)',
+            'blur(0px) brightness(1)'
+          ],
+        }}
+        transition={{
+          duration: 4,
+          repeat: Infinity,
+          repeatType: "reverse",
+          ease: "easeInOut",
+        }}
+      >
+        <Box
+          position="relative"
+          sx={{
+            background: `linear-gradient(135deg, ${color} 0%, transparent 80%)`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            textShadow: `0 0 40px ${color.replace('0.4', '0.2')}`,
+          }}
+        >
+          {children}
+        </Box>
+      </motion.div>
+    </motion.div>
+  );
+});
 
 BackgroundLetter.displayName = 'BackgroundLetter';
 
@@ -150,23 +181,23 @@ const Home: React.FC = () => {
     
           <motion.main
             className="flex min-h-screen min-w-full bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 overflow-hidden"
-            style={{ perspective: 1000 }}
+            style={{ perspective: 1500 }}
           >
             <BackgroundLetter 
               color="rgba(255,255,0,0.4)" 
-              {...getTransform(-100 + rightShift, -100, -200, 'Y')}
+              {...getTransform(-150 + rightShift, -150, -400, 'Y')}
             >
               Y
             </BackgroundLetter>
             <BackgroundLetter 
               color="rgba(0,255,255,0.4)" 
-              {...getTransform(100 + rightShift, 100, -300, 'X')}
+              {...getTransform(150 + rightShift, 150, -600, 'X')}
             >
               X
             </BackgroundLetter>
             <BackgroundLetter 
               color="rgba(255,0,255,0.4)" 
-              {...getTransform(0 + rightShift, 200, -250, 'Z')}
+              {...getTransform(0 + rightShift, 200, -500, 'Z')}
             >
               Z
             </BackgroundLetter>
@@ -218,54 +249,116 @@ const Home: React.FC = () => {
                 >
                   WillWe
                 </Heading>
-                <Text 
-                  align="center" 
-                  fontSize="2xl" 
-                  lineHeight="tall" 
-                  color="white"
-                  fontFamily="'Roboto Mono', monospace"
+
+                <Box position="relative" width="100%">
+                  <Text 
+                    align="center" 
+                    fontSize="2xl" 
+                    lineHeight="tall" 
+                    color="white"
+                    fontFamily="'Roboto Mono', monospace"
+                    position="relative"
+                    zIndex={1}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {['a', 'token', 'use pattern', 'enabling safe', 'self-explanatory', 'co-operative efforts'].map((text, index) => (
+                      <motion.span
+                        key={index}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        style={{
+                          textShadow: '0 0 15px rgba(255,255,255,0.3)',
+                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
+                          padding: '4px 12px',
+                          borderRadius: '4px',
+                          margin: '2px 0',
+                          position: 'relative',
+                          zIndex: 2,
+                        }}
+                      >
+                        {text}
+                      </motion.span>
+                    ))}
+                  </Text>
+                  
+                  {/* Pixelated shadow */}
+                  <Box
+                    position="absolute"
+                    bottom="-20px"
+                    left="50%"
+                    transform="translateX(-50%)"
+                    width="60%"
+                    height="20px"
+                    sx={{
+                      background: `
+                        linear-gradient(to bottom,
+                          rgba(0,0,0,0.1) 0%,
+                          transparent 100%
+                        )
+                      `,
+                      maskImage: `
+                        repeating-linear-gradient(to right,
+                          #000 0px,
+                          #000 4px,
+                          transparent 4px,
+                          transparent 8px
+                        )
+                      `,
+                      WebkitMaskImage: `
+                        repeating-linear-gradient(to right,
+                          #000 0px,
+                          #000 4px,
+                          transparent 4px,
+                          transparent 8px
+                        )
+                      `,
+                      opacity: 0.5,
+                    }}
+                  />
+                </Box>
+
+                <motion.div
+                  initial={{ scale: 0.95 }}
+                  animate={{ 
+                    scale: [0.95, 1.05, 0.95],
+                    y: [-2, 2, -2]
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    repeatType: "reverse",
+                    ease: "easeInOut"
+                  }}
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
+                    position: 'relative',
+                    zIndex: 2,
+                    marginTop: '20px'  // Added spacing to account for the shadow
                   }}
                 >
-                  {['a', 'token', 'use pattern', 'enabling safe', 'self-explanatory', 'co-operative efforts'].map((text, index) => (
-                    <motion.span
-                      key={index}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      style={{
-                        textShadow: '0 0 15px rgba(255,255,255,0.3)',
-                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
-                        padding: '4px 12px',
-                        borderRadius: '4px',
-                        margin: '2px 0',
-                      }}
-                    >
-                      {text}
-                    </motion.span>
-                  ))}
-                </Text>
-    
-                <WideText 
-                  fontWeight="bold" 
-                  fontSize="3xl" 
-                  color="white" 
-                  mt={1}
-                  fontFamily="'Open Sans', sans-serif"
-                  textShadow="0 0 20px rgba(255,255,255,0.4)"
-                  letterSpacing="0.2em"
-                  sx={{
-                    background: 'linear-gradient(90deg, #ffffff 0%, #f0f0f0 50%, #ffffff 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}
-                >
-                  EVIDENTLY NEUTRAL
-                </WideText>
-                <VStack spacing={4} width="100%">
+                  <WideText 
+                    fontWeight="bold" 
+                    fontSize="3xl" 
+                    color="white" 
+                    mt={1}
+                    fontFamily="'Open Sans', sans-serif"
+                    textShadow="0 0 20px rgba(255,255,255,0.4)"
+                    letterSpacing="0.2em"
+                    sx={{
+                      background: 'linear-gradient(90deg, #ffffff 0%, #f0f0f0 50%, #ffffff 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                    }}
+                  >
+                    EVIDENTLY NEUTRAL
+                  </WideText>
+                </motion.div>
+
+                <VStack spacing={4} width="100%" position="relative">
                   <Button
                     colorScheme="whiteAlpha"
                     size="lg"
@@ -290,6 +383,7 @@ const Home: React.FC = () => {
                   >
                     Log in
                   </Button>
+
                   <Box
                     width="32%"
                     position="relative"
@@ -298,7 +392,7 @@ const Home: React.FC = () => {
                       backdropFilter: 'blur(5px)',
                       border: '1px solid rgba(255,255,255,0.18)',
                       borderRadius: 'md',
-                      overflow: 'hidden',
+                      overflow: 'visible',
                       boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
                       transition: 'all 0.3s ease',
                       _hover: {
@@ -313,7 +407,43 @@ const Home: React.FC = () => {
                       style={{
                         width: '100%',
                         height: 'auto',
-                        display: 'block'
+                        display: 'block',
+                        position: 'relative',
+                        zIndex: 2
+                      }}
+                    />
+                    <Box
+                      position="absolute"
+                      bottom="-40px"
+                      left="0"
+                      width="100%"
+                      height="40px"
+                      sx={{
+                        background: `
+                          linear-gradient(to bottom,
+                            rgba(0,0,0,0.9) 0%,
+                            rgba(0,0,0,0) 100%
+                          )
+                        `,
+                        clipPath: 'polygon(20% 0, 80% 0, 100% 100%, 0 100%)',
+                        zIndex: 1,
+                        _before: {
+                          content: '""',
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: '100%',
+                          backgroundImage: `
+                            repeating-linear-gradient(to right,
+                              rgba(255,255,255,0.03) 0px,
+                              rgba(255,255,255,0.03) 2px,
+                              transparent 2px,
+                              transparent 4px
+                            )
+                          `,
+                          clipPath: 'inherit'
+                        }
                       }}
                     />
                   </Box>
