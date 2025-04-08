@@ -8,34 +8,34 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-//   Will: 0x68232ADeF82451a01a8E0844eE01e4e2C57C0C56
-//   Membrane: 0x0Ded41f963E48dc5b650ba00E2CfA91BC473eD0B
-//   Execution: 0x200FB0a4c6592C91a2846D30a5dbf0C2F285F6cc
-//   WillWe: 0xEb885ee4d53D5be0ff8B235c07f3DB8E8ed7528F
-//   Kibern Director: 0x0000000000000000000000000000000000000000
-//   Control [0,1]: 0xC5559e18069856011A598eBe69ad0Ad6A2E1012f 0x0000000000000000000000000000000000000000
-//   Will Price in ETH: 1000000000
+// Will: 0x2a1EeaF390C6F4274F59A20224a2841a469d9d68
+// Membrane: 0x8257540c2f41605fb70DCfCbA70C48F8420840CF
+// Execution: 0x15364dDE1B4C87F8CE3539e3e59A65fbCed12207
+// WillWe: 0x41A717c4d277c26e08C46ec6c8d26553F067A769
+// Kibern Director: 0x0000000000000000000000000000000000000000
+// Control [0,1]: 0x7C2d0821a3E46879B034e297149eE00E6074476f 0x0000000000000000000000000000000000000000
+// Will Price in ETH: 1000000000
 
 
 export const deployments: Deployments = {
     "Will": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x68232ADeF82451a01a8E0844eE01e4e2C57C0C56",
+        "11155420": "0x2a1EeaF390C6F4274F59A20224a2841a469d9d68",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0x0Ded41f963E48dc5b650ba00E2CfA91BC473eD0B",
+        "11155420": "0x8257540c2f41605fb70DCfCbA70C48F8420840CF",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0x200FB0a4c6592C91a2846D30a5dbf0C2F285F6cc",
+        "11155420": "0x15364dDE1B4C87F8CE3539e3e59A65fbCed12207",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0xEb885ee4d53D5be0ff8B235c07f3DB8E8ed7528F",
+        "11155420": "0x41A717c4d277c26e08C46ec6c8d26553F067A769",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -1353,25 +1353,6 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "event",
-            "name": "ConfigSignal",
-            "inputs": [
-                {
-                    "name": "nodeId",
-                    "type": "uint256",
-                    "indexed": true,
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "expressedOption",
-                    "type": "bytes32",
-                    "indexed": false,
-                    "internalType": "bytes32"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
             "name": "CreatedEndpoint",
             "inputs": [
                 {
@@ -1438,6 +1419,12 @@ export const ABIs: ABIKP = {
                 },
                 {
                     "name": "inflationRate",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "strength",
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
@@ -1526,6 +1513,12 @@ export const ABIs: ABIKP = {
                 },
                 {
                     "name": "membraneId",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "strength",
                     "type": "uint256",
                     "indexed": false,
                     "internalType": "uint256"
@@ -1767,6 +1760,12 @@ export const ABIs: ABIKP = {
                     "type": "uint256[]",
                     "indexed": false,
                     "internalType": "uint256[]"
+                },
+                {
+                    "name": "strenght",
+                    "type": "uint256",
+                    "indexed": false,
+                    "internalType": "uint256"
                 }
             ],
             "anonymous": false

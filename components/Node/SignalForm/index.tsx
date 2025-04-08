@@ -8,6 +8,11 @@ import {
   Alert,
   AlertIcon,
   Progress,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
 } from '@chakra-ui/react';
 import { usePrivy } from "@privy-io/react-auth";
 import { useNodeTransactions } from '../../../hooks/useNodeTransactions';
@@ -19,7 +24,9 @@ import { NodeState } from '../../../types/chainData';
 import MembraneSection from './MembraneSection';
 import InflationSection from './InflationSection';
 import SignalSlider from './SignalSlider';
+import ExistingSignalsTab from './ExistingSignalsTab';
 import Link from 'next/link';
+import { Signal, History } from 'lucide-react';
 
 
 interface SignalFormProps {
@@ -55,7 +62,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   const { user, ready } = usePrivy();
   const { signal } = useNodeTransactions(chainId);
 
-  // State declarations
   const [childrenData, setChildrenData] = useState<ChildData[]>([]);
   const [loadingChildren, setLoadingChildren] = useState(true);
   const [sliderValues, setSliderValues] = useState<Record<string, number>>({});
@@ -468,6 +474,16 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
     fetchChildrenData();
   }, [fetchChildrenData]);
 
+  // Handle selecting a membrane from existing signals
+  const handleSelectMembrane = useCallback((membraneId: string) => {
+    handleMembraneChange(nodeId, membraneId);
+  }, [handleMembraneChange, nodeId]);
+
+  // Handle selecting an inflation rate from existing signals
+  const handleSelectInflation = useCallback((inflationRate: string) => {
+    handleInflationChange(nodeId, inflationRate);
+  }, [handleInflationChange, nodeId]);
+
   // Render loading state
   if (!ready || loadingChildren) {
     return (
@@ -498,98 +514,132 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
     );
   }
 
-  // Render main component
+  // Render main component with tabs
   return (
     <VStack spacing={6} width="100%">
-      {/* Membrane Section - Full width */}
-      <Box width="100%">
-        <MembraneSection
-          membraneId={membraneValues[nodeId] || ''}
-          setMembraneId={(value) => handleMembraneChange(nodeId, value)}
-          membraneMetadata={membraneMetadata}
-          membraneRequirements={membraneRequirements}
-          isLoadingMembrane={false}
-          isValidating={isValidating[nodeId] || false}
-          isProcessing={isSubmitting}
-        />
-      </Box>
+      <Tabs variant="enclosed" colorScheme="purple" width="100%">
+        <TabList>
+          <Tab>
+            <HStack spacing={2}>
+              <Signal size={16} />
+              <Text>Submit Signals</Text>
+            </HStack>
+          </Tab>
+          <Tab>
+            <HStack spacing={2}>
+              <History size={16} />
+              <Text>Existing Signals</Text>
+            </HStack>
+          </Tab>
+        </TabList>
+        
+        <TabPanels>
+          {/* Submit Signals Tab */}
+          <TabPanel p={0}>
+            <VStack spacing={6} width="100%">
+              {/* Membrane Section - Full width */}
+              <Box width="100%">
+                <MembraneSection
+                  membraneId={membraneValues[nodeId] || ''}
+                  setMembraneId={(value) => handleMembraneChange(nodeId, value)}
+                  membraneMetadata={membraneMetadata}
+                  membraneRequirements={membraneRequirements}
+                  isLoadingMembrane={false}
+                  isValidating={isValidating[nodeId] || false}
+                  isProcessing={isSubmitting}
+                />
+              </Box>
 
-      {/* Inflation Section - Full width */}
-      <Box width="100%">
-        <InflationSection
-          inflationRate={inflationRates[nodeId] || ''}
-          setInflationRate={(value) => handleInflationChange(nodeId, value)}
-          isProcessing={isSubmitting}
-        />
-      </Box>
+              {/* Inflation Section - Full width */}
+              <Box width="100%">
+                <InflationSection
+                  inflationRate={inflationRates[nodeId] || ''}
+                  setInflationRate={(value) => handleInflationChange(nodeId, value)}
+                  isProcessing={isSubmitting}
+                />
+              </Box>
 
-      {/* Signal Sliders Section */}
-      <VStack spacing={4} width="100%">
-        {childrenData.map((child) => (
-          <Box key={child.nodeId} width="100%" p={4} borderWidth="1px" borderRadius="md">
-            <VStack spacing={4} align="stretch">
-              <Link href={`/nodes/${chainId}/${child.nodeId}`} passHref>
-                <Text 
-                  cursor="pointer" 
-                  color="purple.500" 
-                  _hover={{ 
-                    textDecoration: 'underline',
-                    color: 'purple.600'
-                  }}
-                  fontWeight="medium"
+              {/* Signal Sliders Section */}
+              <VStack spacing={4} width="100%">
+                {childrenData.map((child) => (
+                  <Box key={child.nodeId} width="100%" p={4} borderWidth="1px" borderRadius="md">
+                    <VStack spacing={4} align="stretch">
+                      <Link href={`/nodes/${chainId}/${child.nodeId}`} passHref>
+                        <Text 
+                          cursor="pointer" 
+                          color="purple.500" 
+                          _hover={{ 
+                            textDecoration: 'underline',
+                            color: 'purple.600'
+                          }}
+                          fontWeight="medium"
+                        >
+                          {child.membraneName || child.nodeId.slice(-6)}
+                        </Text>
+                      </Link>
+                      
+                      <SignalSlider
+                        nodeId={nodeId}
+                        parentId={child.nodeId}
+                        value={sliderValues[child.nodeId]}
+                        lastSignal={(child.currentSignal).toString()}
+                        balance={child.eligibilityPerSecond}
+                        eligibilityPerSecond={child.eligibilityPerSecond}
+                        totalInflationPerSecond="0"
+                        onChange={(v) => handleSliderChange(child.nodeId, v)}
+                        onChangeEnd={(v) => handleSliderChange(child.nodeId, v)}
+                        isDisabled={isSubmitting}
+                        selectedTokenColor="purple.500"
+                        chainId={chainId}
+                        totalAllocation={totalAllocation}
+                      />
+                    </VStack>
+                  </Box>
+                ))}
+
+                {/* Total Allocation */}
+                <Box width="100%" p={4} bg="gray.50" borderRadius="md">
+                  <HStack justify="space-between">
+                    <Text>Total Allocation:</Text>
+                    <Text 
+                      fontWeight="bold"
+                      color={Math.abs(totalAllocation - 100) < 0.01 ? 'green.500' : 'red.500'}
+                    >
+                      {Number(totalAllocation).toFixed(2)}%
+                    </Text>
+                  </HStack>
+                </Box>
+
+                {/* Submit Button */}
+                <Button
+                  colorScheme="purple"
+                  width="100%"
+                  onClick={handleSubmit}
+                  isLoading={isSubmitting}
+                  loadingText="Submitting Signals..."
+                  isDisabled={
+                    isSubmitting || 
+                    Math.abs(totalAllocation - 100) > 0.01 ||
+                    !user?.wallet?.address
+                  }
                 >
-                  {child.membraneName || child.nodeId.slice(-6)}
-                </Text>
-              </Link>
-              
-              <SignalSlider
-                nodeId={nodeId}
-                parentId={child.nodeId}
-                value={sliderValues[child.nodeId]}
-                lastSignal={(child.currentSignal).toString()}
-                balance={child.eligibilityPerSecond}
-                eligibilityPerSecond={child.eligibilityPerSecond}
-                totalInflationPerSecond="0"
-                onChange={(v) => handleSliderChange(child.nodeId, v)}
-                onChangeEnd={(v) => handleSliderChange(child.nodeId, v)}
-                isDisabled={isSubmitting}
-                selectedTokenColor="purple.500"
-                chainId={chainId}
-                totalAllocation={totalAllocation}
-              />
+                  Submit Signals
+                </Button>
+              </VStack>
             </VStack>
-          </Box>
-        ))}
-
-        {/* Total Allocation */}
-        <Box width="100%" p={4} bg="gray.50" borderRadius="md">
-          <HStack justify="space-between">
-            <Text>Total Allocation:</Text>
-            <Text 
-              fontWeight="bold"
-              color={Math.abs(totalAllocation - 100) < 0.01 ? 'green.500' : 'red.500'}
-            >
-              {Number(totalAllocation).toFixed(2)}%
-            </Text>
-          </HStack>
-        </Box>
-
-        {/* Submit Button */}
-        <Button
-          colorScheme="purple"
-          width="100%"
-          onClick={handleSubmit}
-          isLoading={isSubmitting}
-          loadingText="Submitting Signals..."
-          isDisabled={
-            isSubmitting || 
-            Math.abs(totalAllocation - 100) > 0.01 ||
-            !user?.wallet?.address
-          }
-        >
-          Submit Signals
-        </Button>
-      </VStack>
+          </TabPanel>
+          
+          {/* Existing Signals Tab */}
+          <TabPanel p={0}>
+            <ExistingSignalsTab 
+              nodeId={nodeId}
+              chainId={chainId}
+              onSelectMembrane={handleSelectMembrane}
+              onSelectInflation={handleSelectInflation}
+            />
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
     </VStack>
   );
 };

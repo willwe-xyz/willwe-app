@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { NodeState, UserSignal } from '../types/chainData';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { NodeState } from '../types/chainData';
 
 interface SignalData {
   membrane: string;
@@ -16,21 +16,51 @@ interface NodeSignalsResult {
   getLastSignalTime: () => number;
 }
 
+interface NodeConfigSignals {
+  membrane: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+  inflation: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+  redistribution: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+  other: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+}
+
+interface NodeConfigSignalsResult {
+  nodeId: string;
+  chainId: string;
+  signals: NodeConfigSignals;
+  raw: {
+    membraneSignals: any[];
+    inflationSignals: any[];
+    redistributionPreferences: any[];
+    otherSignals: any[];
+  };
+}
+
 export function useNodeSignals(node: NodeState): NodeSignalsResult {
   return useMemo(() => {
-    const processSignal = (signal: UserSignal): SignalData[] => {
-      // @ts-ignore
-      return signal.MembraneInflation.map(([membrane, inflation], index) => ({
-        membrane,
-        inflation,
-        timestamp: Number(signal.lastRedistSignal[index]) || Date.now(),
-        value: inflation
-      }));
-    };
-
-    // Process all signals
-    const allSignals = node.signals.flatMap(processSignal)
-      .sort((a, b) => b.timestamp - a.timestamp);
+    // Process signals from the node state
+    const allSignals: SignalData[] = [];
+    
+    // If node has signals array, process them
+    if (node.signals && Array.isArray(node.signals)) {
+      // Process each signal in the array
+      node.signals.forEach((signal: any) => {
+        if (signal && signal.MembraneInflation && Array.isArray(signal.MembraneInflation)) {
+          signal.MembraneInflation.forEach((mi: any[], index: number) => {
+            if (Array.isArray(mi) && mi.length >= 2) {
+              allSignals.push({
+                membrane: mi[0]?.toString() || '',
+                inflation: mi[1]?.toString() || '',
+                timestamp: Number(signal.lastRedistSignal?.[index]) || Date.now(),
+                value: mi[1]?.toString() || '0'
+              });
+            }
+          });
+        }
+      });
+    }
+    
+    // Sort signals by timestamp (newest first)
+    allSignals.sort((a, b) => b.timestamp - a.timestamp);
 
     // Calculate total signal value
     const totalSignalValue = allSignals.reduce(
@@ -58,4 +88,45 @@ export function useNodeSignals(node: NodeState): NodeSignalsResult {
       getLastSignalTime,
     };
   }, [node.signals]);
+}
+
+export function useNodeConfigSignals(nodeId: string, chainId: string) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [data, setData] = useState<NodeConfigSignalsResult | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!nodeId) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const response = await fetch(`/api/getNodeConfigSignals?nodeId=${nodeId}&chainId=${cleanChainId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching node signals: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      setData(result);
+    } catch (err) {
+      console.error('Error fetching node config signals:', err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [nodeId, chainId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return {
+    data,
+    isLoading,
+    error,
+    refetch: fetchData
+  };
 }
