@@ -124,7 +124,8 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     };
 
     fetchRootTokenBalance();
-  }, [endpointAddress, rootTokenAddress]); 
+  }, [endpointAddress, rootTokenAddress, readProvider]);
+
   useEffect(() => {
     const fetchEndpointData = async () => {
       if (!endpointAddress || endpointAddress === ethers.ZeroAddress || !endpointId || !readProvider) return;
@@ -144,7 +145,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     };
 
     fetchEndpointData();
-  }, [endpointAddress, endpointId]); 
+  }, [endpointAddress, endpointId, readProvider, userAddress]);
 
   useEffect(() => {
     const fetchRootTokenSymbol = async () => {
@@ -166,7 +167,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     };
 
     fetchRootTokenSymbol();
-  }, [rootTokenAddress]); // Removed readProvider dependency
+  }, [rootTokenAddress, readProvider]);
 
   const deployEndpoint = async () => {
     if (!isMember) {

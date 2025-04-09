@@ -62,7 +62,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
           No signals found
         </Text>
         <Text color="gray.500">
-          This node doesn't have any signals yet. Be the first to submit a signal!
+          This node doesn&apos;t have any signals yet. Be the first to submit a signal!
         </Text>
       </Box>
     );
@@ -79,7 +79,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
           No signals found
         </Text>
         <Text color="gray.500">
-          This node doesn't have any signals yet. Be the first to submit a signal!
+          This node doesn&apos;t have any signals yet. Be the first to submit a signal!
         </Text>
       </Box>
     );

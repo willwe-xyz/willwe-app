@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { NodeState } from '../../types/chainData';
 import { Box } from '@chakra-ui/react';
@@ -100,7 +100,7 @@ const SunburstChart: React.FC<SunburstChartProps> = ({ nodeData, chainId }) => {
     values: number[];
   }>({ labels: [], parents: [], ids: [], values: [] });
 
-  React.useEffect(() => {
+  useEffect(() => {
     transformDataForSunburst().then((data) => {
       if (data) setSunburstData(data);
     });

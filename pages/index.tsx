@@ -4,6 +4,7 @@ import Head from "next/head";
 import { Spinner, Heading, Text, Button, VStack, Box, chakra } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
 import DashboardPage from './dashboard';
+import Image from 'next/image';
 
 const WideText = chakra(Text, {
   baseStyle: {
@@ -401,9 +402,11 @@ const Home: React.FC = () => {
                       }
                     }}
                   >
-                    <img
+                    <Image 
                       src="/images/buildbyethereum.gif"
                       alt="Built on Ethereum"
+                      width={500}
+                      height={300}
                       style={{
                         width: '100%',
                         height: 'auto',

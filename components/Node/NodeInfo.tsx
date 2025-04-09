@@ -96,19 +96,23 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
 
   // Safely handle null or undefined values
-  const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId), {
-    chainId: Number(chainId),
-    name: `${chainId}`,
-  });
+  const provider = useMemo(() => {
+    return new ethers.JsonRpcProvider(getRPCUrl(chainId), {
+      chainId: Number(chainId),
+      name: `${chainId}`,
+    });
+  }, [chainId]);
   
   // Safely handle null or undefined values
   const tokenAddress = node?.rootPath?.[0] ? nodeIdToAddress(node.rootPath[0]) : ethers.ZeroAddress;
 
-  const tokenContract = new ethers.Contract(
-    tokenAddress,
-    ABIs.IERC20,
-    provider
-  );
+  const tokenContract = useMemo(() => {
+    return new ethers.Contract(
+      tokenAddress,
+      ABIs.IERC20,
+      provider
+    );
+  }, [tokenAddress, provider]);
 
   const [memberData, setMemberData] = useState<Array<{ address: string; ensName: string | null }>>([]);
   const [copied, setCopied] = useState(false);

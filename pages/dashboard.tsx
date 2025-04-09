@@ -71,7 +71,7 @@ export default function DashboardPage() {
         duration: 5000,
       });
     }
-  }, [chainId, isValidChain, router, defaultChainId, toast]);
+  }, [ready]);
 
   // Fetch nodes data (using the validated chainId)
   const { 
