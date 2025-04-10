@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const [selectedToken, setSelectedToken] = useState<string>('');
   
   // Hooks
-  const { colorState, cycleColors } = useColorManagement();
+  const { colorState, cycleColors, setColorState, getContrastColor } = useColorManagement();
 
   const { user, ready, authenticated, logout, login } = usePrivy();
   const { wallets } = useWallets();
@@ -88,6 +88,13 @@ export default function DashboardPage() {
   // Handle token selection
   const handleTokenSelect = (tokenAddress: string) => {
     setSelectedToken(tokenAddress);
+    // Generate a new color based on the token address
+    const newColor = `#${tokenAddress.slice(2, 8)}`; // Use first 6 chars of token address as color
+    setColorState({
+      contrastingColor: newColor,
+      reverseColor: getContrastColor(newColor),
+      hoverColor: `${newColor}20`
+    });
     router.push({
       pathname: '/dashboard',
       query: { 
@@ -157,7 +164,19 @@ export default function DashboardPage() {
 
 
   return (
-    <MainLayout headerProps={headerProps}>
+    <MainLayout 
+      headerProps={headerProps} 
+      rootToken={tokenAddress}
+      onTokenSelect={(tokenAddress) => {
+        // Generate a new color based on the token address
+        const newColor = `#${tokenAddress.slice(2, 8)}`; // Use first 6 chars of token address as color
+        setColorState({
+          contrastingColor: newColor,
+          reverseColor: getContrastColor(newColor),
+          hoverColor: `${newColor}20`
+        });
+      }}
+    >
       <Box flex={1} overflow="auto" bg="gray.50" p={6}>
         {renderChainMismatchWarning()}
         

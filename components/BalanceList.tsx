@@ -8,6 +8,7 @@ import { AlchemyTokenBalance } from '../hooks/useAlchemyBalances';
 
 interface BalanceListProps {
   selectedToken: string;
+  rootToken?: string;
   handleTokenSelect: (tokenAddress: string) => void;
   contrastingColor: string;
   reverseColor: string; 
@@ -21,6 +22,7 @@ interface BalanceListProps {
 
 const BalanceList: React.FC<BalanceListProps> = ({
   selectedToken,
+  rootToken,
   handleTokenSelect,
   contrastingColor,
   reverseColor,
@@ -53,6 +55,10 @@ const BalanceList: React.FC<BalanceListProps> = ({
       });
     }
   }, []);
+
+  const isTokenActive = useCallback((tokenAddress: string) => {
+    return selectedToken === tokenAddress || rootToken === tokenAddress;
+  }, [selectedToken, rootToken]);
 
   if (isLoading) {
     return (
@@ -105,6 +111,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
             const protocolBalance = protocolBalances.find(
               p => p.contractAddress.toLowerCase() === balance.contractAddress.toLowerCase()
             );
+            const isActive = isTokenActive(balance.contractAddress);
 
             return (
               <Box
@@ -113,22 +120,38 @@ const BalanceList: React.FC<BalanceListProps> = ({
                 cursor="pointer"
                 transition="all 0.2s"
                 borderRadius="md"
-                bg={selectedToken === balance.contractAddress ? `${baseColor}10` : 'transparent'}
-                border="1px solid"
-                borderColor={selectedToken === balance.contractAddress ? baseColor : 'transparent'}
+                bg={isActive ? `${baseColor}15` : 'transparent'}
+                border="2px solid"
+                borderColor={isActive ? baseColor : 'transparent'}
                 _hover={{
                   bg: hoverColor,
-                  transform: 'translateY(-1px)',
+                  transform: 'translateY(-2px)',
+                  shadow: 'md'
                 }}
+                position="relative"
                 height="100%"
                 minW="200px"
                 maxW="200px"
                 p={3}
+                shadow={isActive ? 'md' : 'none'}
+                {...(isActive && {
+                  _after: {
+                    content: '""',
+                    position: 'absolute',
+                    bottom: '-2px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '40%',
+                    height: '2px',
+                    bg: baseColor,
+                    borderRadius: 'full'
+                  }
+                })}
               >
                 <TokenBalance
                   balanceItem={balance}
                   protocolBalance={protocolBalance}
-                  isSelected={selectedToken === balance.contractAddress}
+                  isSelected={isActive}
                   contrastingColor={contrastingColor}
                   reverseColor={reverseColor}
                 />

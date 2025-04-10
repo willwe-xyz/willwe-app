@@ -8,6 +8,7 @@ import { useBalances } from '../../hooks/useBalances';
 import Header from './Header';
 import BalanceList from '../BalanceList';
 import { useNode } from '../../contexts/NodeContext';
+import { useColorManagement } from '../../hooks/useColorManagement';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -23,9 +24,16 @@ interface MainLayoutProps {
     cycleColors: () => void;
     onNodeSelect: (nodeId: string) => void;
   };
+  rootToken?: string;
+  onTokenSelect?: (tokenAddress: string) => void;
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ 
+  children, 
+  headerProps, 
+  rootToken,
+  onTokenSelect 
+}) => {
   const { user } = usePrivy();
   const { selectedToken, selectToken } = useNode();
   const router = useRouter();
@@ -43,12 +51,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
   // Handle token selection with navigation
   const handleTokenSelect = useCallback((tokenAddress: string) => {
     selectToken(tokenAddress);
+    if (onTokenSelect) {
+      onTokenSelect(tokenAddress);
+    }
     // Always navigate to dashboard with the selected token
     router.push({
       pathname: '/dashboard',
       query: { token: tokenAddress }
     });
-  }, [selectToken, router]);
+  }, [selectToken, router, onTokenSelect]);
 
   return (
     <Box height="100vh" display="flex" flexDirection="column">
@@ -60,14 +71,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, headerProps })
         <Box width="100%" borderBottom="1px solid" borderColor="gray.200">
           <BalanceList
             selectedToken={selectedToken}
+            rootToken={rootToken}
             handleTokenSelect={handleTokenSelect}
             contrastingColor={headerProps?.contrastingColor || ''}
             reverseColor={headerProps?.reverseColor || ''}
             hoverColor={`${headerProps?.contrastingColor}20` || ''}
             balances={balances || []}
             protocolBalances={protocolBalances || []}
-            isLoading={balancesLoading} userAddress={headerProps?.userAddress || ''} chainId={headerProps?.chainId || '' 
-            }          />
+            isLoading={balancesLoading} 
+            userAddress={headerProps?.userAddress || ''} 
+            chainId={headerProps?.chainId || ''}
+          />
         </Box>
       )}
       

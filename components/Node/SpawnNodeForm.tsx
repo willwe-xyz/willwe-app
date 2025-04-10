@@ -53,13 +53,15 @@ interface SpawnNodeFormProps {
   chainId: string;
   onSuccess?: () => void;
   onClose?: () => void;
+  selectedTokenColor?: string;
 }
 
 const SpawnNodeForm = ({
   nodeId,
   chainId,
   onSuccess,
-  onClose
+  onClose,
+  selectedTokenColor = '#805AD5'
 }: SpawnNodeFormProps) => {
   // Form state
   const [entityName, setEntityName] = useState('');
@@ -281,6 +283,9 @@ const SpawnNodeForm = ({
                 value={entityName}
                 onChange={(e) => setEntityName(e.target.value)}
                 placeholder="Enter name for the membrane"
+                borderColor="gray.200"
+                _hover={{ borderColor: selectedTokenColor }}
+                _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
               />
             </FormControl>
 
@@ -292,11 +297,17 @@ const SpawnNodeForm = ({
                   placeholder="label"
                   value={newCharTitle}
                   onChange={(e) => setNewCharTitle(e.target.value)}
+                  borderColor="gray.200"
+                  _hover={{ borderColor: selectedTokenColor }}
+                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
                 />
                 <Input
                   placeholder="url"
                   value={newCharLink}
                   onChange={(e) => setNewCharLink(e.target.value)}
+                  borderColor="gray.200"
+                  _hover={{ borderColor: selectedTokenColor }}
+                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
                 />
                 <IconButton
                   aria-label="Add characteristic"
@@ -349,19 +360,27 @@ const SpawnNodeForm = ({
                   placeholder="Token address"
                   value={newTokenAddress}
                   onChange={(e) => setNewTokenAddress(e.target.value)}
+                  borderColor="gray.200"
+                  _hover={{ borderColor: selectedTokenColor }}
+                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
                 />
                 <Input
                   placeholder="Required balance"
                   value={newTokenBalance}
                   onChange={(e) => setNewTokenBalance(e.target.value)}
+                  borderColor="gray.200"
+                  _hover={{ borderColor: selectedTokenColor }}
+                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
                 />
                 <Button
                   colorScheme="purple"
                   onClick={validateAndAddToken}
                   isLoading={validatingToken}
-                  isDisabled={!newTokenAddress || !newTokenBalance}
+                  loadingText="Validating..."
+                  bg={selectedTokenColor}
+                  _hover={{ bg: `${selectedTokenColor}90` }}
                 >
-                  Add
+                  Add Token Requirement
                 </Button>
               </HStack>
 
@@ -407,7 +426,11 @@ const SpawnNodeForm = ({
             min={1}
             max={100000000}
           >
-            <NumberInputField />
+            <NumberInputField
+              borderColor="gray.200"
+              _hover={{ borderColor: selectedTokenColor }}
+              _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+            />
             <NumberInputStepper>
               <NumberIncrementStepper />
               <NumberDecrementStepper />
@@ -453,6 +476,8 @@ const SpawnNodeForm = ({
           loadingText="Creating Node..."
           size="lg"
           width="100%"
+          bg={selectedTokenColor}
+          _hover={{ bg: `${selectedTokenColor}90` }}
           isDisabled={
             (useMembrane && (!entityName || characteristics.length === 0)) ||
             isLoading ||

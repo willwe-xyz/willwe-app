@@ -194,8 +194,19 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           bg={headerBg}
           borderBottomWidth="1px"
           borderColor={borderColor}
+          position="relative"
         >
           <NodeInfo node={nodeData} chainId={chainId} />
+          {/* Theme color line */}
+          <Box 
+            position="absolute" 
+            bottom={0} 
+            left={0} 
+            right={0} 
+            height="2px" 
+            bg={selectedTokenColor}
+            opacity={0.8}
+          />
         </Box>
         
         {/* Node operations toolbar */}
@@ -221,8 +232,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
         {/* Main tab navigation */}
         <Tabs 
           variant="enclosed" 
-          colorScheme="purple"
-          isLazy
           sx={{
             '.chakra-tabs__tab': {
               bg: tabBg,
@@ -234,39 +243,43 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 fontWeight: 'semibold'
               },
               _hover: {
-                bg: tabHoverBg
+                bg: tabHoverBg,
+                color: selectedTokenColor
               }
+            },
+            '.chakra-tabs__tab-panel': {
+              bg: tabActiveBg
             }
           }}
         >
           <TabList px={6} pt={4}>
             <Tab>
               <HStack spacing={2}>
-                <Activity size={16} />
+                <Activity size={16} style={{ color: selectedTokenColor }} />
                 <Text>Activity</Text>
               </HStack>
             </Tab>
             <Tab>
               <HStack spacing={2}>
-                <ArrowUpDown size={16} />
+                <ArrowUpDown size={16} style={{ color: selectedTokenColor }} />
                 <Text>Movements</Text>
               </HStack>
             </Tab>
             <Tab>
               <HStack spacing={2}>
-                <Signal size={16} />
+                <Signal size={16} style={{ color: selectedTokenColor }} />
                 <Text>Signals</Text>
               </HStack>
             </Tab>
             <Tab>
               <HStack spacing={2}>
-                <MessageCircle size={16} />
+                <MessageCircle size={16} style={{ color: selectedTokenColor }} />
                 <Text>Chat</Text>
               </HStack>
             </Tab>
             <Tab>
               <HStack spacing={2}>
-                <GitBranch size={16} />
+                <GitBranch size={16} style={{ color: selectedTokenColor }} />
                 <Text>Endpoint</Text>
               </HStack>
             </Tab>

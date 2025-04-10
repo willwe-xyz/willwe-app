@@ -14,6 +14,7 @@ interface SankeyChartProps {
   onNodeSelect: (nodeId: string) => void;
   nodeValues: Record<string, number>;
   chainId: string | number;
+  selectedToken: string;
 }
 
 const Plot = dynamic(() => import('react-plotly.js'), {
@@ -38,7 +39,8 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
   selectedTokenColor,
   onNodeSelect,
   nodeValues,
-  chainId
+  chainId,
+  selectedToken
 }) => {
   const router = useRouter();
   const [nodeLabels, setNodeLabels] = useState<string[]>([]);
@@ -61,6 +63,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
     const target: number[] = [];
     const values: number[] = [];
     const nodeMap = new Map<string, number>();
+    const nodeColors: string[] = [];
 
     // First pass - create nodes with temporary labels
     nodes.forEach(node => {
@@ -69,6 +72,8 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
       if (!nodeMap.has(nodeId)) {
         nodeMap.set(nodeId, labels.length);
         labels.push(nodeId); // Remove slice to keep full ID
+        // Set root node color to be more vibrant, others more transparent
+        nodeColors.push(nodeId === selectedToken ? selectedTokenColor : `${selectedTokenColor}40`);
       }
     });
 
@@ -88,8 +93,8 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
       });
     });
 
-    return { nodeMap, labels, source, target, values };
-  }, [nodes, nodeValues]);
+    return { nodeMap, labels, source, target, values, nodeColors };
+  }, [nodes, nodeValues, selectedToken, selectedTokenColor]);
 
   const formatNodeId = (nodeId: string) => {
     const halfLength = Math.floor(nodeId.length / 2);
@@ -210,11 +215,11 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
             type: 'sankey',
             node: {
               label: nodeLabels,
-              color: Array(nodeLabels.length).fill(selectedTokenColor),
+              color: sankeyStructure.nodeColors,
               thickness: 20,
               line: {
-                color: "white",
-                width: 0.5
+                color: (idx: number) => sankeyStructure.labels[idx] === selectedToken ? selectedTokenColor : "white",
+                width: (idx: number) => sankeyStructure.labels[idx] === selectedToken ? 2 : 0.5
               },
               pad: 15,
               hovertemplate: '%{label}<br>Value: %{value:.1f}%<extra></extra>'

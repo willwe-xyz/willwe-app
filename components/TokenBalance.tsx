@@ -99,6 +99,17 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
         </Tooltip>
       </VStack>
 
+      {/* Token Color Line */}
+      <Box 
+        position="absolute" 
+        bottom={0} 
+        left={0} 
+        right={0} 
+        height="2px" 
+        bg={`#${balanceItem.contractAddress.slice(2, 8)}`}
+        opacity={0.8}
+      />
+
       {/* Progress Bar */}
       <Box 
         mt={isCompact ? 1 : 2} 

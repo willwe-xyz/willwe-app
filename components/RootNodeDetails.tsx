@@ -351,6 +351,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
                 onNodeSelect={onNodeSelect}
                 nodeValues={nodeValues}
                 chainId={chainId}
+                selectedToken={selectedToken}
               />
             </Box>
           )}

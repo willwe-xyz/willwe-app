@@ -39,6 +39,7 @@ interface NodeMetrics {
   memberCount: number;
   membersList: string[];
   userOwnedShares: string;
+  totalSupply: string;
 }
 
 // Add interface for member data
@@ -59,26 +60,27 @@ const calculateMetrics = (node: NodeState): NodeMetrics => {
       value: '0',
       memberCount: 0,
       membersList: [],
-      userOwnedShares: '0'
+      userOwnedShares: '0',
+      totalSupply: '0'
     };
   }
 
   // Per-second rates in gwei, multiply by seconds in a day
-  const dailyUnlockedValue = node.basicInfo.inflation ? 
-    BigInt(Number(node.basicInfo.inflation) * 86400) : 
+  const dailyUnlockedValue = node.basicInfo[1] ? 
+    BigInt(Number(node.basicInfo[1]) * 86400) : 
     BigInt(0);
   
-  console.log('childParentEligibilityinRoot:', node);
   return {
     dailyUnlock: ethers.formatUnits(dailyUnlockedValue, 'ether'),
-    TVL: ethers.formatUnits(node.basicInfo.rootValuationBudget || '0', 'ether'),
-    totalValue: ethers.formatUnits(node.basicInfo.rootValuationBudget || '0', 'ether'),
-    availableShares: ethers.formatUnits(node.basicInfo.balanceBudget || '0', 'ether'),
-    inflow: ethers.formatUnits(node.basicInfo.eligibilityPerSec || '0', 'ether'), // Keep this as per-second rate
-    value: ethers.formatUnits(node.basicInfo.rootValuationReserve || '0', 'ether'),
+    TVL: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
+    totalValue: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
+    availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'ether'),
+    inflow: ethers.formatUnits(node.basicInfo[7] || '0', 'ether'), // Keep this as per-second rate
+    value: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
     memberCount: node.membersOfNode?.length || 0,
     membersList: node.membersOfNode || [],
-    userOwnedShares: ethers.formatUnits(node.basicInfo.balanceOfUser || '0', 'gwei')
+    userOwnedShares: ethers.formatUnits(node.basicInfo[9] || '0', 'gwei'),
+    totalSupply: ethers.formatUnits(node.basicInfo[11] || '0', 'ether')
   };
 };
 
@@ -257,11 +259,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
               transition="all 0.2s"
               _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
             >
-              <Tooltip label="Amount of tokens held in node's own account" fontSize="sm">
+              <Tooltip label="Total supply of tokens in the node" fontSize="sm">
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" color={mutedColor}>Total Node Value</Text>
+                  <Text fontSize="sm" color={mutedColor}>Total Gross Value</Text>
                   <Text fontSize="lg" fontWeight="semibold">
-                    {formatCurrency(metrics.TVL)} PSC
+                    {formatCurrency(metrics.totalSupply)} PSC
                   </Text>
                 </VStack>
               </Tooltip>

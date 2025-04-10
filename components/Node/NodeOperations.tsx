@@ -675,20 +675,24 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
       {needsApproval ? (
         <Button
-          colorScheme="blue"
           onClick={handleApprove}
           isLoading={isProcessing}
           width="100%"
+          bg={selectedTokenColor}
+          color="white"
+          _hover={{ bg: `${selectedTokenColor}90` }}
         >
           Approve Tokens
         </Button>
       ) : (
         <Button
-          colorScheme="purple"
           onClick={() => useDirectParentMint ? handleMint() : handleMintPath()}
           isLoading={isProcessing}
           width="100%"
           isDisabled={!mintAmount || parseFloat(mintAmount) === 0}
+          bg={selectedTokenColor}
+          color="white"
+          _hover={{ bg: `${selectedTokenColor}90` }}
         >
           {useDirectParentMint ? 'Mint from Parent' : 'Mint Path'}
         </Button>
@@ -751,11 +755,13 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       )}
 
       <Button
-        colorScheme="purple"
         onClick={() => useDirectParentBurn ? handleBurn() : handleBurnPath()}
         isLoading={isProcessing}
         width="100%"
         isDisabled={!burnAmount}
+        bg={selectedTokenColor}
+        color="white"
+        _hover={{ bg: `${selectedTokenColor}90` }}
       >
         {useDirectParentBurn ? 'Burn to Parent' : 'Burn Path'}
       </Button>
@@ -784,33 +790,42 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           >
             <Tooltip label="Mint membership">
               <Button
-                leftIcon={<UserPlus size={16} />}
+                leftIcon={<UserPlus size={16} color={selectedTokenColor} />}
                 onClick={handleMintMembership}
                 isDisabled={isMember}
                 colorScheme="purple"
                 variant="outline"
+                borderColor={selectedTokenColor}
+                color={selectedTokenColor}
+                _hover={{ bg: `${selectedTokenColor}20` }}
               >
                 Join
               </Button>
             </Tooltip>
 
             <Tooltip label="Create new node">
-  <Button
-    leftIcon={<GitBranchPlus size={16} />}
-    onClick={() => setActiveModal('spawn')}
-    colorScheme="purple"
-    variant="outline"
-  >
-    Spawn Node
-  </Button>
-</Tooltip>
+              <Button
+                leftIcon={<GitBranchPlus size={16} color={selectedTokenColor} />}
+                onClick={() => setActiveModal('spawn')}
+                colorScheme="purple"
+                variant="outline"
+                borderColor={selectedTokenColor}
+                color={selectedTokenColor}
+                _hover={{ bg: `${selectedTokenColor}20` }}
+              >
+                Spawn Node
+              </Button>
+            </Tooltip>
 
             <Tooltip label="Redistribute value">
               <Button
-                leftIcon={<RefreshCw size={16} />}
+                leftIcon={<RefreshCw size={16} color={selectedTokenColor} />}
                 onClick={handleRedistribute}
                 colorScheme="purple"
                 variant="outline"
+                borderColor={selectedTokenColor}
+                color={selectedTokenColor}
+                _hover={{ bg: `${selectedTokenColor}20` }}
               >
                 Redistribute
               </Button>
@@ -818,10 +833,13 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Mint tokens">
               <Button
-                leftIcon={<Plus size={16} />}
+                leftIcon={<Plus size={16} color={selectedTokenColor} />}
                 onClick={() => setActiveModal('mint')}
                 colorScheme="purple"
                 variant="outline"
+                borderColor={selectedTokenColor}
+                color={selectedTokenColor}
+                _hover={{ bg: `${selectedTokenColor}20` }}
               >
                 Mint
               </Button>
@@ -829,13 +847,16 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Burn tokens">
               <Button
-                leftIcon={<Trash size={16} />}
+                leftIcon={<Trash size={16} color={selectedTokenColor} />}
                 onClick={() => {
                   setActiveModal('burn');
                   checkNodeBalance();
                 }}
                 colorScheme="purple"
                 variant="outline"
+                borderColor={selectedTokenColor}
+                color={selectedTokenColor}
+                _hover={{ bg: `${selectedTokenColor}20` }}
               >
                 Burn
               </Button>
@@ -852,7 +873,9 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       >
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
-          <ModalHeader>Create New Node</ModalHeader>
+          <ModalHeader borderBottom="1px solid" borderColor="gray.200">
+            Create New Node
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             <SpawnNodeForm
@@ -860,6 +883,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
               chainId={chainId}
               onSuccess={onSuccess}
               onClose={handleClose}
+              selectedTokenColor={selectedTokenColor}
             />
           </ModalBody>
         </ModalContent>
@@ -873,7 +897,9 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       >
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
-          <ModalHeader>Mint Tokens</ModalHeader>
+          <ModalHeader borderBottom="1px solid" borderColor="gray.200">
+            Mint Tokens
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             {renderMintModalContent()}
@@ -889,7 +915,9 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       >
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
-          <ModalHeader>Burn Tokens</ModalHeader>
+          <ModalHeader borderBottom="1px solid" borderColor="gray.200">
+            Burn Tokens
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             {renderBurnModalContent()}

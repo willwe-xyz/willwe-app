@@ -1,16 +1,17 @@
-export interface NodeBasicInfo {
-  nodeId: string;                    
-  inflation: string;                 
-  balanceAnchor: string;            
-  balanceBudget: string;            
-  rootValuationBudget: string;      
-  rootValuationReserve: string;     
-  membraneId: string;               
-  eligibilityPerSec: string;        
-  lastRedistribution: string;       
-  balanceOfUser: string;            
-  endpointOfUserForNode: string;    
-  totalSupply: string;              
+export interface NodeBasicInfo extends Array<string> {
+  // These are just for type hints/documentation
+  [0]: string;  // nodeId
+  [1]: string;  // inflation
+  [2]: string;  // balanceAnchor
+  [3]: string;  // balanceBudget
+  [4]: string;  // rootValuationBudget
+  [5]: string;  // rootValuationReserve
+  [6]: string;  // membraneId
+  [7]: string;  // eligibilityPerSec
+  [8]: string;  // lastRedistribution
+  [9]: string;  // balanceOfUser
+  [10]: string; // endpointOfUserForNode
+  [11]: string; // totalSupply
 }
 
 // Add ActivityType enum
@@ -231,18 +232,5 @@ export const isValidNodeState = (data: any): data is NodeState => {
 
 
 export const transformNodeData = (nodeData: NodeState): NodeBasicInfo => {
-  return {
-    nodeId: nodeData.basicInfo.nodeId,
-    inflation: nodeData.basicInfo.inflation,
-    balanceAnchor: nodeData.basicInfo.balanceAnchor,
-    balanceBudget: nodeData.basicInfo.balanceBudget,
-    rootValuationBudget: nodeData.basicInfo.rootValuationBudget,
-    rootValuationReserve: nodeData.basicInfo.rootValuationReserve,
-    membraneId: nodeData.basicInfo.membraneId,
-    eligibilityPerSec: nodeData.basicInfo.eligibilityPerSec,
-    lastRedistribution: nodeData.basicInfo.lastRedistribution,
-    balanceOfUser: nodeData.basicInfo.balanceOfUser,
-    endpointOfUserForNode: nodeData.basicInfo.endpointOfUserForNode,
-    totalSupply: nodeData.basicInfo.totalSupply
-  };
+  return nodeData.basicInfo;
 };

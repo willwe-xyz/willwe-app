@@ -63,7 +63,15 @@ export const useColorManagement = () => {
     });
   }, [getRandomColor, getContrastColor]);
 
-  return { colorState, cycleColors };
+  return { 
+    colorState, 
+    cycleColors, 
+    setColorState,
+    getContrastColor,
+    getReverseColor,
+    hexToRgb,
+    rgbToHex
+  };
 };
 
 export default useColorManagement;

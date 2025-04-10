@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { NodeState } from '../types/chainData';
+import { analyticsId } from '@/next.config';
+import { MoreHorizontal } from 'lucide-react';
+import { partition } from 'd3';
+import { soladyActions } from 'viem/experimental';
+import { constants } from 'buffer';
+import { ReadonlyURLSearchParams } from 'next/navigation';
 
 interface SignalData {
   membrane: string;
@@ -33,6 +39,25 @@ interface NodeConfigSignalsResult {
     redistributionPreferences: any[];
     otherSignals: any[];
   };
+}
+
+interface Signal {
+  value: string;
+  supporters: string[];
+  totalStrength: string;
+}
+
+interface ProcessedSignals {
+  membrane: Record<string, Signal>;
+  inflation: Record<string, Signal>;
+  redistribution: Record<string, Signal>;
+  other: Record<string, Signal>;
+}
+
+interface RawSignal {
+  signalValue: string;
+  supporters?: string[];
+  totalStrength?: string;
 }
 
 export function useNodeSignals(node: NodeState): NodeSignalsResult {
@@ -100,16 +125,119 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
     
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const cleanChainId = chainId.replace('eip155:', '');
-      const response = await fetch(`/api/getNodeConfigSignals?nodeId=${nodeId}&chainId=${cleanChainId}`);
+      const ponderServerUrl = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || 'http://localhost:8080';
+      const response = await fetch(`${ponderServerUrl}/getNodeConfigSignals?nodeId=${nodeId}&chainId=${cleanChainId}`);
       
       if (!response.ok) {
         throw new Error(`Error fetching node signals: ${response.statusText}`);
       }
       
       const result = await response.json();
+      console.log('Node config signals API response:', result);
+      
+      // Process raw signals into categorized signals
+      const processedSignals: ProcessedSignals = {
+        membrane: {},
+        inflation: {},
+        redistribution: {},
+        other: {}
+      };
+
+      // Process membrane signals
+      result.raw.membraneSignals.forEach((signal: RawSignal) => {
+        if (signal.signalValue) {
+          processedSignals.membrane[signal.signalValue] = {
+            value: signal.signalValue,
+            supporters: signal.supporters || [],
+            totalStrength: signal.totalStrength || '0'
+          };
+        }
+      });
+
+      // Process inflation signals
+      result.raw.inflationSignals.forEach((signal: RawSignal) => {
+        if (signal.signalValue) {
+          processedSignals.inflation[signal.signalValue] = {
+            value: signal.signalValue,
+            supporters: signal.supporters || [],
+            totalStrength: signal.totalStrength || '0'
+          };
+        }
+      });
+
+      // Process redistribution signals
+      result.raw.redistributionPreferences.forEach((signal: RawSignal) => {
+        if (signal.signalValue) {
+          processedSignals.redistribution[signal.signalValue] = {
+            value: signal.signalValue,
+            supporters: signal.supporters || [],
+            totalStrength: signal.totalStrength || '0'
+          };
+        }
+      });
+
+      // Process other signals and try to categorize them
+      result.raw.otherSignals.forEach((signal: RawSignal) => {
+        if (!signal.signalValue) return;
+
+        // Try to determine signal type based on value
+        const value = signal.signalValue;
+        
+        // Check if it's a redistribution preference (array format)
+        if (value.startsWith('[') && value.endsWith(']')) {
+          processedSignals.redistribution[value] = {
+            value,
+            supporters: signal.supporters || [],
+            totalStrength: signal.totalStrength || '0'
+          };
+        }
+        // Check if it's an inflation rate (numeric value in gwei/sec range)
+        else if (!isNaN(Number(value)) && Number(value) > 0 && Number(value) < 1000000000000) {
+          processedSignals.inflation[value] = {
+            value,
+            supporters: signal.supporters || [],
+            totalStrength: signal.totalStrength || '0'
+          };
+        }
+        // Check if it's a membrane ID (long numeric string)
+        else if (!isNaN(Number(value)) && value.length > 20) {
+          processedSignals.membrane[value] = {
+            value,
+            supporters: signal.supporters || [],
+            totalStrength: signal.totalStrength || '0'
+          };
+        }
+        // If we can't categorize it, put it in other
+        else {
+          processedSignals.other[value] = {
+            value,
+            supporters: signal.supporters || [],
+            totalStrength: signal.totalStrength || '0'
+          };
+        }
+      });
+
+      // Validate supporters count
+      Object.values(processedSignals).forEach(category => {
+        Object.values(category).forEach((signal: unknown) => {
+          const typedSignal = signal as Signal;
+          if (typedSignal.supporters && typedSignal.supporters.length > 1) {
+            console.warn('Unexpected number of supporters:', {
+              signalValue: typedSignal.value,
+              supporters: typedSignal.supporters,
+              supportersCount: typedSignal.supporters.length
+            });
+          }
+        });
+      });
+
+      // Update the result with processed signals
+      result.signals = processedSignals;
+      
+      console.log('Processed signals:', processedSignals);
       setData(result);
     } catch (err) {
       console.error('Error fetching node config signals:', err);

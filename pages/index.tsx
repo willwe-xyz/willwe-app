@@ -405,6 +405,7 @@ const Home: React.FC = () => {
                     <Image 
                       src="/images/buildbyethereum.gif"
                       alt="Built on Ethereum"
+                      unoptimized
                       width={500}
                       height={300}
                       style={{

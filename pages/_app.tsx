@@ -126,3 +126,47 @@ function MyApp(props: AppProps) {
 }
 
 export default MyApp;
+
+ // what if owenership was in the form of irrevocable rights of participation radther than stock
+   // [...] that is rights that cannot be raided traded bought or soladyActionsbut only acquired by application and acceptance
+
+
+   // what if power and function were distributed with no power vested in or
+   // function performed by any part that could reasonably be exercised by any more pheripheral part
+
+
+   // what if governance was distributed with no individual institution
+   // or combination of either or both, particularly management
+   // able to dominate deliberations or control decisions at any scale
+
+
+   // what if it could seemlessly blend cooperation and competition
+   // with all parties free to impead in unique independednt ways yet able
+   // to abovoid self-interest and cooperate when necessary in the greater good of the whole
+
+
+   // what if it were self-organizing and individuals had the right
+   // to self-organize at any time for any reason at any scale and yet maintaining their irrevocable
+   // rights of participation in governance at any greater scale
+
+
+   // what if it were infinitely malleable yet extremely durable with all parts
+   // capable of constant self-generated modification of form or function without
+   // sacrificing its essential purpose, nature or embodied priciples thus releasing
+   // human ingenuity and the human spirit
+
+
+
+
+   //// nobody believed it was possible, but they were solidly behind it
+  
+   /// Dee Hock - Chaordic Organisation
+   ///
+   ///  
+
+
+
+
+   // the nature of organizations management and scientific exptertise
+   // is not only inceasingly irrelevant to our enormous societal and environmental problems
+   // it's a primary cause of them
