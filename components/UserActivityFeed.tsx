@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner } from '@chakra-ui/react';
+import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner, Link } from '@chakra-ui/react';
 import { ActivityFeed } from './ActivityFeed/ActivityFeed';
 import { ActivityItem } from '../types/chainData';
 import { transformActivities } from '../utils/activityTransformers';
@@ -115,7 +115,8 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
           description: `Activity related to node ${activity.nodeId}`,
           node: {
             id: activity.nodeId || '',
-            name: activity.nodeName || 'Unknown Node'
+            name: activity.nodeName || 'Unknown Node',
+            link: `/nodes/${chainId}/${activity.nodeId}`
           },
           network: activity.network || 'unknown',
           user: {
@@ -128,7 +129,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
     } else {
       setTransformedActivities([]);
     }
-  }, [activities, toast]);
+  }, [activities, toast, chainId]);
 
   // Update debug info on mount
   useEffect(() => {
@@ -164,7 +165,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
   return (
     <VStack spacing={4} align="stretch" w="100%">
       <Flex justifyContent="space-between" alignItems="center">
-      <Heading size="md">User Activity</Heading>
+      <Heading size="md">Feed</Heading>
       <Button 
         size="sm" 
         colorScheme="blue" 
@@ -182,64 +183,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
       </Box>
       )}
       
-      {showDebug && (
-      <Accordion allowToggle>
-        <AccordionItem>
-        <h2>
-          <AccordionButton>
-          <Box flex="1" textAlign="left">
-            Debug Information
-          </Box>
-          <AccordionIcon />
-          </AccordionButton>
-        </h2>
-        <AccordionPanel pb={4}>
-          <VStack align="start" spacing={2}>
-          <Text fontWeight="bold">User Address:</Text>
-          <Code p={2} borderRadius="md" w="100%">{userAddress}</Code>
-          
-          <Text fontWeight="bold">Chain ID:</Text>
-          <Code p={2} borderRadius="md">{chainId}</Code>
-          
-          <Text fontWeight="bold">Activities Count:</Text>
-          <Text>{activities.length} raw / {transformedActivities.length} transformed</Text>
-          
-          <Text fontWeight="bold">Pagination:</Text>
-          <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-            {JSON.stringify(paginationMeta, null, 2)}
-          </Code>
-          
-          <Text fontWeight="bold">Loading State:</Text>
-          <Text>{(isLoading || isPonderLoading) ? 'Loading...' : 'Completed'}</Text>
-          
-          <Text fontWeight="bold">Activity Types:</Text>
-          <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-            {JSON.stringify(
-            transformedActivities.reduce((acc, activity) => {
-              acc[activity.type] = (acc[activity.type] || 0) + 1;
-              return acc;
-            }, {} as Record<string, number>),
-            null,
-            2
-            )}
-          </Code>
-          
-          <Text fontWeight="bold">First Activity:</Text>
-          <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-            {transformedActivities.length > 0 
-            ? JSON.stringify(transformedActivities[0], null, 2) 
-            : 'No activities found'}
-          </Code>
-          
-          <Text fontWeight="bold">Debug Info:</Text>
-          <Code p={2} borderRadius="md" w="100%" overflowX="auto">
-            {JSON.stringify(debugInfo, null, 2)}
-          </Code>
-          </VStack>
-        </AccordionPanel>
-        </AccordionItem>
-      </Accordion>
-      )}
+
       
       {(isLoading || isPonderLoading) && transformedActivities.length === 0 ? (
       <Box textAlign="center" py={8}>

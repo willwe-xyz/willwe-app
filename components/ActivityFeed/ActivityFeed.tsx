@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, VStack, Text, Badge, HStack } from '@chakra-ui/react';
+import { Box, VStack, Text, Badge, HStack, Link } from '@chakra-ui/react';
 import { formatDistanceToNow } from 'date-fns';
 import { ActivityItem } from '../../types/chainData';
 
@@ -42,7 +42,16 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, isLoadin
             <Badge colorScheme="blue">{activity.eventType}</Badge>
           </HStack>
           <Text fontSize="sm" color="gray.500">{`By: ${activity.who}`}</Text>
-          <Text fontSize="sm" color="gray.500">{`Node: ${activity.nodeId}`}</Text>
+          <Text fontSize="sm" color="gray.500">
+            Node:{' '}
+            <Link 
+              href={`/nodes/${activity.networkId}/${activity.nodeId}`}
+              color="blue.500"
+              _hover={{ textDecoration: 'underline' }}
+            >
+              {activity.nodeId}
+            </Link>
+          </Text>
           <Text fontSize="sm" color="gray.500">{`Network: ${activity.network} (${activity.networkId})`}</Text>
           <Text fontSize="sm" color="gray.500">{`Block: ${activity.createdBlockNumber}`}</Text>
           <Text fontSize="sm" color="gray.500">

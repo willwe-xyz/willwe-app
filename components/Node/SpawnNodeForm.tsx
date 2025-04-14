@@ -29,6 +29,7 @@ import {
   Link,
   Progress,
   Divider,
+  Tooltip,
 } from '@chakra-ui/react';
 import { Plus, Trash2, ExternalLink, Copy } from 'lucide-react';
 import { ethers } from 'ethers';
@@ -354,64 +355,76 @@ const SpawnNodeForm = ({
 
             {/* Membership Conditions Section */}
             <Box>
-              <FormLabel>Membership Conditions</FormLabel>
-              <HStack mb={4}>
-                <Input
-                  placeholder="Token address"
-                  value={newTokenAddress}
-                  onChange={(e) => setNewTokenAddress(e.target.value)}
-                  borderColor="gray.200"
-                  _hover={{ borderColor: selectedTokenColor }}
-                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-                />
-                <Input
-                  placeholder="Required balance"
-                  value={newTokenBalance}
-                  onChange={(e) => setNewTokenBalance(e.target.value)}
-                  borderColor="gray.200"
-                  _hover={{ borderColor: selectedTokenColor }}
-                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-                />
-                <Button
-                  colorScheme="purple"
-                  onClick={validateAndAddToken}
-                  isLoading={validatingToken}
-                  loadingText="Validating..."
-                  bg={selectedTokenColor}
-                  _hover={{ bg: `${selectedTokenColor}90` }}
-                >
-                  Add Token Requirement
-                </Button>
-              </HStack>
+              <FormLabel mb={4}>Membership Conditions</FormLabel>
+              <VStack spacing={4} width="100%">
+                <HStack width="100%" spacing={2}>
+                  <FormControl flex={2}>
+                    <Input
+                      placeholder="Token address"
+                      value={newTokenAddress}
+                      onChange={(e) => setNewTokenAddress(e.target.value)}
+                      borderColor="gray.200"
+                      _hover={{ borderColor: selectedTokenColor }}
+                      _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+                    />
+                  </FormControl>
+                  <FormControl flex={1}>
+                    <Input
+                      placeholder="Required balance"
+                      value={newTokenBalance}
+                      onChange={(e) => setNewTokenBalance(e.target.value)}
+                      borderColor="gray.200"
+                      _hover={{ borderColor: selectedTokenColor }}
+                      _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+                    />
+                  </FormControl>
+                  <IconButton
+                    aria-label="Add token requirement"
+                    icon={<Plus size={20} />}
+                    onClick={validateAndAddToken}
+                    isLoading={validatingToken}
+                    bg={selectedTokenColor}
+                    color="white"
+                    _hover={{ bg: `${selectedTokenColor}90` }}
+                  />
+                </HStack>
 
-              {membershipConditions.length > 0 && (
-                <Table size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>Token</Th>
-                      <Th>Required Balance</Th>
-                      <Th width="50px"></Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {membershipConditions.map((mc, idx) => (
-                      <Tr key={idx}>
-                        <Td>
-                          <Code>{mc.symbol ? `${mc.symbol} (${mc.tokenAddress})` : mc.tokenAddress}</Code>
-                        </Td>
-                        <Td>{mc.requiredBalance}</Td>
-                        <Td>
-                          <IconButton
-                            aria-label="Delete condition"
-                            icon={<Trash2 size={18} />}
-                            onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
-                          />
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              )}
+                {membershipConditions.length > 0 && (
+                  <Box width="100%" overflowX="auto">
+                    <Table size="sm" variant="simple">
+                      <Thead>
+                        <Tr>
+                          <Th>Token</Th>
+                          <Th>Required Balance</Th>
+                          <Th width="50px"></Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {membershipConditions.map((mc, idx) => (
+                          <Tr key={idx}>
+                            <Td maxW="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                              <Tooltip label={mc.tokenAddress}>
+                                <Code>{mc.symbol ? `${mc.symbol}` : mc.tokenAddress.substring(0, 10) + '...'}</Code>
+                              </Tooltip>
+                            </Td>
+                            <Td>{mc.requiredBalance}</Td>
+                            <Td>
+                              <IconButton
+                                aria-label="Delete condition"
+                                icon={<Trash2 size={16} />}
+                                size="sm"
+                                variant="ghost"
+                                colorScheme="red"
+                                onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
+                              />
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                )}
+              </VStack>
             </Box>
 
             <Divider />
@@ -421,8 +434,11 @@ const SpawnNodeForm = ({
         <FormControl>
           <FormLabel>Inflation Rate (gwei/sec)</FormLabel>
           <NumberInput
-            value={inflationRate}
-            onChange={(valueString) => setInflationRate(parseInt(valueString))}
+            value={inflationRate || 1}
+            onChange={(valueString) => {
+              const parsed = parseInt(valueString);
+              setInflationRate(isNaN(parsed) ? 1 : parsed);
+            }}
             min={1}
             max={100000000}
           >

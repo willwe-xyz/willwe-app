@@ -17,7 +17,7 @@ import { Copy, ChevronRight } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
-import SunburstChart from './SunburstChart';
+import TreemapChart from './TreemapChart';
 import { nodeIdToAddress } from '../../utils/formatters';
 import router from 'next/router';
 
@@ -27,6 +27,7 @@ interface NodeInfoProps {
   node: NodeState;
   chainId: string;
   onNodeSelect?: (nodeId: string) => void;
+  selectedTokenColor: string;
 }
 
 interface NodeMetrics {
@@ -84,7 +85,12 @@ const calculateMetrics = (node: NodeState): NodeMetrics => {
   };
 };
 
-const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
+const NodeInfo: React.FC<NodeInfoProps> = ({ 
+  node, 
+  chainId, 
+  onNodeSelect,
+  selectedTokenColor
+}) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
   const [tokenSymbol, setTokenSymbol] = useState<string>('');
@@ -222,21 +228,23 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
       bg={bgColor}
       borderRadius="xl"
       overflow="hidden"
+      h="400px"
     >
-      <HStack spacing={6} align="start" w="full">
+      <HStack spacing={4} align="stretch" h="full">
         {/* Left column - Stats */}
         <VStack
-          flex="1"
+          w="67%"
           align="stretch"
-          spacing={4}
+          spacing={3}
+          p={3}
         >
           {/* Stats grid */}
           <Grid 
             templateColumns="repeat(2, 1fr)" 
-            gap={4}
+            gap={3}
           >
             <Box
-              p={4}
+              p={3}
               bg={statsBg}
               borderRadius="lg"
               transition="all 0.2s"
@@ -253,7 +261,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             </Box>
 
             <Box
-              p={4}
+              p={3}
               bg={statsBg}
               borderRadius="lg"
               transition="all 0.2s"
@@ -270,7 +278,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             </Box>
 
             <Box
-              p={4}
+              p={3}
               bg={statsBg}
               borderRadius="lg"
               transition="all 0.2s"
@@ -287,7 +295,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
             </Box>
 
             <Box
-              p={4}
+              p={3}
               bg={statsBg}
               borderRadius="lg"
               transition="all 0.2s"
@@ -307,14 +315,14 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
           {/* Members section */}
           {node.membersOfNode && node.membersOfNode.length > 0 && (
             <Box
-              mt={4}
-              p={4}
+              flex={1}
               bg={cardBg}
               borderRadius="lg"
               borderWidth="1px"
               borderColor={borderColor}
+              overflowY="auto"
             >
-              <VStack align="stretch" spacing={3}>
+              <VStack align="stretch" spacing={2} p={3}>
                 <HStack justify="space-between">
                   <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
                   <Badge colorScheme="purple" variant="subtle" borderRadius="full">
@@ -323,8 +331,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
                 </HStack>
                 
                 <Box 
-                  maxH="150px" 
-                  overflowY="auto"
                   sx={{
                     '&::-webkit-scrollbar': {
                       width: '4px',
@@ -342,8 +348,8 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
                   {memberData.map(({ address, ensName }, index) => (
                     <HStack
                       key={index}
-                      py={2}
-                      px={3}
+                      py={1.5}
+                      px={2}
                       borderRadius="md"
                       _hover={{ bg: hoverBg }}
                       transition="all 0.2s"
@@ -367,10 +373,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({ node, chainId, onNodeSelect }) => {
         </VStack>
 
         {/* Right column - Chart */}
-        <Box flex="1">
-          <SunburstChart
+        <Box w="33%" h="full" p={3}>
+          <TreemapChart
             nodeData={node}
             chainId={chainId}
+            selectedTokenColor={selectedTokenColor}
           />
         </Box>
       </HStack>

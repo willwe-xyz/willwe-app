@@ -351,7 +351,54 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         return;
       }
 
-      const childNodes = await contract.getNodes(parentNodeData.childrenNodes);
+      // Use getAllNodesForRoot instead of getNodes, which was removed
+      // First, get the root address from the parent node data
+      const rootId = parentNodeData.rootPath && parentNodeData.rootPath.length > 0 ? 
+        parentNodeData.rootPath[0] : nodeId;
+      
+      console.log('Getting nodes for root ID:', rootId);
+      
+      let childNodes: any[] = [];
+      
+      try {
+        // getAllNodesForRoot takes an address as the first parameter, not an ID
+        // Convert rootId to an address
+        const rootAddress = ethers.getAddress(ethers.toBeHex(rootId, 20));
+        
+        // Get the user address
+        const userAddress = user?.wallet?.address ? 
+          ethers.getAddress(user.wallet.address) : ethers.ZeroAddress;
+        
+        console.log('Root ID converted to address:', rootAddress);
+        console.log('User address:', userAddress);
+        
+        // Call getAllNodesForRoot with address parameters
+        const allNodesForRoot = await contract.getAllNodesForRoot(rootAddress, userAddress);
+        console.log('All nodes for root:', allNodesForRoot);
+        
+        // Filter nodes to only include the children nodes we need
+        const childNodeIds = parentNodeData.childrenNodes.map(id => id.toString());
+        childNodes = allNodesForRoot.filter((node: any) => 
+          node && node.basicInfo && childNodeIds.includes(node.basicInfo[0].toString())
+        );
+      } catch (error) {
+        console.error('Error using getAllNodesForRoot:', error);
+        console.log('Falling back to individual node queries');
+        
+        // Fallback: Get nodes individually
+        const nodePromises = parentNodeData.childrenNodes.map(childId => 
+          contract.getNodeData(childId, user?.wallet?.address)
+            .catch(err => {
+              console.error(`Error getting data for node ${childId}:`, err);
+              return null;
+            })
+        );
+        
+        childNodes = await Promise.all(nodePromises);
+        childNodes = childNodes.filter(Boolean);
+      }
+      
+      console.log('Filtered child nodes:', childNodes);
 
       // Add validation for childNodes
       if (!childNodes || childNodes.length === 0) {

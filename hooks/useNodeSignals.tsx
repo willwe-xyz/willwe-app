@@ -32,7 +32,7 @@ interface NodeConfigSignals {
 interface NodeConfigSignalsResult {
   nodeId: string;
   chainId: string;
-  signals: NodeConfigSignals;
+  signals: ProcessedSignals;
   raw: {
     membraneSignals: any[];
     inflationSignals: any[];
@@ -138,7 +138,7 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
       const result = await response.json();
       console.log('Node config signals API response:', result);
       
-      // Process raw signals into categorized signals
+      // Process raw signals into categorized signals based on signalType
       const processedSignals: ProcessedSignals = {
         membrane: {},
         inflation: {},
@@ -146,92 +146,29 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
         other: {}
       };
 
-      // Process membrane signals
-      result.raw.membraneSignals.forEach((signal: RawSignal) => {
-        if (signal.signalValue) {
-          processedSignals.membrane[signal.signalValue] = {
-            value: signal.signalValue,
-            supporters: signal.supporters || [],
-            totalStrength: signal.totalStrength || '0'
-          };
-        }
-      });
+      // Process all signals from otherSignals array using their signalType
+      result.raw.otherSignals.forEach((signal: any) => {
+        if (!signal.signalValue || !signal.signalType) return;
 
-      // Process inflation signals
-      result.raw.inflationSignals.forEach((signal: RawSignal) => {
-        if (signal.signalValue) {
-          processedSignals.inflation[signal.signalValue] = {
-            value: signal.signalValue,
-            supporters: signal.supporters || [],
-            totalStrength: signal.totalStrength || '0'
-          };
-        }
-      });
+        const signalData = {
+          value: signal.signalValue,
+          supporters: [signal.who].filter(Boolean),
+          totalStrength: signal.totalStrength || '0'
+        };
 
-      // Process redistribution signals
-      result.raw.redistributionPreferences.forEach((signal: RawSignal) => {
-        if (signal.signalValue) {
-          processedSignals.redistribution[signal.signalValue] = {
-            value: signal.signalValue,
-            supporters: signal.supporters || [],
-            totalStrength: signal.totalStrength || '0'
-          };
+        switch (signal.signalType) {
+          case 'inflation':
+            processedSignals.inflation[signal.signalValue] = signalData;
+            break;
+          case 'membrane':
+            processedSignals.membrane[signal.signalValue] = signalData;
+            break;
+          case 'redistribution':
+            processedSignals.redistribution[signal.signalValue] = signalData;
+            break;
+          default:
+            processedSignals.other[signal.signalValue] = signalData;
         }
-      });
-
-      // Process other signals and try to categorize them
-      result.raw.otherSignals.forEach((signal: RawSignal) => {
-        if (!signal.signalValue) return;
-
-        // Try to determine signal type based on value
-        const value = signal.signalValue;
-        
-        // Check if it's a redistribution preference (array format)
-        if (value.startsWith('[') && value.endsWith(']')) {
-          processedSignals.redistribution[value] = {
-            value,
-            supporters: signal.supporters || [],
-            totalStrength: signal.totalStrength || '0'
-          };
-        }
-        // Check if it's an inflation rate (numeric value in gwei/sec range)
-        else if (!isNaN(Number(value)) && Number(value) > 0 && Number(value) < 1000000000000) {
-          processedSignals.inflation[value] = {
-            value,
-            supporters: signal.supporters || [],
-            totalStrength: signal.totalStrength || '0'
-          };
-        }
-        // Check if it's a membrane ID (long numeric string)
-        else if (!isNaN(Number(value)) && value.length > 20) {
-          processedSignals.membrane[value] = {
-            value,
-            supporters: signal.supporters || [],
-            totalStrength: signal.totalStrength || '0'
-          };
-        }
-        // If we can't categorize it, put it in other
-        else {
-          processedSignals.other[value] = {
-            value,
-            supporters: signal.supporters || [],
-            totalStrength: signal.totalStrength || '0'
-          };
-        }
-      });
-
-      // Validate supporters count
-      Object.values(processedSignals).forEach(category => {
-        Object.values(category).forEach((signal: unknown) => {
-          const typedSignal = signal as Signal;
-          if (typedSignal.supporters && typedSignal.supporters.length > 1) {
-            console.warn('Unexpected number of supporters:', {
-              signalValue: typedSignal.value,
-              supporters: typedSignal.supporters,
-              supportersCount: typedSignal.supporters.length
-            });
-          }
-        });
       });
 
       // Update the result with processed signals

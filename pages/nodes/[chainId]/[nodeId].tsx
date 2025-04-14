@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
-import { Box, Spinner, useToast } from '@chakra-ui/react';
+import { Box, Spinner, useToast, Heading, Text, Button, VStack } from '@chakra-ui/react';
 import AppLayout from '../../../components/Layout/AppLayout';
 import NodeDetails from '../../../components/NodeDetails';
 import { useNodeData } from '../../../hooks/useNodeData';
@@ -59,6 +59,41 @@ const NodePage = () => {
       >
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
           <Spinner size="xl" color={colorState.contrastingColor} />
+        </Box>
+      </MainLayout>
+    );
+  }
+
+  // Show 404 page if node doesn't exist or isn't initialized
+  if (error?.message?.includes('BAD_DATA') || error?.message?.includes('getNodeData')) {
+    return (
+      <MainLayout 
+        headerProps={{
+          userAddress: user?.wallet?.address,
+          chainId: chainId as string,
+          logout,
+          login,
+          isTransacting: false,
+          contrastingColor: colorState.contrastingColor,
+          reverseColor: colorState.reverseColor,
+          cycleColors,
+          onNodeSelect: (nodeId: string) => {
+            router.push(`/nodes/${chainId}/${nodeId}`);
+          },
+        }}
+      >
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+          <VStack spacing={6}>
+            <Heading size="2xl" color={colorState.contrastingColor}>404</Heading>
+            <Text fontSize="xl">Node not found or not initialized</Text>
+            <Button 
+              onClick={() => router.push('/')}
+              colorScheme="blue"
+              variant="outline"
+            >
+              Return to Home
+            </Button>
+          </VStack>
         </Box>
       </MainLayout>
     );

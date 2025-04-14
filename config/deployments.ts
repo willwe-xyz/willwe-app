@@ -8,34 +8,34 @@ type ABIKP = { [key: string]: InterfaceAbi };
 
   
 // === Final Deployment Addresses ===
-// Will: 0x2a1EeaF390C6F4274F59A20224a2841a469d9d68
-// Membrane: 0x8257540c2f41605fb70DCfCbA70C48F8420840CF
-// Execution: 0x15364dDE1B4C87F8CE3539e3e59A65fbCed12207
-// WillWe: 0x41A717c4d277c26e08C46ec6c8d26553F067A769
+// Will: 0x9B03f21d46DB827657F65abA816F3665d6A9BBf9
+// Membrane: 0x96F98ab3b12fEE7efFc426dC40d7d80F5ee3EF42
+// Execution: 0x4215b200db6eB2146b799dA78E777281BBEaFBb2
+// WillWe: 0xD31ED23C4D4E53AB87Ec4a4d8dFc42e2b4df4920
 // Kibern Director: 0x0000000000000000000000000000000000000000
-// Control [0,1]: 0x7C2d0821a3E46879B034e297149eE00E6074476f 0x0000000000000000000000000000000000000000
+// Control [0,1]: 0x233a352BAE49dAc1A429B818631deF401668a458 0x0000000000000000000000000000000000000000
 // Will Price in ETH: 1000000000
 
 
 export const deployments: Deployments = {
     "Will": {
         "84532": "0xDf17125350200A99E5c06E5E2b053fc61Be7E6ae",
-        "11155420": "0x2a1EeaF390C6F4274F59A20224a2841a469d9d68",
+        "11155420": "0x9B03f21d46DB827657F65abA816F3665d6A9BBf9",
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6"
     },
     "Membrane": {
         "84532": "0xaBbd15F9eD0cab9D174b5e9878E9f104a993B41f",
-        "11155420": "0x8257540c2f41605fb70DCfCbA70C48F8420840CF",
+        "11155420": "0x96F98ab3b12fEE7efFc426dC40d7d80F5ee3EF42",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac"
     },
     "Execution": {
         "84532": "0x3D52a3A5D12505B148a46B5D69887320Fc756F96",
-        "11155420": "0x15364dDE1B4C87F8CE3539e3e59A65fbCed12207",
+        "11155420": "0x4215b200db6eB2146b799dA78E777281BBEaFBb2",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3"
     },
     "WillWe": {
         "84532": "0x8f45bEe4c58C7Bb74CDa9fBD40aD86429Dba3E41",
-        "11155420": "0x41A717c4d277c26e08C46ec6c8d26553F067A769",
+        "11155420": "0xD31ED23C4D4E53AB87Ec4a4d8dFc42e2b4df4920",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049"
     }
 };
@@ -139,7 +139,7 @@ export const ABIs: ABIKP = {
             ],
             "outputs": [
                 {
-                    "name": "",
+                    "name": "membersOf",
                     "type": "address[]",
                     "internalType": "address[]"
                 }
@@ -402,9 +402,31 @@ export const ABIs: ABIKP = {
                             "internalType": "string[]"
                         },
                         {
-                            "name": "signals",
-                            "type": "uint256[]",
-                            "internalType": "uint256[]"
+                            "name": "nodeSignals",
+                            "type": "tuple",
+                            "internalType": "struct AllNodeSignals",
+                            "components": [
+                                {
+                                    "name": "signalers",
+                                    "type": "address[]",
+                                    "internalType": "address[]"
+                                },
+                                {
+                                    "name": "inflationSignals",
+                                    "type": "uint256[2][]",
+                                    "internalType": "uint256[2][]"
+                                },
+                                {
+                                    "name": "membraneSignals",
+                                    "type": "uint256[2][]",
+                                    "internalType": "uint256[2][]"
+                                },
+                                {
+                                    "name": "redistributionSignals",
+                                    "type": "uint256[][]",
+                                    "internalType": "uint256[][]"
+                                }
+                            ]
                         }
                     ]
                 }
@@ -413,24 +435,41 @@ export const ABIs: ABIKP = {
         },
         {
             "type": "function",
-            "name": "getChangePrevalence",
+            "name": "getAllSignalsOfNode",
             "inputs": [
                 {
-                    "name": "nodeId_",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "signal_",
+                    "name": "nodeId",
                     "type": "uint256",
                     "internalType": "uint256"
                 }
             ],
             "outputs": [
                 {
-                    "name": "",
-                    "type": "uint256",
-                    "internalType": "uint256"
+                    "name": "all",
+                    "type": "tuple",
+                    "internalType": "struct AllNodeSignals",
+                    "components": [
+                        {
+                            "name": "signalers",
+                            "type": "address[]",
+                            "internalType": "address[]"
+                        },
+                        {
+                            "name": "inflationSignals",
+                            "type": "uint256[2][]",
+                            "internalType": "uint256[2][]"
+                        },
+                        {
+                            "name": "membraneSignals",
+                            "type": "uint256[2][]",
+                            "internalType": "uint256[2][]"
+                        },
+                        {
+                            "name": "redistributionSignals",
+                            "type": "uint256[][]",
+                            "internalType": "uint256[][]"
+                        }
+                    ]
                 }
             ],
             "stateMutability": "view"
@@ -544,65 +583,31 @@ export const ABIs: ABIKP = {
                             "internalType": "string[]"
                         },
                         {
-                            "name": "signals",
-                            "type": "uint256[]",
-                            "internalType": "uint256[]"
-                        }
-                    ]
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getNodes",
-            "inputs": [
-                {
-                    "name": "nodeIds",
-                    "type": "uint256[]",
-                    "internalType": "uint256[]"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "nodes",
-                    "type": "tuple[]",
-                    "internalType": "struct NodeState[]",
-                    "components": [
-                        {
-                            "name": "basicInfo",
-                            "type": "string[12]",
-                            "internalType": "string[12]"
-                        },
-                        {
-                            "name": "membraneMeta",
-                            "type": "string",
-                            "internalType": "string"
-                        },
-                        {
-                            "name": "membersOfNode",
-                            "type": "address[]",
-                            "internalType": "address[]"
-                        },
-                        {
-                            "name": "childrenNodes",
-                            "type": "string[]",
-                            "internalType": "string[]"
-                        },
-                        {
-                            "name": "movementEndpoints",
-                            "type": "address[]",
-                            "internalType": "address[]"
-                        },
-                        {
-                            "name": "rootPath",
-                            "type": "string[]",
-                            "internalType": "string[]"
-                        },
-                        {
-                            "name": "signals",
-                            "type": "uint256[]",
-                            "internalType": "uint256[]"
+                            "name": "nodeSignals",
+                            "type": "tuple",
+                            "internalType": "struct AllNodeSignals",
+                            "components": [
+                                {
+                                    "name": "signalers",
+                                    "type": "address[]",
+                                    "internalType": "address[]"
+                                },
+                                {
+                                    "name": "inflationSignals",
+                                    "type": "uint256[2][]",
+                                    "internalType": "uint256[2][]"
+                                },
+                                {
+                                    "name": "membraneSignals",
+                                    "type": "uint256[2][]",
+                                    "internalType": "uint256[2][]"
+                                },
+                                {
+                                    "name": "redistributionSignals",
+                                    "type": "uint256[][]",
+                                    "internalType": "uint256[][]"
+                                }
+                            ]
                         }
                     ]
                 }

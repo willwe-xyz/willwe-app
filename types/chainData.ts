@@ -46,14 +46,21 @@ export interface MembraneMetadata {
   createdAt: string;
 }
 
+export interface AllNodeSignals {
+  signalers: string[];
+  inflationSignals: [string, string][];
+  membraneSignals: [string, string][];
+  redistributionSignals: string[][];
+}
+
 export interface NodeState {
-  basicInfo: NodeBasicInfo;
-  membraneMeta: string;             // Membrane Metadata CID
-  membersOfNode: string[];          // Array of member addresses
-  childrenNodes: string[];          // Array of children node IDs
-  movementEndpoints: string[];      // Array of node specific execution endpoints
-  rootPath: string[];               // Path from root to current node
-  signals: string[];                // Array of uint256 signals
+  basicInfo: string[];
+  membraneMeta: string;
+  membersOfNode: string[];
+  childrenNodes: string[];
+  movementEndpoints: string[];
+  rootPath: string[];
+  nodeSignals: AllNodeSignals;
 }
 
 
@@ -218,15 +225,89 @@ export interface ActivityItem {
 // Type guard functions
 ///////////////////////////////////////////
 export const isValidNodeState = (data: any): data is NodeState => {
-  return (
-    Array.isArray(data?.basicInfo) &&
-    data.basicInfo.length === 12 &&
-    typeof data.membraneMeta === 'string' &&
-    Array.isArray(data.membersOfNode) &&
-    Array.isArray(data.childrenNodes) &&
-    Array.isArray(data.rootPath) &&
-    Array.isArray(data.signals)
-  );
+  if (!data) return false;
+  
+  // Check basicInfo
+  if (!Array.isArray(data.basicInfo) || data.basicInfo.length !== 12) {
+    console.error('Invalid basicInfo:', data.basicInfo);
+    return false;
+  }
+
+  // Check membraneMeta
+  if (typeof data.membraneMeta !== 'string') {
+    console.error('Invalid membraneMeta:', data.membraneMeta);
+    return false;
+  }
+
+  // Check arrays
+  if (!Array.isArray(data.membersOfNode)) {
+    console.error('Invalid membersOfNode:', data.membersOfNode);
+    return false;
+  }
+  if (!Array.isArray(data.childrenNodes)) {
+    console.error('Invalid childrenNodes:', data.childrenNodes);
+    return false;
+  }
+  if (!Array.isArray(data.movementEndpoints)) {
+    console.error('Invalid movementEndpoints:', data.movementEndpoints);
+    return false;
+  }
+  if (!Array.isArray(data.rootPath)) {
+    console.error('Invalid rootPath:', data.rootPath);
+    return false;
+  }
+
+  // Check nodeSignals structure
+  if (!data.nodeSignals || typeof data.nodeSignals !== 'object') {
+    console.error('Invalid nodeSignals:', data.nodeSignals);
+    return false;
+  }
+
+  const { nodeSignals } = data;
+  
+  // Check signalers
+  if (!Array.isArray(nodeSignals.signalers)) {
+    console.error('Invalid signalers:', nodeSignals.signalers);
+    return false;
+  }
+
+  // Check inflationSignals
+  if (!Array.isArray(nodeSignals.inflationSignals)) {
+    console.error('Invalid inflationSignals:', nodeSignals.inflationSignals);
+    return false;
+  }
+  if (!nodeSignals.inflationSignals.every((sig: any) => 
+    Array.isArray(sig) && sig.length === 2 && typeof sig[0] === 'string' && typeof sig[1] === 'string'
+  )) {
+    console.error('Invalid inflationSignals format:', nodeSignals.inflationSignals);
+    return false;
+  }
+
+  // Check membraneSignals
+  if (!Array.isArray(nodeSignals.membraneSignals)) {
+    console.error('Invalid membraneSignals:', nodeSignals.membraneSignals);
+    return false;
+  }
+  if (!nodeSignals.membraneSignals.every((sig: any) => 
+    Array.isArray(sig) && sig.length === 2 && typeof sig[0] === 'string' && typeof sig[1] === 'string'
+  )) {
+    console.error('Invalid membraneSignals format:', nodeSignals.membraneSignals);
+    return false;
+  }
+
+  // Check redistributionSignals
+  if (!Array.isArray(nodeSignals.redistributionSignals)) {
+    console.error('Invalid redistributionSignals:', nodeSignals.redistributionSignals);
+    return false;
+  }
+  if (!nodeSignals.redistributionSignals.every((sig: any) => 
+    Array.isArray(sig) && sig.every((item: any) => typeof item === 'string')
+  )) {
+    console.error('Invalid redistributionSignals format:', nodeSignals.redistributionSignals);
+    return false;
+  }
+
+  return true;
 };
 
 

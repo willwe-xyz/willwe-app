@@ -1,121 +1,80 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { NodeState, isValidNodeState } from '../types/chainData';
+import { useContract } from './useContract';
 import { ethers } from 'ethers';
-import { deployments, ABIs, getRPCUrl } from '../config/contracts';
-import { NodeState } from '../types/chainData';
 
-interface UseNodeDataResult {
-  data: NodeState | null;
-  isLoading: boolean;
-  error: Error | null;
-  refetch: () => Promise<void>;
-}
+export const useNodeData = (chainId: string, userAddress: string, nodeId: string) => {
+  const { contract } = useContract(chainId);
 
-export function useNodeData(
-  chainId: string | undefined,
-  userAddress: string | undefined, 
-  nodeIdOrAddress: string | undefined,
-  isRootNode: boolean = false
-): UseNodeDataResult {
-  const [data, setData] = useState<NodeState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchData = useCallback(async () => {
-    if (!chainId || !nodeIdOrAddress) {
-      setError(new Error('Invalid chainId or node identifier'));
-      setIsLoading(false);
-      return;
-    }
-
-    // If we don't have a userAddress, use zero address instead of returning early
-    const addressToUse = userAddress || ethers.ZeroAddress;
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
+  return useQuery({
+    queryKey: ['nodeData', chainId, userAddress, nodeId],
+    queryFn: async () => {
+      if (!contract) throw new Error('Contract not initialized');
       
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      try {
+        const nodeIdBN = ethers.toBigInt(nodeId);
+        const data = await contract.getNodeData(nodeIdBN, userAddress);
+        
+        // Log the raw data for debugging
+        console.log('Raw node data:', data);
+
+        // Validate and transform the data
+        if (!data || !Array.isArray(data.basicInfo) || data.basicInfo.length < 12) {
+          throw new Error('Invalid node data structure');
+        }
+
+        // Transform the data into the expected format
+        const nodeState: NodeState = {
+          basicInfo: data.basicInfo.map((item: any) => item?.toString() || ''),
+          membraneMeta: data.membraneMeta?.toString() || '',
+          membersOfNode: Array.isArray(data.membersOfNode) 
+            ? data.membersOfNode.map((item: any) => item?.toString() || '')
+            : [],
+          childrenNodes: Array.isArray(data.childrenNodes)
+            ? data.childrenNodes.map((item: any) => item?.toString() || '')
+            : [],
+          movementEndpoints: Array.isArray(data.movementEndpoints)
+            ? data.movementEndpoints.map((item: any) => item?.toString() || '')
+            : [],
+          rootPath: Array.isArray(data.rootPath)
+            ? data.rootPath.map((item: any) => item?.toString() || '')
+            : [],
+          nodeSignals: {
+            signalers: Array.isArray(data.nodeSignals?.signalers)
+              ? data.nodeSignals.signalers.map((item: any) => item?.toString() || '')
+              : [],
+            inflationSignals: Array.isArray(data.nodeSignals?.inflationSignals)
+              ? data.nodeSignals.inflationSignals.map(([value, support]: [any, any]) => [
+                  value?.toString() || '',
+                  support?.toString() || ''
+                ])
+              : [],
+            membraneSignals: Array.isArray(data.nodeSignals?.membraneSignals)
+              ? data.nodeSignals.membraneSignals.map(([value, support]: [any, any]) => [
+                  value?.toString() || '',
+                  support?.toString() || ''
+                ])
+              : [],
+            redistributionSignals: Array.isArray(data.nodeSignals?.redistributionSignals)
+              ? data.nodeSignals.redistributionSignals.map((signal: any) => 
+                  Array.isArray(signal) ? signal.map((item: any) => item?.toString() || '') : []
+                )
+              : [],
+          },
+        };
+
+        // Validate the transformed data
+        if (!isValidNodeState(nodeState)) {
+          console.error('Invalid node state:', nodeState);
+          throw new Error('Transformed data does not match NodeState interface');
+        }
+
+        return nodeState;
+      } catch (error) {
+        console.error('Error fetching node data:', error);
+        throw error;
       }
-
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
-      const contract = new ethers.Contract(contractAddress, ABIs.WillWe, provider);
-
-      let formattedId: string;
-      if (isRootNode) {
-        formattedId = ethers.toBigInt(nodeIdOrAddress).toString();
-      } else {
-        formattedId = nodeIdOrAddress;
-      }
-
-      console.log('Fetching node data:', {
-        chainId: cleanChainId,
-        nodeIdOrAddress,
-        formattedId,
-        userAddress: addressToUse,
-        isRootNode,
-        contractAddress
-      });
-
-      const nodeData = await contract.getNodeData(formattedId, addressToUse);
-
-      console.log('Node data received:', nodeData);
-
-      if (!nodeData?.basicInfo) {
-        throw new Error('Invalid node data received');
-      }
-
-      // Transform data
-      const transformedData: NodeState = {
-        basicInfo: nodeData.basicInfo.map((item: any) => item.toString()),
-        membraneMeta: nodeData.membraneMeta || '',
-        membersOfNode: nodeData.membersOfNode || [],
-        childrenNodes: (nodeData.childrenNodes || []).map((node: any) => node.toString()),
-        movementEndpoints: nodeData.movementEndpoints || [],
-        rootPath: (nodeData.rootPath || []).map((path: any) => path.toString()),
-        signals: (nodeData.signals || []).map((signal: any) => ({
-          MembraneInflation: (signal.MembraneInflation || []).map((mi: any[]) => 
-            mi.map(item => item.toString())
-          ),
-          lastRedistSignal: (signal.lastRedistSignal || []).map((item: any) => 
-            item.toString()
-          )
-        }))
-      };
-
-      setData(transformedData);
-      setError(null);
-
-    } catch (err) {
-      console.error('Error fetching node data:', err);
-      setError(err instanceof Error ? err : new Error('Failed to fetch node data'));
-      setData(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [chainId, nodeIdOrAddress, userAddress, isRootNode]);
-
-  // Fetch on mount and when dependencies change
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // Refetch when userAddress becomes available
-  useEffect(() => {
-    if (userAddress) {
-      fetchData();
-    }
-  }, [userAddress, fetchData]);
-
-  return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchData
-  };
-}
-
-export default useNodeData;
+    },
+    enabled: !!contract && !!userAddress && !!nodeId,
+  });
+};
