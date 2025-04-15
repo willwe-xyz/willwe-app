@@ -229,19 +229,42 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       borderRadius="xl"
       overflow="hidden"
       h="400px"
+      display="flex"
+      flexDirection="column"
     >
-      <HStack spacing={4} align="stretch" h="full">
+      <Text
+        fontSize="2xl"
+        fontWeight="extrabold"
+        color={selectedTokenColor}
+        opacity={0.9}
+        letterSpacing="tight"
+        textAlign="right"
+        px={6}
+        py={2}
+      >
+        {membraneTitle || 'Loading...'}
+      </Text>
+      <HStack 
+        spacing={4} 
+        align="stretch" 
+        flex={1}
+        minH={0}
+        px={3}
+        pb={3}
+      >
         {/* Left column - Stats */}
         <VStack
           w="67%"
           align="stretch"
           spacing={3}
-          p={3}
+          overflowY="auto"
+          minH={0}
         >
           {/* Stats grid */}
           <Grid 
             templateColumns="repeat(2, 1fr)" 
             gap={3}
+            flex="none"
           >
             <Box
               p={3}
@@ -321,6 +344,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
               borderWidth="1px"
               borderColor={borderColor}
               overflowY="auto"
+              minH={0}
             >
               <VStack align="stretch" spacing={2} p={3}>
                 <HStack justify="space-between">
@@ -373,7 +397,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
         </VStack>
 
         {/* Right column - Chart */}
-        <Box w="33%" h="full" p={3}>
+        <Box 
+          w="33%" 
+          minH={0}
+          overflowY="hidden"
+        >
           <TreemapChart
             nodeData={node}
             chainId={chainId}

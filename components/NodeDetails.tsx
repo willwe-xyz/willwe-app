@@ -161,7 +161,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             borderBottomWidth="1px"
             borderColor={borderColor}
           >
-            <NodeInfo node={nodeData} chainId={chainId} />
+            <NodeInfo node={nodeData} chainId={chainId} selectedTokenColor={selectedTokenColor} />
           </Box>
           
           <Box p={6}>
@@ -196,7 +196,11 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           borderColor={borderColor}
           position="relative"
         >
-          <NodeInfo node={nodeData} chainId={chainId} />
+          <NodeInfo 
+            node={nodeData} 
+            chainId={chainId} 
+            selectedTokenColor={selectedTokenColor}
+          />
           {/* Theme color line */}
           <Box 
             position="absolute" 
