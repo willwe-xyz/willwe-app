@@ -9,18 +9,44 @@ import {
   FormHelperText,
 } from '@chakra-ui/react';
 import { Activity } from 'lucide-react';
+import { ethers } from 'ethers';
 
 interface InflationSectionProps {
   inflationRate: string;
   setInflationRate: (rate: string) => void;
   isProcessing: boolean;
+  tokenSymbol?: string;
 }
 
 export const InflationSection: React.FC<InflationSectionProps> = ({
   inflationRate,
   setInflationRate,
-  isProcessing
+  isProcessing,
+  tokenSymbol = 'PSC' // Default to PSC if not provided
 }) => {
+  // Calculate daily rate in tokens
+  const calculateDailyRate = (gweiPerSec: string) => {
+    try {
+      // Convert gwei/sec to tokens/day
+      // 1. Convert gwei to wei (multiply by 10^9)
+      // 2. Convert wei to tokens (divide by 10^18)
+      // 3. Multiply by seconds in a day
+      const gweiPerSecBN = BigInt(gweiPerSec || '0');
+      const SECONDS_PER_DAY = BigInt(86400);
+      const WEI_PER_GWEI = BigInt(10 ** 9);
+      
+      // First multiply by seconds per day and wei per gwei
+      const weiPerDay = gweiPerSecBN * SECONDS_PER_DAY * WEI_PER_GWEI;
+      
+      // Then convert to tokens (divide by 10^18)
+      return ethers.formatEther(weiPerDay);
+    } catch (error) {
+      return '0';
+    }
+  };
+
+  const dailyRate = calculateDailyRate(inflationRate || '0');
+
   return (
     <Box p={4} bg="purple.50" borderRadius="lg">
       <Box mb={4}>
@@ -38,11 +64,12 @@ export const InflationSection: React.FC<InflationSectionProps> = ({
           placeholder="Enter inflation rate"
           type="number"
           min="0"
-          max="1000000"
           isDisabled={isProcessing}
           bg="white"
         />
-        <FormHelperText>Maximum rate: 1,000,000 gwei/sec</FormHelperText>
+        <Text fontSize="sm" color="gray.600" mt={1}>
+          Daily rate: {dailyRate} {tokenSymbol}/day
+        </Text>
       </FormControl>
     </Box>
   );

@@ -3,10 +3,11 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
-import { Box, Flex, Input, List, ListItem, VStack, Text, Select, useColorModeValue } from '@chakra-ui/react';
+import { Box, Flex, Input, List, ListItem, VStack, Text, Select, useColorModeValue, HStack, Badge } from '@chakra-ui/react';
 import { PlotMouseEvent } from 'plotly.js';
 import { getMembraneNameFromCID } from '../../utils/ipfs';
 import { NodeState } from '../../types/chainData';
+import { ethers } from 'ethers';
 
 interface SankeyChartProps {
   nodes: NodeState[];
@@ -16,6 +17,51 @@ interface SankeyChartProps {
   chainId: string | number;
   selectedToken: string;
 }
+
+interface NodeMetrics {
+  value: number;
+  inflation: number;
+  inflow: number;
+  memberCount: number;
+  depth: number;
+  signalStrength: number;
+}
+
+interface SankeyStructure {
+  nodeMap: Map<string, number>;
+  labels: string[];
+  source: number[];
+  target: number[];
+  values: number[];
+  nodeColors: string[];
+  nodeSizes: number[];
+  nodeDepths: number[];
+  nodeSignalStrengths: number[];
+}
+
+type SankeyData = {
+  type: 'sankey';
+  node: {
+    label: string[];
+    color: string[];
+    thickness: number[];
+    line: {
+      color: string[];
+      width: number[];
+    };
+    pad: number;
+    hovertemplate: string;
+    customdata: Array<[number, number, number, number]>;
+  };
+  link: {
+    source: number[];
+    target: number[];
+    value: number[];
+    color: string[];
+    hovertemplate: string;
+    customdata: Array<[number, number]>;
+  };
+};
 
 const Plot = dynamic(() => import('react-plotly.js'), {
   ssr: false,
@@ -47,6 +93,9 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
   const [isLabelsLoading, setIsLabelsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
+  const [minValueFilter, setMinValueFilter] = useState(0);
+  const [selectedDepth, setSelectedDepth] = useState<number | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   
   // Add labelToId mapping
   const [labelToId, setLabelToId] = useState<Map<string, string>>(new Map());
@@ -56,7 +105,63 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
   const borderColor = useColorModeValue('gray.100', 'gray.700');
   const inputBg = useColorModeValue('gray.50', 'gray.700');
 
-  // Initialize basic structure with node IDs
+  // Calculate node metrics with proper value scaling
+  const nodeMetrics = useMemo(() => {
+    const metrics = new Map<string, {
+      value: number;
+      inflation: number;
+      inflow: number;
+      memberCount: number;
+      depth: number;
+      signalStrength: number;
+      maxValue: number;
+    }>();
+
+    // First pass - find max value and inflow for scaling
+    let maxValue = 0;
+    let maxInflow = 0;
+    nodes.forEach(node => {
+      if (!node?.basicInfo?.[4]) return;
+      const value = Number(ethers.formatUnits(node.basicInfo[4] || '0', 'ether'));
+      const inflow = Number(ethers.formatUnits(node.basicInfo[7] || '0', 'ether'));
+      maxValue = Math.max(maxValue, value);
+      maxInflow = Math.max(maxInflow, inflow);
+    });
+
+    // Second pass - calculate metrics with proper scaling
+    nodes.forEach(node => {
+      if (!node?.basicInfo?.[0]) return;
+      
+      const nodeId = node.basicInfo[0];
+      const value = Number(ethers.formatUnits(node.basicInfo[4] || '0', 'ether'));
+      const inflation = Number(ethers.formatUnits(node.basicInfo[1] || '0', 'ether'));
+      const inflow = Number(ethers.formatUnits(node.basicInfo[7] || '0', 'ether'));
+      const memberCount = node.membersOfNode?.length || 0;
+      const depth = node.rootPath?.length || 0;
+      
+      // Calculate signal strength from various signals
+      const signalStrength = Math.min(
+        (node.nodeSignals?.inflationSignals?.length || 0) +
+        (node.nodeSignals?.membraneSignals?.length || 0) +
+        (node.nodeSignals?.redistributionSignals?.length || 0),
+        10
+      ) / 10;
+
+      metrics.set(nodeId, {
+        value,
+        inflation,
+        inflow,
+        memberCount,
+        depth,
+        signalStrength,
+        maxValue
+      });
+    });
+
+    return metrics;
+  }, [nodes]);
+
+  // Initialize basic structure with enhanced metrics
   const sankeyStructure = useMemo(() => {
     const labels: string[] = [];
     const source: number[] = [];
@@ -64,20 +169,38 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
     const values: number[] = [];
     const nodeMap = new Map<string, number>();
     const nodeColors: string[] = [];
+    const nodeSizes: number[] = [];
+    const nodeDepths: number[] = [];
+    const nodeSignalStrengths: number[] = [];
 
-    // First pass - create nodes with temporary labels
+    // First pass - create nodes with metrics
     nodes.forEach(node => {
       if (!node?.basicInfo?.[0]) return;
       const nodeId = node.basicInfo[0];
       if (!nodeMap.has(nodeId)) {
         nodeMap.set(nodeId, labels.length);
-        labels.push(nodeId); // Remove slice to keep full ID
-        // Set root node color to be more vibrant, others more transparent
-        nodeColors.push(nodeId === selectedToken ? selectedTokenColor : `${selectedTokenColor}40`);
+        labels.push(nodeId);
+        
+        const metrics = nodeMetrics.get(nodeId);
+        if (metrics) {
+          // Size based on value
+          const size = Math.log10(metrics.value + 1) * 20;
+          nodeSizes.push(size);
+          
+          // Color based on inflation
+          const inflationColor = metrics.inflation > 0 
+            ? `${selectedTokenColor}${Math.min(Math.floor(metrics.inflation * 100), 100)}`
+            : `${selectedTokenColor}20`;
+          nodeColors.push(inflationColor);
+          
+          // Store depth and signal strength
+          nodeDepths.push(metrics.depth);
+          nodeSignalStrengths.push(metrics.signalStrength);
+        }
       }
     });
 
-    // Second pass - create links
+    // Second pass - create links with enhanced metrics
     nodes.forEach(node => {
       if (!node?.basicInfo?.[0]) return;
       const sourceIdx = nodeMap.get(node.basicInfo[0]);
@@ -88,13 +211,27 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
         if (typeof targetIdx === 'number') {
           source.push(sourceIdx);
           target.push(targetIdx);
-          values.push(nodeValues[childId] || 1);
+          
+          // Calculate link value based on child's value
+          const childMetrics = nodeMetrics.get(childId);
+          const linkValue = childMetrics?.value || 1;
+          values.push(linkValue);
         }
       });
     });
 
-    return { nodeMap, labels, source, target, values, nodeColors };
-  }, [nodes, nodeValues, selectedToken, selectedTokenColor]);
+    return { 
+      nodeMap, 
+      labels, 
+      source, 
+      target, 
+      values, 
+      nodeColors,
+      nodeSizes,
+      nodeDepths,
+      nodeSignalStrengths
+    };
+  }, [nodes, nodeMetrics, selectedTokenColor]);
 
   const formatNodeId = (nodeId: string) => {
     const halfLength = Math.floor(nodeId.length / 2);
@@ -165,6 +302,20 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
     }
   }, [labelToId, onNodeSelect, router, chainId]);
 
+  const handleNodeHover = useCallback((event: PlotMouseEvent) => {
+    const hoveredPoint = event.points?.[0];
+    if (!hoveredPoint) {
+      setHoveredNode(null);
+      return;
+    }
+
+    const label = (hoveredPoint as any).label;
+    if (label) {
+      const nodeId = labelToId.get(label);
+      setHoveredNode(nodeId || null);
+    }
+  }, [labelToId]);
+
   const handleNodeListClick = useCallback((label: string) => {
     const nodeId = labelToId.get(label);
     if (nodeId) {
@@ -174,14 +325,143 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
   }, [labelToId, onNodeSelect, router, chainId]);
 
   const getFilteredAndSortedNodes = () => {
-    const filtered = nodeLabels.filter(label => 
-      label.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = nodeLabels.filter(label => {
+      const nodeId = labelToId.get(label);
+      if (!nodeId) return false;
+      
+      const metrics = nodeMetrics.get(nodeId);
+      if (!metrics) return false;
+      
+      return (
+        label.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        metrics.value >= minValueFilter &&
+        (selectedDepth === null || metrics.depth === selectedDepth)
+      );
+    });
     
     return filtered.sort((a, b) => {
-      if (sortOrder === "asc") return a.localeCompare(b);
-      return b.localeCompare(a);
+      const aId = labelToId.get(a);
+      const bId = labelToId.get(b);
+      const aMetrics = aId ? nodeMetrics.get(aId) : null;
+      const bMetrics = bId ? nodeMetrics.get(bId) : null;
+      
+      if (!aMetrics || !bMetrics) return 0;
+      
+      if (sortOrder === "asc") {
+        return aMetrics.value - bMetrics.value;
+      }
+      return bMetrics.value - aMetrics.value;
     });
+  };
+
+  const getNodeHoverTemplate = (): string => {
+    return `
+      <b>%{label}</b><br>
+      Value: %{value:.1f}%<br>
+      Inflation: %{customdata[0]:.4f}/sec<br>
+      Members: %{customdata[1]}<br>
+      Depth: %{customdata[2]}<br>
+      Signal Strength: %{customdata[3]:.0f}%<extra></extra>
+    `;
+  };
+
+  const getLinkHoverTemplate = (): string => {
+    return `
+      <b>Flow Details</b><br>
+      From: %{source.label}<br>
+      To: %{target.label}<br>
+      Value: %{value:.1f}%<br>
+      Source Inflation: %{customdata[0]:.4f}/sec<br>
+      Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
+    `;
+  };
+
+  const getNodeLineColor = (idx: number): string => {
+    const nodeId = sankeyStructure.labels[idx];
+    const metrics = nodeMetrics.get(nodeId);
+    return (metrics?.signalStrength || 0) > 0.5 ? selectedTokenColor : "white";
+  };
+
+  const getNodeLineWidth = (idx: number): number => {
+    const nodeId = sankeyStructure.labels[idx];
+    const metrics = nodeMetrics.get(nodeId);
+    return (metrics?.signalStrength || 0) * 2 || 0.5;
+  };
+
+  const getSankeyData = (): SankeyData => {
+    const nodeCustomData: Array<[number, number, number, number]> = nodeLabels.map((_, idx) => {
+      const nodeId = sankeyStructure.labels[idx];
+      const metrics = nodeMetrics.get(nodeId);
+      return [
+        metrics?.inflation || 0,
+        metrics?.memberCount || 0,
+        metrics?.depth || 0,
+        (metrics?.signalStrength || 0) * 100
+      ];
+    });
+
+    const linkCustomData: Array<[number, number]> = sankeyStructure.source.map((_, idx) => {
+      const sourceIdx = sankeyStructure.source[idx];
+      const targetIdx = sankeyStructure.target[idx];
+      const sourceId = sankeyStructure.labels[sourceIdx];
+      const targetId = sankeyStructure.labels[targetIdx];
+      const sourceMetrics = nodeMetrics.get(sourceId);
+      const targetMetrics = nodeMetrics.get(targetId);
+      return [
+        sourceMetrics?.inflation || 0,
+        targetMetrics?.inflation || 0
+      ];
+    });
+
+    // Calculate node sizes with more balanced proportions
+    const minNodeSize = 20; // Increased minimum size
+    const maxNodeSize = 40; // Decreased maximum size
+    const nodeSizes = nodeLabels.map((_, idx) => {
+      const nodeId = sankeyStructure.labels[idx];
+      const metrics = nodeMetrics.get(nodeId);
+      if (!metrics) return minNodeSize;
+
+      const value = metrics.value;
+      const maxValue = metrics.maxValue;
+      
+      // Linear scale with compressed range for better proportions
+      const normalizedValue = value > 0 ? (value / (maxValue || 1)) : 0;
+      const size = minNodeSize + (normalizedValue * (maxNodeSize - minNodeSize));
+      
+      return Math.max(minNodeSize, Math.min(maxNodeSize, size));
+    });
+
+    // Calculate link values based on inflow
+    const linkValues = sankeyStructure.source.map((sourceIdx, idx) => {
+      const targetIdx = sankeyStructure.target[idx];
+      const targetId = sankeyStructure.labels[targetIdx];
+      const metrics = nodeMetrics.get(targetId);
+      return metrics?.inflow || 1; // Use inflow for link width, minimum 1 for visibility
+    });
+
+    return {
+      type: 'sankey',
+      node: {
+        label: nodeLabels,
+        color: nodeLabels.map(() => selectedTokenColor),
+        thickness: nodeSizes,
+        line: {
+          color: nodeLabels.map(() => selectedTokenColor),
+          width: nodeLabels.map(() => 0.5) // Consistent thin borders
+        },
+        pad: 15,
+        hovertemplate: getNodeHoverTemplate(),
+        customdata: nodeCustomData
+      },
+      link: {
+        source: sankeyStructure.source,
+        target: sankeyStructure.target,
+        value: linkValues,
+        color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
+        hovertemplate: getLinkHoverTemplate(),
+        customdata: linkCustomData
+      }
+    };
   };
 
   if (isLabelsLoading) {
@@ -211,27 +491,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
         overflow="hidden"
       >
         <Plot
-          data={[{
-            type: 'sankey',
-            node: {
-              label: nodeLabels,
-              color: sankeyStructure.nodeColors,
-              thickness: 20,
-              line: {
-                color: (idx: number) => sankeyStructure.labels[idx] === selectedToken ? selectedTokenColor : "white",
-                width: (idx: number) => sankeyStructure.labels[idx] === selectedToken ? 2 : 0.5
-              },
-              pad: 15,
-              hovertemplate: '%{label}<br>Value: %{value:.1f}%<extra></extra>'
-            },
-            link: {
-              source: sankeyStructure.source,
-              target: sankeyStructure.target,
-              value: sankeyStructure.values,
-              color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
-              hovertemplate: 'From: %{source.label}<br>To: %{target.label}<br>Value: %{value:.1f}%<extra></extra>'
-            }
-          }]}
+          data={[getSankeyData() as any]}
           layout={{
             autosize: true,
             height: 600,
@@ -248,6 +508,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
             }
           }}
           onClick={handleNodeClick}
+          onHover={handleNodeHover}
           style={{ width: '100%', height: '100%' }}
           config={{
             displayModeBar: false,
@@ -291,8 +552,39 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
             boxShadow: `0 0 0 1px ${selectedTokenColor}`
           }}
         >
-          <option value="asc">A-Z</option>
-          <option value="desc">Z-A</option>
+          <option value="asc">Value (Low to High)</option>
+          <option value="desc">Value (High to Low)</option>
+        </Select>
+
+        <Input
+          type="number"
+          placeholder="Min Value Filter"
+          value={minValueFilter}
+          onChange={(e) => setMinValueFilter(Number(e.target.value))}
+          size="sm"
+          bg={inputBg}
+          borderRadius="md"
+          _focus={{
+            borderColor: selectedTokenColor,
+            boxShadow: `0 0 0 1px ${selectedTokenColor}`
+          }}
+        />
+
+        <Select
+          size="sm"
+          value={selectedDepth === null ? '' : selectedDepth}
+          onChange={(e) => setSelectedDepth(e.target.value ? Number(e.target.value) : null)}
+          placeholder="Filter by Depth"
+          bg={inputBg}
+          borderRadius="md"
+          _focus={{
+            borderColor: selectedTokenColor,
+            boxShadow: `0 0 0 1px ${selectedTokenColor}`
+          }}
+        >
+          {Array.from(new Set(sankeyStructure.nodeDepths)).map(depth => (
+            <option key={depth} value={depth}>Depth {depth}</option>
+          ))}
         </Select>
 
         <List 
@@ -313,24 +605,44 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
             },
           }}
         >
-          {getFilteredAndSortedNodes().map((label, index) => (
-            <ListItem 
-              key={index}
-              p={2}
-              cursor="pointer"
-              borderRadius="md"
-              transition="all 0.2s"
-              _hover={{ 
-                bg: `${selectedTokenColor}10`,
-                color: selectedTokenColor
-              }}
-              onClick={() => handleNodeListClick(label)}
-            >
-              <Text fontSize="sm">{label}</Text>
-            </ListItem>
-          ))}
+          {getFilteredAndSortedNodes().map((label, index) => {
+            const nodeId = labelToId.get(label);
+            const metrics = nodeId ? nodeMetrics.get(nodeId) : null;
+            
+            return (
+              <ListItem 
+                key={index}
+                p={2}
+                cursor="pointer"
+                borderRadius="md"
+                transition="all 0.2s"
+                bg={hoveredNode === nodeId ? `${selectedTokenColor}10` : 'transparent'}
+                _hover={{ 
+                  bg: `${selectedTokenColor}10`,
+                  color: selectedTokenColor
+                }}
+                onClick={() => handleNodeListClick(label)}
+              >
+                <VStack align="start" spacing={1}>
+                  <Text fontSize="sm" fontWeight="medium">{label}</Text>
+                  {metrics && (
+                    <HStack spacing={2}>
+                      <Badge colorScheme="purple" variant="subtle">
+                        {metrics.value.toFixed(2)}%
+                      </Badge>
+                      <Badge colorScheme="green" variant="subtle">
+                        {metrics.memberCount} members
+                      </Badge>
+                    </HStack>
+                  )}
+                </VStack>
+              </ListItem>
+            );
+          })}
         </List>
       </VStack>
     </Flex>
   );
 };
+
+export default SankeyChart;

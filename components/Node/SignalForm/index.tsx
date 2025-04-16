@@ -34,6 +34,7 @@ interface SignalFormProps {
   nodeId: string;
   parentNodeData: NodeState | null;
   onSuccess?: () => void;
+  tokenSymbol?: string;
 }
 
 type ChildData = {
@@ -58,7 +59,7 @@ interface MembraneRequirement {
   formattedBalance: string;
 }
 
-const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData, onSuccess }) => {
+const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData, onSuccess, tokenSymbol = 'PSC' }) => {
   const { user, ready } = usePrivy();
   const { signal } = useNodeTransactions(chainId);
 
@@ -250,7 +251,8 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   }, [calculateEligibilityImpact, sliderValues]);
 
   const handleSubmit = useCallback(async () => {
-    if (Math.abs(totalAllocation - 100) > 0.01) {
+    // Only require 100% allocation if there are children to redistribute to
+    if (childrenData.length > 0 && Math.abs(totalAllocation - 100) > 0.01) {
       setError('Total allocation must equal 100%');
       return;
     }
@@ -275,11 +277,14 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         })
       ];
   
-      // Verify the sum of child signals equals 10000 (100.00%)
-      const childSignalsSum = signalArray.slice(2).reduce((sum, val) => sum + Number(val), 0);
-      if (childSignalsSum !== 10000) {
-        throw new Error(`Invalid signal sum: ${childSignalsSum}. Expected 10000 basis points.`);
+      // Only verify child signals sum if there are children
+      if (childrenData.length > 0) {
+        const childSignalsSum = signalArray.slice(2).reduce((sum, val) => sum + Number(val), 0);
+        if (childSignalsSum !== 10000) {
+          throw new Error(`Invalid signal sum: ${childSignalsSum}. Expected 10000 basis points.`);
+        }
       }
+
       console.log("Submitting signals:", signalArray);
       console.log("Signal array as strings:", signalArray.map(String));
       await signal(nodeId, signalArray.map(String));
@@ -603,6 +608,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                   inflationRate={inflationRates[nodeId] || ''}
                   setInflationRate={(value) => handleInflationChange(nodeId, value)}
                   isProcessing={isSubmitting}
+                  tokenSymbol={tokenSymbol}
                 />
               </Box>
 
@@ -666,7 +672,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                   loadingText="Submitting Signals..."
                   isDisabled={
                     isSubmitting || 
-                    Math.abs(totalAllocation - 100) > 0.01 ||
+                    (childrenData.length > 0 && Math.abs(totalAllocation - 100) > 0.01) ||
                     !user?.wallet?.address
                   }
                 >

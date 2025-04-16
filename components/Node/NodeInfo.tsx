@@ -28,6 +28,7 @@ interface NodeInfoProps {
   chainId: string;
   onNodeSelect?: (nodeId: string) => void;
   selectedTokenColor: string;
+  tokenSymbol: string;
 }
 
 interface NodeMetrics {
@@ -89,11 +90,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   node, 
   chainId, 
   onNodeSelect,
-  selectedTokenColor
+  selectedTokenColor,
+  tokenSymbol
 }) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
-  const [tokenSymbol, setTokenSymbol] = useState<string>('');
   const toast = useToast();
 
   const borderColor = useColorModeValue('gray.100', 'gray.700');
@@ -124,28 +125,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 
   const [memberData, setMemberData] = useState<Array<{ address: string; ensName: string | null }>>([]);
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    const fetchTokenSymbol = async () => {
-      if (!node?.rootPath?.[0] || !chainId) return;
-
-      try {
-        const code = await provider.getCode(tokenAddress);
-        if (code === '0x') {
-          setTokenSymbol('NOT A TOKEN');
-          return;
-        }
-
-        const symbol = await tokenContract.symbol();
-        setTokenSymbol(symbol);
-      } catch (error) {
-        console.error('Error fetching token symbol:', error);
-        setTokenSymbol('UNKNOWN');
-      }
-    };
-
-    fetchTokenSymbol();
-  }, [node, chainId, provider, tokenContract, tokenAddress]);
 
   useEffect(() => {
     const fetchMembraneTitle = async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './NodeDetails.module.css';
 import {
   Box,
@@ -44,6 +44,8 @@ import {
   Info,
 } from 'lucide-react';
 import { nodeIdToAddress } from '../utils/formatters';
+import { getRPCUrl } from '../utils/getRPCUrl';
+import { ERC20_ABI } from '../constants/ABIs';
 
 interface NodeDetailsProps {
   chainId: string;
@@ -58,10 +60,53 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
 }) => {
   const { user } = usePrivy();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const [tokenSymbol, setTokenSymbol] = useState<string>('$TOKEN');
   
   const cleanChainId = chainId?.replace('eip155:', '') || '';
   const userAddress = user?.wallet?.address || ethers.ZeroAddress;
   const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, userAddress, nodeId);
+  
+  // Initialize provider and token contract
+  const provider = useMemo(() => {
+    return new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+  }, [cleanChainId]);
+
+  // Get token address from root path
+  const tokenAddress = useMemo(() => {
+    if (!nodeData?.rootPath?.[0]) return ethers.ZeroAddress;
+    return nodeIdToAddress(nodeData.rootPath[0]);
+  }, [nodeData]);
+
+  const tokenContract = useMemo(() => {
+    return new ethers.Contract(
+      tokenAddress,
+      ERC20_ABI,
+      provider
+    );
+  }, [tokenAddress, provider]);
+
+  // Fetch token symbol
+  useEffect(() => {
+    const fetchTokenSymbol = async () => {
+      if (!nodeData?.rootPath?.[0] || !cleanChainId) return;
+
+      try {
+        const code = await provider.getCode(tokenAddress);
+        if (code === '0x') {
+          setTokenSymbol('$TOKEN');
+          return;
+        }
+
+        const symbol = await tokenContract.symbol();
+        setTokenSymbol(symbol);
+      } catch (error) {
+        console.error('Error fetching token symbol:', error);
+        setTokenSymbol('$TOKEN');
+      }
+    };
+
+    fetchTokenSymbol();
+  }, [nodeData, cleanChainId, provider, tokenContract, tokenAddress]);
   
   // Theme colors
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -200,6 +245,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             node={nodeData} 
             chainId={chainId} 
             selectedTokenColor={selectedTokenColor}
+            tokenSymbol={tokenSymbol}
           />
           {/* Theme color line */}
           <Box 
@@ -316,7 +362,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
                 nodeId={nodeId} 
                 chainId={chainId} 
                 parentNodeData={nodeData}
-                onSuccess={refetch} 
+                onSuccess={refetch}
+                tokenSymbol={tokenSymbol}
               />
             </TabPanel>
 
