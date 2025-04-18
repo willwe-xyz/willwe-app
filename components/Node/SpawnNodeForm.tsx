@@ -30,8 +30,11 @@ import {
   Progress,
   Divider,
   Tooltip,
+  Card,
+  CardBody,
+  CardHeader,
 } from '@chakra-ui/react';
-import { Plus, Trash2, ExternalLink, Copy } from 'lucide-react';
+import { Plus, Trash2, ExternalLink, Copy, Activity } from 'lucide-react';
 import { ethers } from 'ethers';
 import { usePrivy } from '@privy-io/react-auth';
 import { deployments, ABIs, getExplorerLink } from '../../config/contracts';
@@ -264,198 +267,244 @@ const SpawnNodeForm = ({
   return (
     <Box as="form" onSubmit={handleSubmit} width="100%">
       <VStack spacing={6} align="stretch">
-        <FormControl display="flex" alignItems="center">
-          <FormLabel htmlFor="use-membrane" mb="0">
-            Define
-          </FormLabel>
-          <Switch
-            id="use-membrane"
-            isChecked={useMembrane}
-            onChange={(e) => setUseMembrane(e.target.checked)}
-            colorScheme="purple"
-          />
-        </FormControl>
+        {/* Define Switch */}
+        <Card variant="outline" bg="white">
+          <CardBody>
+            <FormControl display="flex" alignItems="center">
+              <FormLabel htmlFor="use-membrane" mb="0" fontWeight="semibold">
+                Define Node Properties
+              </FormLabel>
+              <Switch
+                id="use-membrane"
+                isChecked={useMembrane}
+                onChange={(e) => setUseMembrane(e.target.checked)}
+                colorScheme="purple"
+                size="lg"
+              />
+            </FormControl>
+          </CardBody>
+        </Card>
 
         {useMembrane && (
           <>
-            <FormControl isRequired>
-              <FormLabel>Name</FormLabel>
-              <Input
-                value={entityName}
-                onChange={(e) => setEntityName(e.target.value)}
-                placeholder="Enter name for the membrane"
-                borderColor="gray.200"
-                _hover={{ borderColor: selectedTokenColor }}
-                _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-              />
-            </FormControl>
+            {/* Name Section */}
+            <Card variant="outline" bg="white">
+              <CardBody>
+                <FormControl isRequired>
+                  <FormLabel fontWeight="semibold">Name</FormLabel>
+                  <Input
+                    value={entityName}
+                    onChange={(e) => setEntityName(e.target.value)}
+                    placeholder="Enter name for the membrane"
+                    size="lg"
+                    borderColor="gray.200"
+                    _hover={{ borderColor: selectedTokenColor }}
+                    _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+                  />
+                </FormControl>
+              </CardBody>
+            </Card>
 
             {/* Characteristics Section */}
-            <Box>
-              <FormLabel>Characteristics</FormLabel>
-              <HStack mb={4}>
-                <Input
-                  placeholder="label"
-                  value={newCharTitle}
-                  onChange={(e) => setNewCharTitle(e.target.value)}
-                  borderColor="gray.200"
-                  _hover={{ borderColor: selectedTokenColor }}
-                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-                />
-                <Input
-                  placeholder="url"
-                  value={newCharLink}
-                  onChange={(e) => setNewCharLink(e.target.value)}
-                  borderColor="gray.200"
-                  _hover={{ borderColor: selectedTokenColor }}
-                  _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-                />
-                <IconButton
-                  aria-label="Add characteristic"
-                  icon={<Plus size={20} />}
-                  onClick={addCharacteristic}
-                  isDisabled={!newCharTitle || !newCharLink}
-                />
-              </HStack>
+            <Card variant="outline" bg="white">
+              <CardHeader pb={0}>
+                <FormLabel margin="0" fontWeight="semibold">Characteristics</FormLabel>
+              </CardHeader>
+              <CardBody>
+                <VStack spacing={4} align="stretch">
+                  <HStack spacing={3}>
+                    <Input
+                      placeholder="Label"
+                      value={newCharTitle}
+                      onChange={(e) => setNewCharTitle(e.target.value)}
+                      size="lg"
+                      borderColor="gray.200"
+                      _hover={{ borderColor: selectedTokenColor }}
+                      _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+                    />
+                    <Input
+                      placeholder="URL"
+                      value={newCharLink}
+                      onChange={(e) => setNewCharLink(e.target.value)}
+                      size="lg"
+                      borderColor="gray.200"
+                      _hover={{ borderColor: selectedTokenColor }}
+                      _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+                    />
+                    <IconButton
+                      aria-label="Add characteristic"
+                      icon={<Plus size={20} />}
+                      onClick={addCharacteristic}
+                      isDisabled={!newCharTitle || !newCharLink}
+                      size="lg"
+                      colorScheme="purple"
+                      bg={selectedTokenColor}
+                      color="white"
+                      _hover={{ bg: `${selectedTokenColor}90` }}
+                    />
+                  </HStack>
 
-              {characteristics.length > 0 && (
-                <Table size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th>Title</Th>
-                      <Th>Link</Th>
-                      <Th width="50px"></Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {characteristics.map((char, idx) => (
-                      <Tr key={idx}>
-                        <Td>{char.title}</Td>
-                        <Td>
-                          <Link href={char.link} isExternal color="purple.500">
-                            {char.link.substring(0, 30)}...
-                            <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
-                          </Link>
-                        </Td>
-                        <Td>
-                          <IconButton
-                            aria-label="Delete characteristic"
-                            icon={<Trash2 size={18} />}
-                            onClick={() => setCharacteristics(prev => prev.filter((_, i) => i !== idx))}
-                          />
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              )}
-            </Box>
-
-            <Divider />
+                  {characteristics.length > 0 && (
+                    <Box borderRadius="md" borderWidth="1px" borderColor="gray.200" overflow="hidden">
+                      <Table size="sm" variant="simple">
+                        <Thead bg="gray.50">
+                          <Tr>
+                            <Th>Title</Th>
+                            <Th>Link</Th>
+                            <Th width="50px"></Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {characteristics.map((char, idx) => (
+                            <Tr key={idx}>
+                              <Td fontWeight="medium">{char.title}</Td>
+                              <Td>
+                                <Link href={char.link} isExternal color="purple.500">
+                                  {char.link.substring(0, 30)}...
+                                  <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
+                                </Link>
+                              </Td>
+                              <Td>
+                                <IconButton
+                                  aria-label="Delete characteristic"
+                                  icon={<Trash2 size={16} />}
+                                  size="sm"
+                                  variant="ghost"
+                                  colorScheme="red"
+                                  onClick={() => setCharacteristics(prev => prev.filter((_, i) => i !== idx))}
+                                />
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </Box>
+                  )}
+                </VStack>
+              </CardBody>
+            </Card>
 
             {/* Membership Conditions Section */}
-            <Box>
-              <FormLabel mb={4}>Membership Conditions</FormLabel>
-              <VStack spacing={4} width="100%">
-                <HStack width="100%" spacing={2}>
-                  <FormControl flex={2}>
+            <Card variant="outline" bg="white">
+              <CardHeader pb={0}>
+                <FormLabel margin="0" fontWeight="semibold">Membership Conditions</FormLabel>
+              </CardHeader>
+              <CardBody>
+                <VStack spacing={4} align="stretch">
+                  <HStack spacing={3}>
                     <Input
                       placeholder="Token address"
                       value={newTokenAddress}
                       onChange={(e) => setNewTokenAddress(e.target.value)}
+                      size="lg"
                       borderColor="gray.200"
                       _hover={{ borderColor: selectedTokenColor }}
                       _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
                     />
-                  </FormControl>
-                  <FormControl flex={1}>
                     <Input
                       placeholder="Required balance"
                       value={newTokenBalance}
                       onChange={(e) => setNewTokenBalance(e.target.value)}
+                      size="lg"
                       borderColor="gray.200"
                       _hover={{ borderColor: selectedTokenColor }}
                       _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
                     />
-                  </FormControl>
-                  <IconButton
-                    aria-label="Add token requirement"
-                    icon={<Plus size={20} />}
-                    onClick={validateAndAddToken}
-                    isLoading={validatingToken}
-                    bg={selectedTokenColor}
-                    color="white"
-                    _hover={{ bg: `${selectedTokenColor}90` }}
-                  />
-                </HStack>
+                    <IconButton
+                      aria-label="Add token requirement"
+                      icon={<Plus size={20} />}
+                      onClick={validateAndAddToken}
+                      isLoading={validatingToken}
+                      size="lg"
+                      colorScheme="purple"
+                      bg={selectedTokenColor}
+                      color="white"
+                      _hover={{ bg: `${selectedTokenColor}90` }}
+                    />
+                  </HStack>
 
-                {membershipConditions.length > 0 && (
-                  <Box width="100%" overflowX="auto">
-                    <Table size="sm" variant="simple">
-                      <Thead>
-                        <Tr>
-                          <Th>Token</Th>
-                          <Th>Required Balance</Th>
-                          <Th width="50px"></Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {membershipConditions.map((mc, idx) => (
-                          <Tr key={idx}>
-                            <Td maxW="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-                              <Tooltip label={mc.tokenAddress}>
-                                <Code>{mc.symbol ? `${mc.symbol}` : mc.tokenAddress.substring(0, 10) + '...'}</Code>
-                              </Tooltip>
-                            </Td>
-                            <Td>{mc.requiredBalance}</Td>
-                            <Td>
-                              <IconButton
-                                aria-label="Delete condition"
-                                icon={<Trash2 size={16} />}
-                                size="sm"
-                                variant="ghost"
-                                colorScheme="red"
-                                onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
-                              />
-                            </Td>
+                  {membershipConditions.length > 0 && (
+                    <Box borderRadius="md" borderWidth="1px" borderColor="gray.200" overflow="hidden">
+                      <Table size="sm" variant="simple">
+                        <Thead bg="gray.50">
+                          <Tr>
+                            <Th>Token</Th>
+                            <Th>Required Balance</Th>
+                            <Th width="50px"></Th>
                           </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
-                  </Box>
-                )}
-              </VStack>
-            </Box>
-
-            <Divider />
+                        </Thead>
+                        <Tbody>
+                          {membershipConditions.map((mc, idx) => (
+                            <Tr key={idx}>
+                              <Td maxW="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                                <Tooltip label={mc.tokenAddress}>
+                                  <Code p={1} borderRadius="md">{mc.symbol ? `${mc.symbol}` : mc.tokenAddress.substring(0, 10) + '...'}</Code>
+                                </Tooltip>
+                              </Td>
+                              <Td fontWeight="medium">{mc.requiredBalance}</Td>
+                              <Td>
+                                <IconButton
+                                  aria-label="Delete condition"
+                                  icon={<Trash2 size={16} />}
+                                  size="sm"
+                                  variant="ghost"
+                                  colorScheme="red"
+                                  onClick={() => setMembershipConditions(prev => prev.filter((_, i) => i !== idx))}
+                                />
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </Box>
+                  )}
+                </VStack>
+              </CardBody>
+            </Card>
           </>
         )}
 
-        <FormControl>
-          <FormLabel>Inflation Rate (gwei/sec)</FormLabel>
-          <NumberInput
-            value={inflationRate || 1}
-            onChange={(valueString) => {
-              const parsed = parseInt(valueString);
-              setInflationRate(isNaN(parsed) ? 1 : parsed);
-            }}
-            min={1}
-            max={100000000}
-          >
-            <NumberInputField
-              borderColor="gray.200"
-              _hover={{ borderColor: selectedTokenColor }}
-              _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-            />
-            <NumberInputStepper>
-              <NumberIncrementStepper />
-              <NumberDecrementStepper />
-            </NumberInputStepper>
-          </NumberInput>
-          <FormHelperText>
-            Rate at which new node shares are generated
-          </FormHelperText>
-        </FormControl>
+        {/* Inflation Rate Section */}
+        <Card variant="outline" bg="white">
+          <CardBody>
+            <FormControl>
+              <Box p={4} bg="purple.50" borderRadius="lg">
+                <Box mb={4}>
+                  <HStack>
+                    <Activity size={16} />
+                    <Text fontSize="lg" fontWeight="semibold">Inflation Rate</Text>
+                  </HStack>
+                </Box>
+
+                <FormLabel fontWeight="medium">Rate (gwei/sec)</FormLabel>
+                <NumberInput
+                  value={inflationRate || 1}
+                  onChange={(valueString) => {
+                    const parsed = parseInt(valueString);
+                    setInflationRate(isNaN(parsed) ? 1 : parsed);
+                  }}
+                  min={1}
+                  max={100000000}
+                  size="lg"
+                >
+                  <NumberInputField
+                    borderColor="gray.200"
+                    _hover={{ borderColor: selectedTokenColor }}
+                    _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+                    bg="white"
+                  />
+                  <NumberInputStepper>
+                    <NumberIncrementStepper />
+                    <NumberDecrementStepper />
+                  </NumberInputStepper>
+                </NumberInput>
+                <Text fontSize="sm" color="gray.600" mt={2}>
+                  Daily rate: {ethers.formatEther(BigInt(inflationRate || 1) * BigInt(86400) * BigInt(10 ** 9))} PSC/day
+                </Text>
+              </Box>
+            </FormControl>
+          </CardBody>
+        </Card>
 
         {isLoading && <Progress size="xs" isIndeterminate colorScheme="purple" />}
 

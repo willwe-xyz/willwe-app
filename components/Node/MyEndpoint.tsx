@@ -85,8 +85,24 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
 
   // Get endpoint address and membership status from nodeData
   const endpointAddress = nodeData.basicInfo[10];  // endpoint address is at index 10
-  const endpointId = endpointAddress && endpointAddress !== ethers.ZeroAddress ? 
-    addressToNodeId(endpointAddress) : null;
+  const endpointId = React.useMemo(() => {
+    try {
+      // Check if endpointAddress is "0" or empty
+      if (!endpointAddress || endpointAddress === "0" || endpointAddress === ethers.ZeroAddress) {
+        return null;
+      }
+      // Validate that it's a proper Ethereum address
+      if (!/^0x[a-fA-F0-9]{40}$/.test(endpointAddress)) {
+        console.warn('Invalid endpoint address format:', endpointAddress);
+        return null;
+      }
+      return addressToNodeId(endpointAddress);
+    } catch (error) {
+      console.error('Error converting endpoint address to node ID:', error);
+      return null;
+    }
+  }, [endpointAddress]);
+
   const isMember = nodeData.membersOfNode.some(
     member => member.toLowerCase() === user?.wallet?.address?.toLowerCase()
   );
@@ -107,7 +123,10 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
 
   useEffect(() => {
     const fetchRootTokenBalance = async () => {
-      if (!endpointAddress || !rootTokenAddress || !readProvider) return;
+      if (!endpointAddress || endpointAddress === "0" || !rootTokenAddress || !readProvider) {
+        setRootTokenBalance('0');
+        return;
+      }
       
       try {
         const tokenContract = new ethers.Contract(
@@ -120,6 +139,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         setRootTokenBalance(balance.toString());
       } catch (error) {
         console.error('Error fetching root token balance:', error);
+        setRootTokenBalance('0');
       }
     };
 
@@ -128,7 +148,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
 
   useEffect(() => {
     const fetchEndpointData = async () => {
-      if (!endpointAddress || endpointAddress === ethers.ZeroAddress || !endpointId || !readProvider) return;
+      if (!endpointAddress || endpointAddress === "0" || !endpointId || !readProvider) return;
       
       try {
         const willWeContract = new ethers.Contract(
@@ -421,7 +441,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
   }
 
   // If no endpoint exists, show creation option
-  if (!endpointAddress || endpointAddress === ethers.ZeroAddress) {
+  if (!endpointAddress || endpointAddress === "0" || endpointAddress === ethers.ZeroAddress) {
     return (
       <VStack spacing={6} align="stretch">
         <Alert status="info" borderRadius="md">
