@@ -393,10 +393,10 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
       const nodeId = sankeyStructure.labels[idx];
       const metrics = nodeMetrics.get(nodeId);
       return [
-        metrics?.inflation || 0,
-        metrics?.memberCount || 0,
-        metrics?.depth || 0,
-        (metrics?.signalStrength || 0) * 100
+        metrics?.inflation || 0, // Fallback to 0
+        metrics?.memberCount || 0, // Fallback to 0
+        metrics?.depth || 0, // Fallback to 0
+        (metrics?.signalStrength || 0) * 100 // Fallback to 0
       ];
     });
 
@@ -408,35 +408,23 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
       const sourceMetrics = nodeMetrics.get(sourceId);
       const targetMetrics = nodeMetrics.get(targetId);
       return [
-        sourceMetrics?.inflation || 0,
-        targetMetrics?.inflation || 0
+        sourceMetrics?.inflation || 0, // Fallback to 0
+        targetMetrics?.inflation || 0 // Fallback to 0
       ];
     });
 
-    // Calculate node sizes with more balanced proportions
-    const minNodeSize = 20; // Increased minimum size
-    const maxNodeSize = 40; // Decreased maximum size
+    // Ensure node sizes and link values are valid
     const nodeSizes = nodeLabels.map((_, idx) => {
       const nodeId = sankeyStructure.labels[idx];
       const metrics = nodeMetrics.get(nodeId);
-      if (!metrics) return minNodeSize;
-
-      const value = metrics.value;
-      const maxValue = metrics.maxValue;
-      
-      // Linear scale with compressed range for better proportions
-      const normalizedValue = value > 0 ? (value / (maxValue || 1)) : 0;
-      const size = minNodeSize + (normalizedValue * (maxNodeSize - minNodeSize));
-      
-      return Math.max(minNodeSize, Math.min(maxNodeSize, size));
+      return Math.max(20, Math.min(40, metrics?.value || 20)); // Fallback to 20
     });
 
-    // Calculate link values based on inflow
-    const linkValues = sankeyStructure.source.map((sourceIdx, idx) => {
+    const linkValues = sankeyStructure.source.map((_, idx) => {
       const targetIdx = sankeyStructure.target[idx];
       const targetId = sankeyStructure.labels[targetIdx];
       const metrics = nodeMetrics.get(targetId);
-      return metrics?.inflow || 1; // Use inflow for link width, minimum 1 for visibility
+      return metrics?.inflow || 1; // Fallback to 1
     });
 
     return {
@@ -447,10 +435,17 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
         thickness: nodeSizes,
         line: {
           color: nodeLabels.map(() => selectedTokenColor),
-          width: nodeLabels.map(() => 0.5) // Consistent thin borders
+          width: nodeLabels.map(() => 0.5)
         },
         pad: 15,
-        hovertemplate: getNodeHoverTemplate(),
+        hovertemplate: `
+          <b>%{label}</b><br>
+          Value: %{value:.1f}%<br>
+          Inflation: %{customdata[0]:.4f}/sec<br>
+          Members: %{customdata[1]}<br>
+          Depth: %{customdata[2]}<br>
+          Signal Strength: %{customdata[3]:.0f}%<extra></extra>
+        `,
         customdata: nodeCustomData
       },
       link: {
@@ -458,7 +453,14 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
         target: sankeyStructure.target,
         value: linkValues,
         color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
-        hovertemplate: getLinkHoverTemplate(),
+        hovertemplate: `
+          <b>Flow Details</b><br>
+          From: %{source.label}<br>
+          To: %{target.label}<br>
+          Value: %{value:.1f}%<br>
+          Source Inflation: %{customdata[0]:.4f}/sec<br>
+          Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
+        `,
         customdata: linkCustomData
       }
     };

@@ -75,110 +75,41 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
     const membranes = await getMembraneData(chainId, nodeIds.slice(1));
     const membraneMetadata = membranes.membraneMetadata;
 
-    // Calculate minimum value to ensure visibility
-    const MIN_DISPLAY_VALUE = 0.0001; // Smaller minimum for better proportions
-
-    // Generate color shades for the nodes
+    const MIN_DISPLAY_VALUE = 0.0001; // Ensure minimum value for visibility
     const colorShades = generateColorShades(selectedTokenColor, nodeData.rootPath.length);
 
-    // First pass to collect all values and node data
     const rawValues: number[] = [];
-    const nodeDataArray: NodeState[] = [];
-
-    // Fetch data for all nodes in the path
     for (let index = 0; index < nodeData.rootPath.length; index++) {
       const nodeId = nodeData.rootPath[index];
       if (!nodeId) continue;
 
       try {
-        // Fetch data for this node
         const data = await contract.getNodeData(ethers.toBigInt(nodeId), ethers.ZeroAddress);
-        
-        // Access the basicInfo array directly from the raw data
-        const basicInfo = data[0].map((item: any) => item?.toString() || '0');
-        console.log(`Node ${nodeId} basicInfo:`, basicInfo);
-        
-        const nodeInfo: NodeState = {
-          basicInfo,
-          membraneMeta: data[1]?.toString() || '',
-          membersOfNode: Array.isArray(data[2]) ? data[2].map((item: any) => item?.toString() || '') : [],
-          childrenNodes: Array.isArray(data[3]) ? data[3].map((item: any) => item?.toString() || '') : [],
-          movementEndpoints: Array.isArray(data[4]) ? data[4].map((item: any) => item?.toString() || '') : [],
-          rootPath: Array.isArray(data[5]) ? data[5].map((item: any) => item?.toString() || '') : [],
-          nodeSignals: {
-            signalers: [],
-            inflationSignals: [],
-            membraneSignals: [],
-            redistributionSignals: []
-          }
-        };
-        nodeDataArray.push(nodeInfo);
-
-        // Get Balance Anchor (basicInfo[2])
-        const balanceAnchor = basicInfo[2];
-        console.log(`Node ${nodeId} Balance Anchor (raw):`, balanceAnchor);
-        
-        const formattedValue = balanceAnchor ? Number(ethers.formatUnits(balanceAnchor, 'ether')) : 0;
-        console.log(`Node ${nodeId} Balance Anchor (formatted):`, formattedValue);
-        
+        const balanceAnchor = data[0]?.[2]?.toString() || '0';
+        const formattedValue = Number(ethers.formatUnits(balanceAnchor, 'ether')) || MIN_DISPLAY_VALUE;
         rawValues.push(formattedValue);
       } catch (error) {
         console.error(`Error fetching data for node ${nodeId}:`, error);
-        rawValues.push(0);
-        nodeDataArray.push(nodeData);
+        rawValues.push(MIN_DISPLAY_VALUE);
       }
     }
 
-    // Find the maximum raw value
     const maxRawValue = Math.max(...rawValues, MIN_DISPLAY_VALUE);
-    console.log('Raw values array:', rawValues);
-    console.log('Max raw value:', maxRawValue);
-    
-    // Process all nodes in a flat structure
     for (let index = 0; index < nodeData.rootPath.length; index++) {
       const nodeId = nodeData.rootPath[index];
       if (!nodeId) continue;
 
-      try {
-        const formattedId = nodeId.toLowerCase();
-        
-        // Get display name
-        let displayName: string;
-        if (index === 0) {
-          const hexAddress = ethers.toBigInt(formattedId).toString(16).padStart(40, '0');
-          displayName = `0x${hexAddress.slice(0, 6)}...${hexAddress.slice(-4)}`;
-        } else {
-          displayName = membraneMetadata[index - 1]?.name || `Node ${nodeId.slice(-6)}`;
-        }
-        
-        labels.push(displayName);
-        ids.push(formattedId);
-        parents.push(''); // All nodes are at root level
-
-        // Calculate display value with proper proportions
-        const rawValue = rawValues[index];
-        let displayValue;
-        
-        if (rawValue > 0) {
-          // If node has value, use actual value
-          displayValue = rawValue;
-        } else {
-          // If node has no value, use minimum display value
-          displayValue = maxRawValue * MIN_DISPLAY_VALUE;
-        }
-        
-        values.push(displayValue);
-        console.log(`Node ${nodeId} final display value:`, displayValue);
-        
-        // Add hover text with actual value
-        text.push(`${rawValue.toLocaleString()} PSC`);
-        colors.push(colorShades[index]);
-      } catch (error) {
-        console.error(`Error processing node ID ${nodeId}:`, error);
-      }
+      const displayName = membraneMetadata[index - 1]?.name || `Node ${nodeId.slice(-6)}`;
+      labels.push(displayName);
+      ids.push(nodeId.toLowerCase());
+      parents.push('');
+      const rawValue = rawValues[index];
+      const displayValue = rawValue > 0 ? rawValue : maxRawValue * MIN_DISPLAY_VALUE;
+      values.push(displayValue);
+      text.push(`${rawValue.toLocaleString()} PSC`);
+      colors.push(colorShades[index]);
     }
-    
-    console.log('Final values array:', values);
+
     return { labels, parents, ids, values, text, colors };
   };
 

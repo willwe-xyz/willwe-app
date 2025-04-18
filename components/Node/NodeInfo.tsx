@@ -202,6 +202,75 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 
   const metrics = useMemo(() => calculateMetrics(node), [node]);
 
+  const getNodeHoverTemplate = (): string => {
+    return `
+      <b>%{label}</b><br>
+      Value: %{value:.1f}%<br>
+      Inflation: %{customdata[0]:.4f}/sec<br>
+      Members: %{customdata[1]}<br>
+      Depth: %{customdata[2]}<br>
+      Signal Strength: %{customdata[3]:.0f}%<extra></extra>
+    `;
+  };
+
+  // Ensure all node data is valid
+  const getSankeyData = (): SankeyData => {
+    const nodeCustomData: Array<[number, number, number, number]> = nodeLabels.map((_, idx) => {
+      const nodeId = sankeyStructure.labels[idx];
+      const metrics = nodeMetrics.get(nodeId);
+      return [
+        metrics?.inflation || 0,
+        metrics?.memberCount || 0,
+        metrics?.depth || 0,
+        (metrics?.signalStrength || 0) * 100
+      ];
+    });
+
+    const linkCustomData: Array<[number, number]> = sankeyStructure.source.map((_, idx) => {
+      const sourceIdx = sankeyStructure.source[idx];
+      const targetIdx = sankeyStructure.target[idx];
+      const sourceId = sankeyStructure.labels[sourceIdx];
+      const targetId = sankeyStructure.labels[targetIdx];
+      const sourceMetrics = nodeMetrics.get(sourceId);
+      const targetMetrics = nodeMetrics.get(targetId);
+      return [
+        sourceMetrics?.inflation || 0,
+        targetMetrics?.inflation || 0
+      ];
+    });
+
+    return {
+      type: 'sankey',
+      node: {
+        label: nodeLabels,
+        color: nodeLabels.map(() => selectedTokenColor),
+        thickness: nodeLabels.map(() => 20), // Fallback size
+        line: {
+          color: nodeLabels.map(() => selectedTokenColor),
+          width: nodeLabels.map(() => 0.5)
+        },
+        pad: 15,
+        hovertemplate: getNodeHoverTemplate(),
+        customdata: nodeCustomData
+      },
+      link: {
+        source: sankeyStructure.source,
+        target: sankeyStructure.target,
+        value: sankeyStructure.values.map(v => v || 1), // Fallback to 1
+        color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
+        hovertemplate: `
+          <b>Flow Details</b><br>
+          From: %{source.label}<br>
+          To: %{target.label}<br>
+          Value: %{value:.1f}%<br>
+          Source Inflation: %{customdata[0]:.4f}/sec<br>
+          Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
+        `,
+        customdata: linkCustomData
+      }
+    };
+  };
+
   return (
     <Box
       bg={bgColor}
