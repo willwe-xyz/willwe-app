@@ -2,7 +2,7 @@
   "private": true,
   "engines": {
     "npm": ">=8.0.0 <10.8.2",
-    "node": ">=19.0.0 <20.18.0"
+    "node": ">=19.0.0 <20.19.0"
   },
   "scripts": {
     "dev": "next dev",
