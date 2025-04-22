@@ -1,13 +1,33 @@
 'use client';
 
-import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/router';
-import { Box, Flex, Input, List, ListItem, VStack, Text, Select, useColorModeValue, HStack, Badge } from '@chakra-ui/react';
-import { PlotMouseEvent } from 'plotly.js';
-import { getMembraneNameFromCID } from '../../utils/ipfs';
+import { useRouter } from 'next/navigation';
+import { 
+  Box, 
+  useColorModeValue, 
+  Input, 
+  VStack, 
+  List, 
+  ListItem, 
+  Text, 
+  HStack, 
+  Badge, 
+  Select,
+  Flex,
+  Spinner
+} from '@chakra-ui/react';
 import { NodeState } from '../../types/chainData';
 import { ethers } from 'ethers';
+import { deployments, ABIs, getRPCUrl } from '../../config/contracts';
+import { getMembraneNameFromCID } from '../../utils/ipfs';
+import Color from 'color';
+
+// Dynamic import of Plotly
+const Plot = dynamic(() => import('react-plotly.js'), {
+  ssr: false,
+  loading: () => <Box>Loading...</Box>
+});
 
 interface SankeyChartProps {
   nodes: NodeState[];
@@ -25,60 +45,10 @@ interface NodeMetrics {
   memberCount: number;
   depth: number;
   signalStrength: number;
+  totalSupply: number;
+  label: string;
+  nodeId: string;
 }
-
-interface SankeyStructure {
-  nodeMap: Map<string, number>;
-  labels: string[];
-  source: number[];
-  target: number[];
-  values: number[];
-  nodeColors: string[];
-  nodeSizes: number[];
-  nodeDepths: number[];
-  nodeSignalStrengths: number[];
-}
-
-type SankeyData = {
-  type: 'sankey';
-  node: {
-    label: string[];
-    color: string[];
-    thickness: number[];
-    line: {
-      color: string[];
-      width: number[];
-    };
-    pad: number;
-    hovertemplate: string;
-    customdata: Array<[number, number, number, number]>;
-  };
-  link: {
-    source: number[];
-    target: number[];
-    value: number[];
-    color: string[];
-    hovertemplate: string;
-    customdata: Array<[number, number]>;
-  };
-};
-
-const Plot = dynamic(() => import('react-plotly.js'), {
-  ssr: false,
-  loading: () => (
-    <Box 
-      w="100%" 
-      h="600px" 
-      display="flex" 
-      alignItems="center" 
-      justifyContent="center"
-      bg="gray.50"
-      borderRadius="xl"
-    >
-      <Text color="gray.500">Loading chart...</Text>
-    </Box>
-  )
-});
 
 export const SankeyChart: React.FC<SankeyChartProps> = ({
   nodes,
@@ -86,387 +56,236 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
   onNodeSelect,
   nodeValues,
   chainId,
-  selectedToken
 }) => {
   const router = useRouter();
-  const [nodeLabels, setNodeLabels] = useState<string[]>([]);
-  const [isLabelsLoading, setIsLabelsLoading] = useState(true);
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const inputBg = useColorModeValue('gray.50', 'gray.700');
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
-  const [minValueFilter, setMinValueFilter] = useState(0);
-  const [selectedDepth, setSelectedDepth] = useState<number | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  
-  // Add labelToId mapping
-  const [labelToId, setLabelToId] = useState<Map<string, string>>(new Map());
+  const [nodeLabels, setNodeLabels] = useState<Map<string, string>>(new Map());
+  const [isLoadingLabels, setIsLoadingLabels] = useState(false);
 
-  // Theme colors
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.100', 'gray.700');
-  const inputBg = useColorModeValue('gray.50', 'gray.700');
+  // Fetch labels from IPFS
+  useEffect(() => {
+    const fetchLabels = async () => {
+      setIsLoadingLabels(true);
+      const labels = new Map<string, string>();
+      
+      try {
+        await Promise.all(nodes.map(async (node) => {
+          if (!node?.basicInfo?.[0]) return;
+          
+          const nodeId = node.basicInfo[0].toString();
+          // Use basicInfo[3] for membrane metadata CID
+          const labelCID = node.basicInfo[6].toString(); // Active membrane ID
+          
+          try {
+            if (labelCID && labelCID !== '0') {
+              const cleanChainId = chainId.toString().replace('eip155:', '');
+              const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+              const membraneContract = new ethers.Contract(
+                deployments.Membrane[cleanChainId],
+                ABIs.Membrane,
+                provider
+              );
 
-  // Calculate node metrics with proper value scaling
+              // Get membrane data from contract
+              const membrane = await membraneContract.getMembraneById(labelCID);
+              if (membrane && membrane.meta) {
+                const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
+                const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
+                if (response.ok) {
+                  const metadata = await response.json();
+                  labels.set(nodeId, metadata.name || metadata.title || `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`);
+                  return;
+                }
+              }
+            }
+            // Fallback if no valid membrane metadata
+            labels.set(nodeId, `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`);
+          } catch (error) {
+            console.warn(`Error fetching label for node ${nodeId}:`, error);
+            labels.set(nodeId, `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`);
+          }
+        }));
+        
+        setNodeLabels(labels);
+      } catch (error) {
+        console.error('Error fetching labels:', error);
+      } finally {
+        setIsLoadingLabels(false);
+      }
+    };
+
+    fetchLabels();
+  }, [nodes, chainId]);
+
+  // Calculate node metrics
   const nodeMetrics = useMemo(() => {
-    const metrics = new Map<string, {
-      value: number;
-      inflation: number;
-      inflow: number;
-      memberCount: number;
-      depth: number;
-      signalStrength: number;
-      maxValue: number;
-    }>();
+    const metrics = new Map<string, NodeMetrics>();
 
-    // First pass - find max value and inflow for scaling
-    let maxValue = 0;
-    let maxInflow = 0;
-    nodes.forEach(node => {
-      if (!node?.basicInfo?.[4]) return;
-      const value = Number(ethers.formatUnits(node.basicInfo[4] || '0', 'ether'));
-      const inflow = Number(ethers.formatUnits(node.basicInfo[7] || '0', 'ether'));
-      maxValue = Math.max(maxValue, value);
-      maxInflow = Math.max(maxInflow, inflow);
-    });
-
-    // Second pass - calculate metrics with proper scaling
     nodes.forEach(node => {
       if (!node?.basicInfo?.[0]) return;
       
-      const nodeId = node.basicInfo[0];
-      const value = Number(ethers.formatUnits(node.basicInfo[4] || '0', 'ether'));
-      const inflation = Number(ethers.formatUnits(node.basicInfo[1] || '0', 'ether'));
-      const inflow = Number(ethers.formatUnits(node.basicInfo[7] || '0', 'ether'));
-      const memberCount = node.membersOfNode?.length || 0;
-      const depth = node.rootPath?.length || 0;
-      
-      // Calculate signal strength from various signals
-      const signalStrength = Math.min(
-        (node.nodeSignals?.inflationSignals?.length || 0) +
-        (node.nodeSignals?.membraneSignals?.length || 0) +
-        (node.nodeSignals?.redistributionSignals?.length || 0),
-        10
-      ) / 10;
+      try {
+        const nodeId = node.basicInfo[0].toString();
+        const value = BigInt(node.basicInfo[4] || '0');
+        const inflation = BigInt(node.basicInfo[1] || '0');
+        const inflow = BigInt(node.basicInfo[7] || '0');
+        const totalSupply = BigInt(node.basicInfo[2] || '0');
+        
+        const valuePercent = totalSupply > 0 ? 
+          Number((value * BigInt(10000)) / totalSupply) / 100 : 0;
+        
+        const inflationRate = Number(ethers.formatUnits(inflation, 'ether'));
+        const inflowRate = Number(ethers.formatUnits(inflow, 'ether'));
+        
+        const memberCount = Array.isArray(node.membersOfNode) ? node.membersOfNode.length : 0;
+        const depth = Array.isArray(node.rootPath) ? node.rootPath.length : 0;
+        
+        const signalStrength = Math.min(
+          (Array.isArray(node.nodeSignals?.inflationSignals) ? node.nodeSignals.inflationSignals.length : 0) +
+          (Array.isArray(node.nodeSignals?.membraneSignals) ? node.nodeSignals.membraneSignals.length : 0) +
+          (Array.isArray(node.nodeSignals?.redistributionSignals) ? node.nodeSignals.redistributionSignals.length : 0)
+        ) / 10;
 
-      metrics.set(nodeId, {
-        value,
-        inflation,
-        inflow,
-        memberCount,
-        depth,
-        signalStrength,
-        maxValue
-      });
+        metrics.set(nodeId, {
+          value: valuePercent,
+          inflation: inflationRate,
+          inflow: inflowRate,
+          memberCount,
+          depth,
+          signalStrength,
+          totalSupply: Number(ethers.formatUnits(totalSupply, 'ether')),
+          label: nodeLabels.get(nodeId) || `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`,
+          nodeId
+        });
+      } catch (error) {
+        console.warn('Error processing node metrics:', error);
+      }
     });
 
     return metrics;
-  }, [nodes]);
+  }, [nodes, nodeLabels]);
 
-  // Initialize basic structure with enhanced metrics
-  const sankeyStructure = useMemo(() => {
-    const labels: string[] = [];
+  // Calculate color intensity based on value and member count
+  const getNodeColor = (nodeId: string, metrics: NodeMetrics) => {
+    const baseColor = Color(selectedTokenColor);
+    
+    // Normalize value to 0-1 range
+    const maxValue = Math.max(...Array.from(nodeMetrics.values()).map(m => m.value));
+    const normalizedValue = maxValue > 0 ? metrics.value / maxValue : 0;
+    
+    // Normalize member count to 0-1 range
+    const maxMembers = Math.max(...Array.from(nodeMetrics.values()).map(m => m.memberCount));
+    const normalizedMembers = maxMembers > 0 ? metrics.memberCount / maxMembers : 0;
+    
+    // Combine both factors (60% value, 40% members)
+    const intensity = (normalizedValue * 0.6) + (normalizedMembers * 0.4);
+    
+    // Adjust color intensity (keeping it between 30% and 100% to maintain visibility)
+    return baseColor.alpha(0.3 + (intensity * 0.7)).toString();
+  };
+
+  // Get link color based on source and target nodes
+  const getLinkColor = (sourceId: string, targetId: string) => {
+    const sourceMetrics = nodeMetrics.get(sourceId);
+    const targetMetrics = nodeMetrics.get(targetId);
+    
+    if (!sourceMetrics || !targetMetrics) {
+      return `${selectedTokenColor}40`;
+    }
+    
+    const sourceColor = Color(getNodeColor(sourceId, sourceMetrics));
+    const targetColor = Color(getNodeColor(targetId, targetMetrics));
+    
+    // Mix colors and reduce opacity for links
+    return sourceColor.mix(targetColor, 0.5).alpha(0.4).toString();
+  };
+
+  // Prepare Sankey data
+  const sankeyData = useMemo(() => {
+    const displayLabels: string[] = [];
+    const nodeColors: string[] = [];
     const source: number[] = [];
     const target: number[] = [];
     const values: number[] = [];
     const nodeMap = new Map<string, number>();
-    const nodeColors: string[] = [];
-    const nodeSizes: number[] = [];
-    const nodeDepths: number[] = [];
-    const nodeSignalStrengths: number[] = [];
+    const fullIds: string[] = [];
 
-    // First pass - create nodes with metrics
+    // First pass: create nodes
     nodes.forEach(node => {
       if (!node?.basicInfo?.[0]) return;
-      const nodeId = node.basicInfo[0];
-      if (!nodeMap.has(nodeId)) {
-        nodeMap.set(nodeId, labels.length);
-        labels.push(nodeId);
-        
-        const metrics = nodeMetrics.get(nodeId);
-        if (metrics) {
-          // Size based on value
-          const size = Math.log10(metrics.value + 1) * 20;
-          nodeSizes.push(size);
-          
-          // Color based on inflation
-          const inflationColor = metrics.inflation > 0 
-            ? `${selectedTokenColor}${Math.min(Math.floor(metrics.inflation * 100), 100)}`
-            : `${selectedTokenColor}20`;
-          nodeColors.push(inflationColor);
-          
-          // Store depth and signal strength
-          nodeDepths.push(metrics.depth);
-          nodeSignalStrengths.push(metrics.signalStrength);
-        }
-      }
+      const nodeId = node.basicInfo[0].toString();
+      const metrics = nodeMetrics.get(nodeId);
+      if (!metrics) return;
+
+      nodeMap.set(nodeId, displayLabels.length);
+      displayLabels.push(metrics.label);
+      fullIds.push(nodeId);
+      nodeColors.push(getNodeColor(nodeId, metrics));
     });
 
-    // Second pass - create links with enhanced metrics
+    // Second pass: create links
     nodes.forEach(node => {
       if (!node?.basicInfo?.[0]) return;
-      const sourceIdx = nodeMap.get(node.basicInfo[0]);
-      if (typeof sourceIdx !== 'number') return;
-
+      const sourceId = node.basicInfo[0].toString();
+      const sourceIndex = nodeMap.get(sourceId);
+      
       node.childrenNodes?.forEach(childId => {
-        const targetIdx = nodeMap.get(childId);
-        if (typeof targetIdx === 'number') {
-          source.push(sourceIdx);
-          target.push(targetIdx);
-          
-          // Calculate link value based on child's value
-          const childMetrics = nodeMetrics.get(childId);
-          const linkValue = childMetrics?.value || 1;
-          values.push(linkValue);
-        }
-      });
-    });
-
-    return { 
-      nodeMap, 
-      labels, 
-      source, 
-      target, 
-      values, 
-      nodeColors,
-      nodeSizes,
-      nodeDepths,
-      nodeSignalStrengths
-    };
-  }, [nodes, nodeMetrics, selectedTokenColor]);
-
-  const formatNodeId = (nodeId: string) => {
-    const halfLength = Math.floor(nodeId.length / 2);
-    return '_' + nodeId.slice(halfLength);
-  };
-
-  // Load membrane names
-  useEffect(() => {
-    const loadMembraneNames = async () => {
-      setIsLabelsLoading(true);
-      const newLabels = [...sankeyStructure.labels];
-      const newLabelToId = new Map<string, string>();
-      
-      await Promise.all(
-        nodes.map(async (node) => {
-          if (node?.basicInfo?.[0] && node.membraneMeta) {
-            const idx = sankeyStructure.nodeMap.get(node.basicInfo[0]);
-            if (idx !== undefined) {
-              const membraneName = await getMembraneNameFromCID(node.membraneMeta);
-              if (membraneName) {
-                newLabels[idx] = membraneName;
-                newLabelToId.set(membraneName, node.basicInfo[0]);
-              } else {
-                // Format node ID if no membrane name
-                const formattedId = formatNodeId(node.basicInfo[0]);
-                newLabels[idx] = formattedId;
-                newLabelToId.set(formattedId, node.basicInfo[0]);
-              }
-            }
-          }
-        })
-      );
-      
-      // Also add ID mappings for non-named nodes
-      nodes.forEach(node => {
-        if (node?.basicInfo?.[0]) {
-          const nodeId = node.basicInfo[0];
-          const formattedId = formatNodeId(nodeId);
-          newLabelToId.set(formattedId, nodeId);
-          
-          // Update label if it hasn't been set by membrane name
-          const idx = sankeyStructure.nodeMap.get(nodeId);
-          if (idx !== undefined && newLabels[idx] === nodeId) {
-            newLabels[idx] = formattedId;
+        const targetIndex = nodeMap.get(childId);
+        if (sourceIndex !== undefined && targetIndex !== undefined) {
+          const targetMetrics = nodeMetrics.get(childId);
+          if (targetMetrics) {
+            source.push(sourceIndex);
+            target.push(targetIndex);
+            values.push(Math.max(1, targetMetrics.value));
           }
         }
       });
-      
-      setNodeLabels(newLabels);
-      setLabelToId(newLabelToId);
-      setIsLabelsLoading(false);
-    };
-
-    loadMembraneNames();
-  }, [nodes, sankeyStructure]);
-
-  const handleNodeClick = useCallback((event: PlotMouseEvent) => {
-    const clickedPoint = event.points?.[0];
-    if (!clickedPoint) return;
-
-    const label = (clickedPoint as any).label;
-    if (label) {
-      const nodeId = labelToId.get(label);
-      if (nodeId) {
-        onNodeSelect(nodeId);
-        router.push(`/nodes/${chainId}/${nodeId}`);
-      }
-    }
-  }, [labelToId, onNodeSelect, router, chainId]);
-
-  const handleNodeHover = useCallback((event: PlotMouseEvent) => {
-    const hoveredPoint = event.points?.[0];
-    if (!hoveredPoint) {
-      setHoveredNode(null);
-      return;
-    }
-
-    const label = (hoveredPoint as any).label;
-    if (label) {
-      const nodeId = labelToId.get(label);
-      setHoveredNode(nodeId || null);
-    }
-  }, [labelToId]);
-
-  const handleNodeListClick = useCallback((label: string) => {
-    const nodeId = labelToId.get(label);
-    if (nodeId) {
-      onNodeSelect(nodeId);
-      router.push(`/nodes/${chainId}/${nodeId}`);
-    }
-  }, [labelToId, onNodeSelect, router, chainId]);
-
-  const getFilteredAndSortedNodes = () => {
-    const filtered = nodeLabels.filter(label => {
-      const nodeId = labelToId.get(label);
-      if (!nodeId) return false;
-      
-      const metrics = nodeMetrics.get(nodeId);
-      if (!metrics) return false;
-      
-      return (
-        label.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        metrics.value >= minValueFilter &&
-        (selectedDepth === null || metrics.depth === selectedDepth)
-      );
-    });
-    
-    return filtered.sort((a, b) => {
-      const aId = labelToId.get(a);
-      const bId = labelToId.get(b);
-      const aMetrics = aId ? nodeMetrics.get(aId) : null;
-      const bMetrics = bId ? nodeMetrics.get(bId) : null;
-      
-      if (!aMetrics || !bMetrics) return 0;
-      
-      if (sortOrder === "asc") {
-        return aMetrics.value - bMetrics.value;
-      }
-      return bMetrics.value - aMetrics.value;
-    });
-  };
-
-  const getNodeHoverTemplate = (): string => {
-    return `
-      <b>%{label}</b><br>
-      Value: %{value:.1f}%<br>
-      Inflation: %{customdata[0]:.4f}/sec<br>
-      Members: %{customdata[1]}<br>
-      Depth: %{customdata[2]}<br>
-      Signal Strength: %{customdata[3]:.0f}%<extra></extra>
-    `;
-  };
-
-  const getLinkHoverTemplate = (): string => {
-    return `
-      <b>Flow Details</b><br>
-      From: %{source.label}<br>
-      To: %{target.label}<br>
-      Value: %{value:.1f}%<br>
-      Source Inflation: %{customdata[0]:.4f}/sec<br>
-      Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
-    `;
-  };
-
-  const getNodeLineColor = (idx: number): string => {
-    const nodeId = sankeyStructure.labels[idx];
-    const metrics = nodeMetrics.get(nodeId);
-    return (metrics?.signalStrength || 0) > 0.5 ? selectedTokenColor : "white";
-  };
-
-  const getNodeLineWidth = (idx: number): number => {
-    const nodeId = sankeyStructure.labels[idx];
-    const metrics = nodeMetrics.get(nodeId);
-    return (metrics?.signalStrength || 0) * 2 || 0.5;
-  };
-
-  const getSankeyData = (): SankeyData => {
-    const nodeCustomData: Array<[number, number, number, number]> = nodeLabels.map((_, idx) => {
-      const nodeId = sankeyStructure.labels[idx];
-      const metrics = nodeMetrics.get(nodeId);
-      return [
-        metrics?.inflation || 0, // Fallback to 0
-        metrics?.memberCount || 0, // Fallback to 0
-        metrics?.depth || 0, // Fallback to 0
-        (metrics?.signalStrength || 0) * 100 // Fallback to 0
-      ];
-    });
-
-    const linkCustomData: Array<[number, number]> = sankeyStructure.source.map((_, idx) => {
-      const sourceIdx = sankeyStructure.source[idx];
-      const targetIdx = sankeyStructure.target[idx];
-      const sourceId = sankeyStructure.labels[sourceIdx];
-      const targetId = sankeyStructure.labels[targetIdx];
-      const sourceMetrics = nodeMetrics.get(sourceId);
-      const targetMetrics = nodeMetrics.get(targetId);
-      return [
-        sourceMetrics?.inflation || 0, // Fallback to 0
-        targetMetrics?.inflation || 0 // Fallback to 0
-      ];
-    });
-
-    // Ensure node sizes and link values are valid
-    const nodeSizes = nodeLabels.map((_, idx) => {
-      const nodeId = sankeyStructure.labels[idx];
-      const metrics = nodeMetrics.get(nodeId);
-      return Math.max(20, Math.min(40, metrics?.value || 20)); // Fallback to 20
-    });
-
-    const linkValues = sankeyStructure.source.map((_, idx) => {
-      const targetIdx = sankeyStructure.target[idx];
-      const targetId = sankeyStructure.labels[targetIdx];
-      const metrics = nodeMetrics.get(targetId);
-      return metrics?.inflow || 1; // Fallback to 1
     });
 
     return {
-      type: 'sankey',
+      type: 'sankey' as const,
+      orientation: 'h' as const,
       node: {
-        label: nodeLabels,
-        color: nodeLabels.map(() => selectedTokenColor),
-        thickness: nodeSizes,
-        line: {
-          color: nodeLabels.map(() => selectedTokenColor),
-          width: nodeLabels.map(() => 0.5)
-        },
         pad: 15,
-        hovertemplate: `
-          <b>%{label}</b><br>
-          Value: %{value:.1f}%<br>
-          Inflation: %{customdata[0]:.4f}/sec<br>
-          Members: %{customdata[1]}<br>
-          Depth: %{customdata[2]}<br>
-          Signal Strength: %{customdata[3]:.0f}%<extra></extra>
-        `,
-        customdata: nodeCustomData
+        thickness: 20,
+        line: { color: 'black', width: 0.5 },
+        label: displayLabels,
+        color: nodeColors,
+        customdata: fullIds,
+        hovertemplate: 
+          '<b>%{label}</b><br>' +
+          'Value: %{value:.2f}%<br>' +
+          'Members: %{customdata:members}<br>' +
+          '<extra></extra>'
       },
       link: {
-        source: sankeyStructure.source,
-        target: sankeyStructure.target,
-        value: linkValues,
-        color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
-        hovertemplate: `
-          <b>Flow Details</b><br>
-          From: %{source.label}<br>
-          To: %{target.label}<br>
-          Value: %{value:.1f}%<br>
-          Source Inflation: %{customdata[0]:.4f}/sec<br>
-          Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
-        `,
-        customdata: linkCustomData
+        source,
+        target,
+        value: values,
+        color: source.map((_, i) => getLinkColor(fullIds[source[i]], fullIds[target[i]])),
+        hovertemplate: 
+          '<b>From: %{source.label}</b><br>' +
+          '<b>To: %{target.label}</b><br>' +
+          'Value: %{value:.2f}%<br>' +
+          '<extra></extra>'
       }
     };
+  }, [nodes, nodeMetrics, selectedTokenColor]);
+
+  const handleNodeClick = (event: any) => {
+    const pointData = event.points?.[0];
+    if (pointData?.customdata) {
+      const nodeId = pointData.customdata;
+      onNodeSelect(nodeId);
+      router.push(`/nodes/${chainId}/${nodeId}`);
+    }
   };
 
-  if (isLabelsLoading) {
+  if (isLoadingLabels) {
     return (
       <Box 
         w="100%" 
@@ -474,57 +293,51 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
         display="flex" 
         alignItems="center" 
         justifyContent="center"
-        bg="gray.50"
+        bg={bgColor}
         borderRadius="xl"
       >
-        <Text color="gray.500">Loading labels...</Text>
+        <VStack spacing={4}>
+          <Spinner size="xl" color={selectedTokenColor} />
+          <Text>Loading node labels...</Text>
+        </VStack>
       </Box>
     );
   }
 
   return (
-    <Flex w="100%" h="100%" gap={6}>
+    <Flex direction={{ base: 'column', lg: 'row' }} w="100%" gap={6}>
       <Box 
-        flex="0.85" 
-        minH="600px"
+        flex="0.85"
+        h={{ base: "400px", lg: "600px" }}
         bg={bgColor}
         borderRadius="xl"
         shadow="sm"
         overflow="hidden"
       >
         <Plot
-          data={[getSankeyData() as any]}
+          data={[sankeyData]}
           layout={{
             autosize: true,
-            height: 600,
+            margin: { l: 50, r: 50, b: 50, t: 50 },
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
-            font: {
-              family: 'Inter, sans-serif'
-            },
-            margin: {
-              l: 25,
-              r: 25,
-              t: 25,
-              b: 25
-            }
-          }}
-          onClick={handleNodeClick}
-          onHover={handleNodeHover}
+            font: { size: 12 },
+            width: undefined,
+            height: undefined,
+          } as any}
           style={{ width: '100%', height: '100%' }}
-          config={{
-            displayModeBar: false,
-            responsive: true
-          }}
+          useResizeHandler={true}
+          onClick={handleNodeClick}
+          config={{ displayModeBar: false }}
         />
       </Box>
 
       <VStack 
         flex="0.15" 
-        h="600px" 
+        h={{ base: "300px", lg: "600px" }}
         p={4} 
         borderLeft="1px" 
-        borderColor={borderColor}
+        borderColor="gray.100"
         bg={bgColor}
         borderRadius="xl"
         shadow="sm"
@@ -558,37 +371,6 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
           <option value="desc">Value (High to Low)</option>
         </Select>
 
-        <Input
-          type="number"
-          placeholder="Min Value Filter"
-          value={minValueFilter}
-          onChange={(e) => setMinValueFilter(Number(e.target.value))}
-          size="sm"
-          bg={inputBg}
-          borderRadius="md"
-          _focus={{
-            borderColor: selectedTokenColor,
-            boxShadow: `0 0 0 1px ${selectedTokenColor}`
-          }}
-        />
-
-        <Select
-          size="sm"
-          value={selectedDepth === null ? '' : selectedDepth}
-          onChange={(e) => setSelectedDepth(e.target.value ? Number(e.target.value) : null)}
-          placeholder="Filter by Depth"
-          bg={inputBg}
-          borderRadius="md"
-          _focus={{
-            borderColor: selectedTokenColor,
-            boxShadow: `0 0 0 1px ${selectedTokenColor}`
-          }}
-        >
-          {Array.from(new Set(sankeyStructure.nodeDepths)).map(depth => (
-            <option key={depth} value={depth}>Depth {depth}</option>
-          ))}
-        </Select>
-
         <List 
           w="100%" 
           overflowY="auto" 
@@ -607,13 +389,19 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
             },
           }}
         >
-          {getFilteredAndSortedNodes().map((label, index) => {
-            const nodeId = labelToId.get(label);
-            const metrics = nodeId ? nodeMetrics.get(nodeId) : null;
-            
-            return (
+          {Array.from(nodeMetrics.entries())
+            .filter(([, metrics]) => 
+              metrics.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              metrics.nodeId.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .sort(([, a], [, b]) => 
+              sortOrder === 'asc' ? 
+                a.value - b.value : 
+                b.value - a.value
+            )
+            .map(([nodeId, metrics]) => (
               <ListItem 
-                key={index}
+                key={nodeId}
                 p={2}
                 cursor="pointer"
                 borderRadius="md"
@@ -623,24 +411,25 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
                   bg: `${selectedTokenColor}10`,
                   color: selectedTokenColor
                 }}
-                onClick={() => handleNodeListClick(label)}
+                onClick={() => onNodeSelect(nodeId)}
+                onMouseEnter={() => setHoveredNode(nodeId)}
+                onMouseLeave={() => setHoveredNode(null)}
               >
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" fontWeight="medium">{label}</Text>
-                  {metrics && (
-                    <HStack spacing={2}>
-                      <Badge colorScheme="purple" variant="subtle">
-                        {metrics.value.toFixed(2)}%
-                      </Badge>
-                      <Badge colorScheme="green" variant="subtle">
-                        {metrics.memberCount} members
-                      </Badge>
-                    </HStack>
-                  )}
+                  <Text fontSize="sm" fontWeight="medium">
+                    {metrics.label}
+                  </Text>
+                  <HStack spacing={2}>
+                    <Badge colorScheme="purple" variant="subtle">
+                      {metrics.value.toFixed(2)}%
+                    </Badge>
+                    <Badge colorScheme="green" variant="subtle">
+                      {metrics.memberCount} members
+                    </Badge>
+                  </HStack>
                 </VStack>
               </ListItem>
-            );
-          })}
+            ))}
         </List>
       </VStack>
     </Flex>

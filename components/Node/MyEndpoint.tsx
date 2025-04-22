@@ -447,9 +447,9 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         <Alert status="info" borderRadius="md">
           <AlertIcon />
           <VStack align="start" spacing={2}>
-            <Text fontWeight="medium">No Endpoint Found</Text>
+            <Text fontWeight="medium">You don't have an endpoint yet.</Text>
             <Text fontSize="sm">
-              Create an endpoint to execute transactions on behalf of this node.
+              Create a personal endpoint in the context of this node.
             </Text>
           </VStack>
         </Alert>

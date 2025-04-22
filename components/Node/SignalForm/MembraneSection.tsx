@@ -37,7 +37,7 @@ export const MembraneSection: React.FC<MembraneSectionProps> = ({
   return (
     <Box p={4} bg="purple.50" borderRadius="lg">
       <Text fontSize="lg" fontWeight="semibold" mb={4}>
-        Membrane Configuration
+        Control and Identity
       </Text>
       
       <FormControl>

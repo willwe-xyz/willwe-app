@@ -118,7 +118,7 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId,
       ) : movements?.length === 0 ? (
         <Alert status="info">
           <AlertIcon />
-          <Text>No active movements found</Text>
+          <Text>No active movements found. Start a new movement for this node.</Text>
         </Alert>
       ) : (
         <TableContainer>

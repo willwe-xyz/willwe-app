@@ -37,6 +37,18 @@ export default function DashboardPage() {
   // Get token from URL or context
   const tokenAddress = router.query.token as string || selectedToken;
   
+  // Set initial color based on token address
+  useEffect(() => {
+    if (tokenAddress) {
+      const newColor = `#${tokenAddress.slice(2, 8)}`;
+      setColorState({
+        contrastingColor: newColor,
+        reverseColor: getContrastColor(newColor),
+        hoverColor: `${newColor}20`
+      });
+    }
+  }, [tokenAddress, setColorState, getContrastColor]);
+
   // Find supported networks from deployments
   const supportedChainIds = Object.keys(deployments.WillWe);
   

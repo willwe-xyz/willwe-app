@@ -272,6 +272,35 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           borderColor="gray.100"
           bg="gray.50"
         >
+          <Flex justify="space-between" align="center" mb={4}>
+            <Button
+              leftIcon={<Plus size={16} />}
+              onClick={() => {
+                if (!selectedToken) {
+                  toast({
+                    title: "Error",
+                    description: "Invalid root token selected",
+                    status: "error",
+                    duration: 5000,
+                  });
+                  return;
+                }
+                setShowSpawnModal(true);
+              }}
+              bg={selectedTokenColor}
+              color="white"
+              _hover={{
+                bg: selectedTokenColor,
+                opacity: 0.9
+              }}
+              isLoading={isProcessing}
+              isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
+              size="md"
+              px={6}
+            >
+              Create New Node
+            </Button>
+          </Flex>
           <NodeFilters
             nodes={nodes}
             onFilterChange={(filteredNodes) => {
@@ -311,36 +340,8 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
             >
               <VStack spacing={4}>
                 <Text color="gray.600" fontSize="sm">
-                  No nodes found. Create a new node to get started.
+                  No nodes found for this token. Create a new node using the button above to get started.
                 </Text>
-
-                <Button
-                  leftIcon={<Plus size={16} />}
-                  onClick={() => {
-                    if (!selectedToken) {
-                      toast({
-                        title: "Error",
-                        description: "Invalid root token selected",
-                        status: "error",
-                        duration: 5000,
-                      });
-                      return;
-                    }
-                    setShowSpawnModal(true);
-                  }}
-                  bg={selectedTokenColor}
-                  color="white"
-                  _hover={{
-                    bg: selectedTokenColor,
-                    opacity: 0.9
-                  }}
-                  isLoading={isProcessing}
-                  isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
-                  size="md"
-                  px={6}
-                >
-                  Create Node
-                </Button>
               </VStack>
             </Box>
           ) : (

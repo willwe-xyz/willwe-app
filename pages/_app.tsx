@@ -93,33 +93,36 @@ function MyApp(props: AppProps) {
       </Head>
       
       <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={config}>
-          <PrivyProvider
-            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
-            config={{
-              loginMethods: ['wallet', 'farcaster', 'email'],
-              defaultChain: taikoHekla,
-              supportedChains: [
-                localhost,
-                baseSepolia,
-                base,
-                taikoHekla,
-                taiko,
-                optimismSepolia,
-                optimism
-              ],
-              appearance: {
-                theme: 'light',
-                accentColor: customTheme.colors.brand[600],
-                showWalletLoginFirst: true,
-              },
-            }}
-          >
+        <PrivyProvider
+          appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
+          config={{
+            loginMethods: ['wallet', 'farcaster', 'email'],
+            defaultChain: taikoHekla,
+            supportedChains: [
+              localhost,
+              baseSepolia,
+              base,
+              taikoHekla,
+              taiko,
+              optimismSepolia,
+              optimism
+            ],
+            appearance: {
+              theme: 'light',
+              accentColor: customTheme.colors.brand[600],
+              showWalletLoginFirst: true,
+            },
+            embeddedWallets: {
+              noPrompt: true,
+            },
+          }}
+        >
+          <WagmiProvider config={config}>
             <ChakraProvider theme={customTheme}>
               <AppContent {...props} />
             </ChakraProvider>
-          </PrivyProvider>
-        </WagmiProvider>
+          </WagmiProvider>
+        </PrivyProvider>
       </QueryClientProvider>
     </>
   );
