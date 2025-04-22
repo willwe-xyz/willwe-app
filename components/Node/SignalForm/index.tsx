@@ -19,7 +19,7 @@ import { useNodeTransactions } from '../../../hooks/useNodeTransactions';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { fetchIPFSMetadata } from '../../../utils/ipfs';
 import { deployments, ABIs, getRPCUrl } from '../../../config/contracts';
-import { ethers, formatUnits } from 'ethers';
+import { ethers } from 'ethers';
 import { NodeState } from '../../../types/chainData';
 import MembraneSection from './MembraneSection';
 import InflationSection from './InflationSection';
@@ -410,21 +410,19 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         throw new Error('No child nodes returned from contract');
       }
 
-      // Get signals one by one instead of all at once
-      const existingSignals = await Promise.all(
-        parentNodeData.childrenNodes.map(async (childNodeId: string) => {
-          try {
-            const signals = await contract.getUserNodeSignals(
-              user?.wallet?.address,
-              nodeId
-            );
-          
-          } catch (error) {
-            console.error('Error fetching signals for node:', childNodeId, error);
-            return [['0', '0']]; // Return default value on error
-          }
-        })
-      );
+      // Get signals for the parent node
+      let parentSignals: string[] = [];
+      try {
+        const signals = await contract.getUserNodeSignals(
+          user?.wallet?.address,
+          nodeId
+        );
+        parentSignals = signals.map((signal: any) => signal.toString());
+        console.log('Parent node signals:', parentSignals);
+      } catch (error) {
+        console.error('Error fetching parent signals:', error);
+        parentSignals = [];
+      }
 
       const childrenWithMetadata = await Promise.all(
         childNodes.map(async (node: any, index: number) => {
@@ -456,16 +454,12 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
             console.error('Error fetching membrane metadata:', error);
           }
 
-          // Safely handle signal value
-          let currentSignalBasisPoints = '0';
-          try {
-            const nodeSignals = existingSignals[index];
-            if (nodeSignals && nodeSignals[0] && nodeSignals[0][0]) {
-              // The signal value is already converted to a string
-              currentSignalBasisPoints = nodeSignals[0][0];
-            }
-          } catch (error) {
-            console.error('Error processing signal value:', error);
+          // Get the signal value for this child from the parent's signals array
+          // The first two elements are membrane and inflation, then child signals follow
+          let currentSignalBasisPoints = 0;
+          const childIndex = index + 2; // +2 to skip membrane and inflation values
+          if (parentSignals.length > childIndex) {
+            currentSignalBasisPoints = Number(parentSignals[childIndex]);
           }
 
           return {
@@ -486,33 +480,24 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         throw new Error('No valid children data could be processed');
       }
 
-      setChildrenData(validChildren);
-      
-      // Initialize sliders with safe number conversion
-      const initialValues = Object.fromEntries(
-        validChildren.map(child => {
-          try {
-            const percentageValue = Number(child.currentSignal) / 100;
-            return [child.nodeId, percentageValue];
-          } catch (error) {
-            console.error('Error converting signal value:', error);
-            return [child.nodeId, 0];
-          }
-        })
-      );
+      // Initialize sliders with values from parent signals
+      const initialValues = childrenWithMetadata
+        .filter((child): child is ChildData => child !== null)
+        .reduce((acc, child, index) => {
+          const childIndex = index + 2; // +2 to skip membrane and inflation values
+          // Convert basis points to percentage (10000 = 100%)
+          const signalValue = parentSignals[childIndex] ? Number(parentSignals[childIndex]) / 100 : 0;
+          acc[child.nodeId] = signalValue;
+          return acc;
+        }, {} as Record<string, number>);
       
       setSliderValues(initialValues);
       
-      // Calculate initial total with safe number conversion
-      const initialTotal = Object.values(initialValues).reduce((sum: number, val: unknown) => {
-        try {
-          return sum + (Number(val) || 0);
-        } catch (error) {
-          console.error('Error calculating total:', error);
-          return sum;
-        }
-      }, 0);
-      setTotalAllocation(Number(initialTotal));
+      // Calculate initial total
+      const initialTotal = Object.values(initialValues).reduce((sum, val) => sum + val, 0);
+      setTotalAllocation(initialTotal);
+
+      setChildrenData(childrenWithMetadata.filter((child): child is ChildData => child !== null));
 
     } catch (error) {
       console.error('Error in fetchChildrenData:', error);
@@ -580,7 +565,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
           <Tab>
             <HStack spacing={2}>
               <History size={16} />
-              <Text>Existing Signals</Text>
+              <Text>Current Signals</Text>
             </HStack>
           </Tab>
         </TabList>

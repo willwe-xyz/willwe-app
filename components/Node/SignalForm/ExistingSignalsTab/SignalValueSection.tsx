@@ -36,47 +36,70 @@ const SignalValueSection: React.FC<SignalValueSectionProps> = ({
   const hoverBg = useColorModeValue('purple.50', 'purple.900');
 
   // Process signals data
-  const processSignals = (signals: any[], type: 'membrane' | 'inflation') => {
+  const processSignals = (signals: [string, string][], type: 'membrane' | 'inflation') => {
     const signalMap = new Map<string, SignalValue>();
     
-    signals.forEach((signal, index) => {
-      const value = signal[0].toString();
-      const support = signal[1].toString();
+    if (!Array.isArray(signals)) {
+      console.error(`Invalid signals array:`, signals);
+      return [];
+    }
+
+    // Process each signal entry
+    signals.forEach((signal, userIndex) => {
+      const signalerAddress = nodeData.nodeSignals.signalers[userIndex];
+      if (!signalerAddress) return;
+
+      const [value, support] = signal;
       
-      // Skip signals with value 0 as they represent 'no signal'
-      if (value === '0') {
+      // Skip empty or invalid signals
+      if (!value || value === '0') {
         return;
       }
-      
+
+      // Add or update signal in the map
       if (!signalMap.has(value)) {
         signalMap.set(value, {
           value,
-          support,
-          supporters: [],
+          support: '0',
+          supporters: []
         });
       }
-      
+
       const existingSignal = signalMap.get(value)!;
       existingSignal.supporters.push({
-        address: nodeData.nodeSignals.signalers[index] || '',
-        support,
+        address: signalerAddress,
+        support
       });
+
+      // Update total support
+      const currentSupport = BigInt(existingSignal.support || '0');
+      const additionalSupport = BigInt(support || '0');
+      existingSignal.support = (currentSupport + additionalSupport).toString();
     });
-    
+
     return Array.from(signalMap.values())
       .sort((a, b) => Number(b.support) - Number(a.support));
   };
 
   // Debug log to see the structure of signal data
-  console.log('Node signals:', nodeData.nodeSignals);
-  console.log('Membrane signals:', nodeData.nodeSignals.membraneSignals);
-  console.log('Inflation signals:', nodeData.nodeSignals.inflationSignals);
+  console.log('Processing signals:', {
+    nodeSignals: nodeData.nodeSignals,
+    membraneSignals: nodeData.nodeSignals?.membraneSignals,
+    inflationSignals: nodeData.nodeSignals?.inflationSignals,
+    signalers: nodeData.nodeSignals?.signalers
+  });
 
-  // Ensure we're using the correct arrays for each signal type
-  const membraneSignals = nodeData.nodeSignals && nodeData.nodeSignals.membraneSignals ? 
+  // Process membrane and inflation signals from their respective arrays
+  const membraneSignals = nodeData.nodeSignals?.membraneSignals ? 
     processSignals(nodeData.nodeSignals.membraneSignals, 'membrane') : [];
-  const inflationSignals = nodeData.nodeSignals && nodeData.nodeSignals.inflationSignals ? 
+  const inflationSignals = nodeData.nodeSignals?.inflationSignals ? 
     processSignals(nodeData.nodeSignals.inflationSignals, 'inflation') : [];
+
+  // Debug log processed signals
+  console.log('Processed signals:', {
+    membrane: membraneSignals,
+    inflation: inflationSignals
+  });
   
   const totalSupply = Number(nodeData.basicInfo[11]); // Total supply from node state
   const requiredSupport = totalSupply / 2;
@@ -95,15 +118,16 @@ const SignalValueSection: React.FC<SignalValueSectionProps> = ({
     // Format the display value based on signal type
     const getDisplayValue = () => {
       if (type === 'membrane') {
+        // For membrane signals, display the membrane ID
         return `Membrane ${signal.value}`;
       } else if (type === 'inflation') {
-        // Format inflation as gwei/sec
-        const gweiValue = Number(signal.value) / 1e9; // Convert to gwei if needed
-        return `${gweiValue} gwei/sec`;
+        // For inflation signals, convert from wei to gwei/sec
+        const gweiValue = Number(signal.value) / 1e9;
+        return `${gweiValue.toFixed(9)} gwei/sec`;
       }
       return signal.value;
     };
-    
+
     return (
       <Box
         p={4}

@@ -172,7 +172,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       <Box p={4} borderBottom="1px solid" borderColor={borderColor}>
         <Text fontSize="lg" fontWeight="bold">Node Chat</Text>
         <Text fontSize="sm" color="gray.500">
-          Discuss with other members of this node
+          Discuss with other members of this node ***(!!!!)
         </Text>
       </Box>
       

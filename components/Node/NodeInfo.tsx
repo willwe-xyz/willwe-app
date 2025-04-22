@@ -72,12 +72,17 @@ const calculateMetrics = (node: NodeState): NodeMetrics => {
     BigInt(Number(node.basicInfo[1]) * 86400) : 
     BigInt(0);
   
+  // Convert inflow from per-second to per-day
+  const inflowPerDay = node.basicInfo[7] ? 
+    BigInt(Number(node.basicInfo[7]) * 86400) : 
+    BigInt(0);
+  
   return {
     dailyUnlock: ethers.formatUnits(dailyUnlockedValue, 'ether'),
     TVL: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
     totalValue: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
     availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'ether'),
-    inflow: ethers.formatUnits(node.basicInfo[7] || '0', 'ether'), // Keep this as per-second rate
+    inflow: ethers.formatUnits(inflowPerDay, 'ether'), // Now per day
     value: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
     memberCount: node.membersOfNode?.length || 0,
     membersList: node.membersOfNode || [],
@@ -325,7 +330,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
                 <VStack align="start" spacing={1}>
                   <Text fontSize="sm" color={mutedColor}>Daily Unlock</Text>
                   <Text fontSize="lg" fontWeight="semibold">
-                    {formatCurrency(metrics.dailyUnlock)} PSC/day
+                    {formatCurrency(metrics.dailyUnlock)} {tokenSymbol}/day
                   </Text>
                 </VStack>
               </Tooltip>
@@ -342,7 +347,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
                 <VStack align="start" spacing={1}>
                   <Text fontSize="sm" color={mutedColor}>Total Gross Value</Text>
                   <Text fontSize="lg" fontWeight="semibold">
-                    {formatCurrency(metrics.totalSupply)} PSC
+                    {formatCurrency(metrics.totalSupply)} {tokenSymbol}
                   </Text>
                 </VStack>
               </Tooltip>
@@ -355,11 +360,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
               transition="all 0.2s"
               _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
             >
-              <Tooltip label="Current per-second inflation rate" fontSize="sm">
+              <Tooltip label="Daily inflation rate" fontSize="sm">
                 <VStack align="start" spacing={1}>
                   <Text fontSize="sm" color={mutedColor}>Inflow Rate</Text>
                   <Text fontSize="lg" fontWeight="semibold">
-                    {formatCurrency(metrics.inflow)} PSC/sec
+                    {formatCurrency(metrics.inflow)} {tokenSymbol}/day
                   </Text>
                 </VStack>
               </Tooltip>
@@ -376,7 +381,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
                 <VStack align="start" spacing={1}>
                   <Text fontSize="sm" color={mutedColor}>Active Shares</Text>
                   <Text fontSize="lg" fontWeight="semibold">
-                    {formatCurrency(metrics.availableShares)} PSC
+                    {formatCurrency(metrics.availableShares)} {tokenSymbol}
                   </Text>
                 </VStack>
               </Tooltip>
@@ -454,6 +459,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             nodeData={node}
             chainId={chainId}
             selectedTokenColor={selectedTokenColor}
+            tokenSymbol={tokenSymbol}
           />
         </Box>
       </HStack>

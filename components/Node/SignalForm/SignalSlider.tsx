@@ -51,12 +51,21 @@ const EligibilityImpact = memo(({
   };
 
   const scaledImpact = calculateScaledImpact();
-  const displayValue = parseFloat(scaledImpact).toFixed(4);
+  const displayValue = parseFloat(scaledImpact);
+  const hasBalance = BigInt(parentBalance) > BigInt(0);
+
+  if (displayValue === 0) {
+    return (
+      <Text fontSize="xs" color="gray.500">
+        No Impact ({hasBalance ? "No value provided" : "Not a member"})
+      </Text>
+    );
+  }
 
   return (
-    <Text fontSize="xs" color={parseFloat(displayValue) >= 0 ? "green.500" : "red.500"}>
-      Impact: {parseFloat(displayValue) >= 0 ? "+" : ""}
-      {displayValue} tokens/day
+    <Text fontSize="xs" color={displayValue >= 0 ? "green.500" : "red.500"}>
+      Impact: {displayValue >= 0 ? "+" : ""}
+      {displayValue.toFixed(4)} tokens/day
     </Text>
   );
 });
@@ -190,7 +199,7 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
     <VStack align="stretch" spacing={2} width="100%" mb={4}>
       <HStack justify="space-between">
         <Text fontSize="sm" color="gray.600">
-          Last Preference: {(parseInt(lastSignal) / 100).toFixed(2)}%
+          Last Preference: {(Number(lastSignal) / 100).toFixed(2)}%
         </Text>
         <ButtonGroup size="sm" spacing={1}>
           <IconButton

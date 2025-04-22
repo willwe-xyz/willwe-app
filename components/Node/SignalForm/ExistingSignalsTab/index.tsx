@@ -292,7 +292,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
             <HStack spacing={2}>
               <Shield size={14} />
               <Activity size={14} />
-              <Text>Signals</Text>
+              <Text>Configuration</Text>
             </HStack>
           </Tab>
           <Tab>

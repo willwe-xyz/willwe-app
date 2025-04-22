@@ -17,12 +17,14 @@ interface TreemapChartProps {
   nodeData: NodeState;
   chainId: string;
   selectedTokenColor: string;
+  tokenSymbol?: string;
 }
 
 const TreemapChart: React.FC<TreemapChartProps> = ({ 
   nodeData, 
   chainId,
-  selectedTokenColor = '#319795' // Default to teal if no color provided
+  selectedTokenColor = '#319795', // Default to teal if no color provided
+  tokenSymbol = 'TOKEN' // Default to TOKEN if not provided
 }) => {
   const router = useRouter();
   const { contract } = useContract(chainId);
@@ -106,7 +108,7 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
       const rawValue = rawValues[index];
       const displayValue = rawValue > 0 ? rawValue : maxRawValue * MIN_DISPLAY_VALUE;
       values.push(displayValue);
-      text.push(`${rawValue.toLocaleString()} PSC`);
+      text.push(`${rawValue.toLocaleString()} ${tokenSymbol}`);
       colors.push(colorShades[index]);
     }
 
@@ -137,7 +139,7 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
         setChartData(data);
       }
     });
-  }, [nodeData, chainId, selectedTokenColor]);
+  }, [nodeData, chainId, selectedTokenColor, tokenSymbol]);
 
   return (
     <Box height="100%" width="100%">
