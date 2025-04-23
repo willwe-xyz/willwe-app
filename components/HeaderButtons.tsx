@@ -35,6 +35,7 @@ interface HeaderButtonsProps {
   onNodeSelect: (nodeId: string) => void;
   isTransacting?: boolean;
   buttonHoverBg?: string;
+  selectedTokenColor: string;
 }
 
 export default function HeaderButtons({
@@ -43,7 +44,8 @@ export default function HeaderButtons({
   logout,
   login,
   isTransacting,
-  buttonHoverBg = 'purple.50'
+  buttonHoverBg = 'purple.50',
+  selectedTokenColor,
 }: HeaderButtonsProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -58,8 +60,14 @@ export default function HeaderButtons({
     size: "sm",
     variant: "outline",
     colorScheme: "purple",
-    _hover: { bg: buttonHoverBg },
-    isDisabled: isTransacting
+    _hover: { 
+      bg: buttonHoverBg,
+      borderColor: selectedTokenColor,
+      color: selectedTokenColor
+    },
+    isDisabled: isTransacting,
+    borderColor: selectedTokenColor,
+    color: selectedTokenColor
   };
 
   return (

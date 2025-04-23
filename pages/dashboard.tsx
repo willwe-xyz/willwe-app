@@ -83,7 +83,7 @@ export default function DashboardPage() {
         duration: 5000,
       });
     }
-  }, [ready]);
+  }, [ready, isValidChain, router, defaultChainId]);
 
   // Fetch nodes data (using the validated chainId)
   const { 
@@ -189,13 +189,13 @@ export default function DashboardPage() {
         });
       }}
     >
-      <Box flex={1} overflow="auto" bg="gray.50" p={6}>
+      <Box flex={1} overflow="auto" bg="gray.50" p={4}>
         {renderChainMismatchWarning()}
         
         {!tokenAddress ? (
           renderEmptyDashboard()
         ) : (
-          <Grid templateColumns={{ base: "1fr", lg: "2fr 1fr" }} gap={6}>
+          <Grid templateColumns={{ base: "1fr", lg: "2fr 1fr" }} gap={3}>
             <GridItem>
               <RootNodeDetails 
                 nodes={nodes || []}

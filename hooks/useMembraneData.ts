@@ -39,7 +39,7 @@ export async function getMembraneData(chainId: string, nodeIds: string[] = []) {
     );
 
     // Get node data for all requested nodes
-    console.log('Fetching data for nodes:', nodeIds);
+    // console.log('Fetching data for nodes:', nodeIds);
     
     let nodesData: NodeState[] = [];
     
@@ -62,13 +62,13 @@ export async function getMembraneData(chainId: string, nodeIds: string[] = []) {
             rootId = firstNodeId;
           }
           
-          console.log('Getting nodes for root ID:', rootId);
+          // console.log('Getting nodes for root ID:', rootId);
           
           // getAllNodesForRoot takes an address as the first parameter, not an ID
           // Convert rootId to an address
           const rootAddress = ethers.getAddress(ethers.toBeHex(rootId, 20));
           
-          console.log('Root ID converted to address:', rootAddress);
+          // console.log('Root ID converted to address:', rootAddress);
           
           // Call with address parameters
           const allNodesForRoot: NodeState[] = await willweContract.getAllNodesForRoot(
@@ -82,7 +82,7 @@ export async function getMembraneData(chainId: string, nodeIds: string[] = []) {
             node && node.basicInfo && nodeIdStrings.includes(node.basicInfo[0].toString())
           );
           
-          console.log('Filtered nodes data:', nodesData);
+          // console.log('Filtered nodes data:', nodesData);
         } catch (error) {
           console.error('Error using getAllNodesForRoot:', error);
           throw error; // Propagate to fallback
@@ -90,7 +90,7 @@ export async function getMembraneData(chainId: string, nodeIds: string[] = []) {
       }
     } catch (error) {
       // Fallback: If getAllNodesForRoot fails, try getNodeData individually for each node
-      console.log('Falling back to individual node queries');
+      // console.log('Falling back to individual node queries');
       const individualNodesPromises = nodeIds.map(id => 
         willweContract.getNodeData(id, ethers.ZeroAddress)
           .catch(err => {
@@ -109,7 +109,7 @@ export async function getMembraneData(chainId: string, nodeIds: string[] = []) {
 
     const membraneDataPromises = cids.map(cid => fetchIPFSData(cid));
     const membraneResults = await Promise.all(membraneDataPromises);
-    console.log('Membrane metadata:', membraneResults);
+    // console.log('Membrane metadata:', membraneResults);
     
     const membraneMetadata: MembraneMetadata[] = membraneResults
       .filter(Boolean)

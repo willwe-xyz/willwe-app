@@ -164,8 +164,10 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
       }
     };
 
-    fetchEndpointData();
-  }, [endpointAddress, endpointId, readProvider, userAddress]);
+    if (endpointAddress && endpointAddress !== "0" && endpointAddress !== ethers.ZeroAddress) {
+      fetchEndpointData();
+    }
+  }, [endpointAddress, endpointId, readProvider, userAddress, chainId, setEndpointNodeData]);
 
   useEffect(() => {
     const fetchRootTokenSymbol = async () => {
@@ -447,7 +449,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         <Alert status="info" borderRadius="md">
           <AlertIcon />
           <VStack align="start" spacing={2}>
-            <Text fontWeight="medium">You don't have an endpoint yet.</Text>
+            <Text fontWeight="medium">You don&apos;t have an endpoint yet.</Text>
             <Text fontSize="sm">
               Create a personal endpoint in the context of this node.
             </Text>

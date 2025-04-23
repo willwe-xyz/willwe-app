@@ -199,49 +199,49 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   const combinedError = error || ponderError;
 
   return (
-    <VStack 
-      spacing={4} 
-      align="stretch" 
-      w="100%" 
-      bg="white" 
-      borderRadius="xl" 
-      shadow="sm" 
+    <Box
+      bg="white"
+      shadow="sm"
       overflow="hidden"
+      border="1px solid"
+      borderColor="gray.100"
+      height="100%"
+      display="flex"
+      flexDirection="column"
     >
-      <Box 
-        p={4} 
-        borderBottom="1px" 
-        borderColor="gray.100"
-        bg="white"
-      >
+      <Box p={4} borderBottom="1px" borderColor="gray.100" bg="gray.50">
         <Flex 
           justifyContent="space-between" 
           alignItems="center"
         >
-          <HStack spacing={3}>
+          <HStack spacing={2}>
             <Box
-              p={2}
+              
               borderRadius="lg"
               bg={`${selectedTokenColor}10`}
             >
               <Activity size={20} color={selectedTokenColor} />
             </Box>
-            <Heading size="md">Root Node Activity</Heading>
+            <Heading size="md">Network Activity</Heading>
           </HStack>
           <Button 
             size="sm" 
             onClick={handleRefresh} 
             isLoading={isLoading || isPonderLoading}
-            bg={selectedTokenColor}
-            color="white"
+            borderColor={selectedTokenColor}
+            variant="outline"
+            color={selectedTokenColor}
+            bg="transparent"
             _hover={{
               bg: selectedTokenColor,
               opacity: 0.9,
+              color: 'white'
             }}
-            leftIcon={<RefreshCw size={14} />}
           >
-            Refresh
+            <RefreshCw size={16}/>
           </Button>
+            
+          
         </Flex>
       </Box>
       
@@ -256,7 +256,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
         </Alert>
       )}
       
-      <Box flex="1" position="relative" minH="400px">
+      <Box flex="1" position="relative" minH="400px" h="100%">
         {(isLoading || isPonderLoading) && activities.length === 0 ? (
           <Flex 
             direction="column" 
@@ -277,17 +277,20 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
         ) : (
           <Box 
             overflowY="auto" 
-            maxH="calc(100vh - 300px)"
+            maxH="calc(100vh - 200px)"
+            minH="400px"
+            h="100%"
+            p={4}
             sx={{
               '&::-webkit-scrollbar': {
                 width: '4px',
               },
               '&::-webkit-scrollbar-track': {
                 width: '6px',
-                background: 'gray.50',
+                bg: 'gray.50',
               },
               '&::-webkit-scrollbar-thumb': {
-                background: 'gray.300',
+                bg: 'gray.300',
                 borderRadius: '24px',
               },
             }}
@@ -297,53 +300,11 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
               isLoading={isLoading || isPonderLoading}
               error={combinedError ? combinedError.message : null}
               emptyStateMessage="No activities found for this root node. Activities will appear here when events occur in this node or any of its derived nodes."
+              selectedTokenColor={selectedTokenColor}
             />
           </Box>
         )}
       </Box>
-
-      {showDebug && (
-        <Accordion allowToggle>
-          <AccordionItem border="none">
-            <AccordionButton 
-              _hover={{ bg: 'gray.50' }}
-              px={4}
-            >
-              <Box flex="1" textAlign="left">
-                <Text fontSize="sm" color="gray.600">Debug Information</Text>
-              </Box>
-              <AccordionIcon />
-            </AccordionButton>
-            <AccordionPanel 
-              pb={4} 
-              bg="gray.50"
-              fontSize="sm"
-            >
-              <VStack align="start" spacing={3}>
-                <Box w="100%">
-                  <Text fontWeight="medium" mb={1}>Root Node ID (Token Address):</Text>
-                  <Code p={2} borderRadius="md" w="100%" fontSize="xs">{tokenAddress}</Code>
-                </Box>
-                
-                <Box w="100%">
-                  <Text fontWeight="medium" mb={1}>Chain ID:</Text>
-                  <Code p={2} borderRadius="md" fontSize="xs">{chainId}</Code>
-                </Box>
-                
-                <Box w="100%">
-                  <Text fontWeight="medium" mb={1}>Activities Count:</Text>
-                  <Text color="gray.600">{activities.length} activities</Text>
-                </Box>
-                
-                <Box w="100%">
-                  <Text fontWeight="medium" mb={1}>Loading State:</Text>
-                  <Text color="gray.600">{(isLoading || isPonderLoading) ? 'Loading...' : 'Completed'}</Text>
-                </Box>
-              </VStack>
-            </AccordionPanel>
-          </AccordionItem>
-        </Accordion>
-      )}
-    </VStack>
+    </Box>
   );
 };

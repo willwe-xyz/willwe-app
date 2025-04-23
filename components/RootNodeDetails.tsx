@@ -49,6 +49,7 @@ interface RootNodeDetailsProps {
   isLoading: boolean;
   error: Error | null;
   onRefresh?: () => void;
+  tokenSymbol: string;
 }
 
 export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
@@ -59,7 +60,8 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   nodes = [],
   isLoading,
   error,
-  onRefresh
+  onRefresh,
+  tokenSymbol
 }) => {
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const toast = useToast();
@@ -157,6 +159,11 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     };
   }, [nodes, selectedToken, totalSupplyValue]);
 
+  const formatValue = (value: string | bigint): string => {
+    const formatted = formatBalance(value.toString());
+    return Number(formatted).toFixed(4);
+  };
+
   if (isLoading) {
     return (
       <Box p={6} bg="white" rounded="xl" shadow="sm">
@@ -206,24 +213,28 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   return (
     <Box 
       bg="white" 
-      borderRadius="2xl" 
-      shadow="sm" 
+    
+      shadow="sm"
       overflow="hidden"
       border="1px solid"
       borderColor="gray.100"
+      padding={1}
+      
     >
-      <Box p={6} borderBottom="1px" borderColor="gray.100">
+      <Box p={3} pb={3}>
         <Grid 
           templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', lg: 'repeat(5, 1fr)' }}
-          gap={4}
+          gap={3}
         >
           <StatsCard
             title="Total Value"
-            value={formatBalance(totalSupplyValue.toString())}
+            value={formatValue(totalSupplyValue)}
             icon={<Activity size={14} />}
             color={selectedTokenColor}
             tooltip="Total value locked in the network"
             size="sm"
+            valueSize="md"
+            decimalSize="40%"
           />
           
           <StatsCard
@@ -255,107 +266,35 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
           
           <StatsCard
             title="Average Expense"
-            value={formatBalance(averageExpense.toString())}
+            value={formatValue(averageExpense.toString())}
             icon={<Wallet size={14} />}
             color="red.500"
             tooltip="Average expense per node in ETH/day"
             size="sm"
+            valueSize="md"
+            decimalSize="40%"
           />
         </Grid>
       </Box>
 
       <Flex direction="column" flex="1" overflow="hidden">
-        <Box 
-          px={6} 
-          py={4} 
-          borderBottom="1px" 
-          borderColor="gray.100"
-          bg="gray.50"
-        >
-          <Flex justify="space-between" align="center" mb={4}>
-            <Button
-              leftIcon={<Plus size={16} />}
-              onClick={() => {
-                if (!selectedToken) {
-                  toast({
-                    title: "Error",
-                    description: "Invalid root token selected",
-                    status: "error",
-                    duration: 5000,
-                  });
-                  return;
-                }
-                setShowSpawnModal(true);
-              }}
-              bg={selectedTokenColor}
-              color="white"
-              _hover={{
-                bg: selectedTokenColor,
-                opacity: 0.9
-              }}
-              isLoading={isProcessing}
-              isDisabled={!selectedToken || isProcessing || !wallets[0]?.address}
-              size="md"
-              px={6}
-            >
-              Create New Node
-            </Button>
-          </Flex>
-          <NodeFilters
-            nodes={nodes}
-            onFilterChange={(filteredNodes) => {
-              // Implement filtering logic
-            }}
-          />
-        </Box>
 
-        <Box 
-          flex="1" 
-          overflowY="auto" 
-          px={6} 
-          py={4} 
-          pb={20}
-          sx={{
-            '&::-webkit-scrollbar': {
-              width: '4px',
-            },
-            '&::-webkit-scrollbar-track': {
-              width: '6px',
-              bg: 'gray.50',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              bg: 'gray.300',
-              borderRadius: '24px',
-            },
-          }}
-        >
-          {nodes.length === 0 ? (
-            <Box 
-              p={8} 
-              bg="gray.50" 
-              rounded="xl" 
-              textAlign="center"
-              border="2px dashed"
-              borderColor="gray.200"
-            >
-              <VStack spacing={4}>
-                <Text color="gray.600" fontSize="sm">
-                  No nodes found for this token. Create a new node using the button above to get started.
-                </Text>
-              </VStack>
-            </Box>
-          ) : (
-            <Box pb={16}>
-              <SankeyChart
-                nodes={nodes}
-                selectedTokenColor={selectedTokenColor}
-                onNodeSelect={onNodeSelect}
-                nodeValues={nodeValues}
-                chainId={chainId}
-                selectedToken={selectedToken}
-              />
-            </Box>
-          )}
+
+        <Box p={1} pt={1}>
+          <Box pb={8}>
+            <SankeyChart
+              nodes={nodes}
+              selectedTokenColor={selectedTokenColor}
+              onNodeSelect={onNodeSelect}
+              nodeValues={nodeValues}
+              chainId={chainId}
+              selectedToken={selectedToken}
+              onCreateNode={() => setShowSpawnModal(true)}
+              isProcessing={isProcessing}
+              canCreateNode={!!selectedToken && !isProcessing && !!wallets[0]?.address}
+              tokenName={tokenSymbol}
+            />
+          </Box>
         </Box>
       </Flex>
 
@@ -372,6 +311,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         onClose={() => setShowSpawnModal(false)}
         showToolbar={false}
       />
+    
     </Box>
   );
 };

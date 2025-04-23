@@ -139,7 +139,7 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
         setChartData(data);
       }
     });
-  }, [nodeData, chainId, selectedTokenColor, tokenSymbol]);
+  }, [nodeData, chainId, selectedTokenColor, tokenSymbol, transformDataForTreemap]);
 
   return (
     <Box height="100%" width="100%">

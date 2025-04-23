@@ -16,6 +16,7 @@ interface HeaderProps {
   contrastingColor: string;
   reverseColor: string;
   cycleColors: () => void;
+  selectedTokenColor: string;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -28,7 +29,8 @@ const Header: React.FC<HeaderProps> = ({
   isTransacting,
   contrastingColor,
   reverseColor,
-  cycleColors
+  cycleColors,
+  selectedTokenColor
 }) => {
   // Only render header components once
   return (
@@ -52,6 +54,7 @@ const Header: React.FC<HeaderProps> = ({
         selectedNodeId={selectedNodeId}
         onNodeSelect={onNodeSelect}
         isTransacting={isTransacting}
+        selectedTokenColor={selectedTokenColor}
       />
     </Flex>
   );
