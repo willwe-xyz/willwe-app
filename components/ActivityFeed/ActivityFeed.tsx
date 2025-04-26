@@ -3,6 +3,7 @@ import { Box, VStack, Text, Badge, HStack, Link, useColorModeValue } from '@chak
 import { formatDistanceToNow } from 'date-fns';
 import { ActivityItem } from '../../types/chainData';
 import { Users, ArrowUpRight } from 'lucide-react';
+import { formatRelativeTime } from './../../utils/timeUtils';
 
 interface ActivityFeedProps {
   activities: ActivityItem[];
@@ -98,10 +99,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
               color={selectedTokenColor}
               fontWeight="medium"
             >
-              {activity.when && !isNaN(new Date(activity.when).getTime())
-                ? formatDistanceToNow(new Date(activity.when), { addSuffix: true })
-                : 'Unknown time'
-              }
+              {activity.when ? formatRelativeTime(activity.when) : 'Unknown time'}
             </Text>
           </HStack>
 

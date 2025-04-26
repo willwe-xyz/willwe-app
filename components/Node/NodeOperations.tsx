@@ -37,7 +37,11 @@ import {
   ToastId,
   IconButton,
   FormHelperText,
-  Switch
+  Switch,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb
 } from '@chakra-ui/react';
 import {
   GitBranchPlus,
@@ -56,6 +60,7 @@ import { useNodeData } from '../../hooks/useNodeData';
 import { deployments } from '../../config/deployments';
 import { ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
+import { formatBalance } from '../../utils/formatters';
 import  SpawnNodeForm  from './SpawnNodeForm';
 
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
@@ -590,64 +595,45 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       
       <FormControl isRequired>
         <FormLabel>Amount</FormLabel>
-        <Input
-          value={mintAmount}
-          onChange={async (e) => {
-            const newAmount = e.target.value;
-            setMintAmount(newAmount); // Update form value immediately
-            
-            // Skip allowance check if amount is empty or 0
-            if (!newAmount || parseFloat(newAmount) === 0) {
-              setNeedsApproval(false);
-              return;
-            }
-
-            // Immediately check allowance with new value
-            try {
-              if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
-                console.warn('Required data not available');
+        <HStack width="100%" spacing={4}>
+          <Slider
+            value={parseFloat(mintAmount) || 0}
+            onChange={(value) => {
+              const newAmount = value.toFixed(4);
+              setMintAmount(newAmount);
+              // Skip allowance check if amount is empty or 0
+              if (!newAmount || parseFloat(newAmount) === 0) {
+                setNeedsApproval(false);
                 return;
               }
-
-              const provider = await getEthersProvider();
-              const signer = await provider.getSigner();
-              const rootTokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
-              const cleanChainId = chainId.replace('eip155:', '');
-              const willWeAddress = deployments.WillWe[cleanChainId];
-
-              const tokenContract = new ethers.Contract(
-                rootTokenAddress,
-                [
-                  'function allowance(address,address) view returns (uint256)',
-                  'function decimals() view returns (uint8)'
-                ],
-                signer as unknown as ethers.ContractRunner
-              );
-
-              const [currentAllowance, decimals] = await Promise.all([
-                tokenContract.allowance(user.wallet.address, willWeAddress),
-                tokenContract.decimals()
-              ]);
-
-              const requiredAmount = ethers.parseUnits(newAmount, decimals);
-              setAllowance(currentAllowance.toString());
-              setNeedsApproval(currentAllowance < requiredAmount);
-
-              console.log('Immediate allowance check:', {
-                currentAllowance: currentAllowance.toString(),
-                requiredAmount: requiredAmount.toString(),
-                needsApproval: currentAllowance < requiredAmount
-              });
-            } catch (error) {
-              console.error('Error in immediate allowance check:', error);
-              setNeedsApproval(true); // Fail safe: require approval on error
-            }
-          }}
-          placeholder="Enter amount to mint"
-          type="number"
-          min="0"
-          step="any"
-        />
+              checkAllowance();
+            }}
+            min={0}
+            max={parseFloat(formatBalance(userBalance))}
+            step={0.01}
+            colorScheme="purple"
+          >
+            <SliderTrack>
+              <SliderFilledTrack />
+            </SliderTrack>
+            <SliderThumb />
+          </Slider>
+          <Button
+            size="sm"
+            onClick={() => {
+              const maxBalance = formatBalance(userBalance);
+              setMintAmount(maxBalance);
+              checkAllowance();
+            }}
+            colorScheme="purple"
+            variant="outline"
+          >
+            Max
+          </Button>
+        </HStack>
+        <Text fontSize="sm" color="gray.500" mt={2} textAlign="center">
+          {parseFloat(mintAmount || '0').toFixed(4)}
+        </Text>
         <FormHelperText>
           {useDirectParentMint 
             ? "Mints tokens directly from parent node's reserve"
@@ -719,15 +705,40 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
       <FormControl isRequired>
         <FormLabel>Amount</FormLabel>
-        <Input
-          value={burnAmount}
-          onChange={(e) => {
-            setBurnAmount(e.target.value);
-            checkNodeBalance();
-          }}
-          placeholder="Enter amount to burn"
-          type="number"
-        />
+        <HStack width="100%" spacing={4}>
+          <Slider
+            value={parseFloat(burnAmount) || 0}
+            onChange={(value) => {
+              const newAmount = value.toFixed(4);
+              setBurnAmount(newAmount);
+              checkNodeBalance();
+            }}
+            min={0}
+            max={parseFloat(formatBalance(userBalance))}
+            step={0.01}
+            colorScheme="purple"
+          >
+            <SliderTrack>
+              <SliderFilledTrack />
+            </SliderTrack>
+            <SliderThumb />
+          </Slider>
+          <Button
+            size="sm"
+            onClick={() => {
+              const maxBalance = formatBalance(userBalance);
+              setBurnAmount(maxBalance);
+              checkNodeBalance();
+            }}
+            colorScheme="purple"
+            variant="outline"
+          >
+            Max
+          </Button>
+        </HStack>
+        <Text fontSize="sm" color="gray.500" mt={2} textAlign="center">
+          {parseFloat(burnAmount || '0').toFixed(4)}
+        </Text>
         <FormHelperText>
           {useDirectParentBurn 
             ? "Burns tokens directly to parent node"

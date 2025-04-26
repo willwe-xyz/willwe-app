@@ -19,6 +19,7 @@ import {
 } from '@chakra-ui/react';
 import { Shield, Activity, ArrowUpDown, Info } from 'lucide-react';
 import { SignalValue } from './types';
+import { formatEther } from 'ethers';
 
 interface SignalDetailsModalProps {
   isOpen: boolean;
@@ -27,6 +28,31 @@ interface SignalDetailsModalProps {
   signalType: 'membrane' | 'inflation' | 'redistribution';
   totalSupply?: string;
 }
+
+// Utility function to format values to ether with max 4 decimals
+const formatToEther = (value: string | number): string => {
+  try {
+    // Convert scientific notation to regular string
+    const normalizedValue = typeof value === 'number' 
+      ? value.toLocaleString('fullwide', { useGrouping: false })
+      : value;
+
+    // If the number is too large for formatEther, we'll handle it manually
+    if (normalizedValue.length > 78) { // ethers.js has a limit of ~78 digits
+      const valueInEther = Number(normalizedValue) / 1e18;
+      return valueInEther.toFixed(4).replace(/\.?0+$/, '');
+    }
+
+    const etherValue = formatEther(normalizedValue);
+    const formatted = Number(etherValue).toFixed(4);
+    return formatted.replace(/\.?0+$/, '');
+  } catch (error) {
+    console.warn('Error formatting value to ether:', error);
+    // Fallback to basic number formatting if conversion fails
+    const valueInEther = Number(value) / 1e18;
+    return valueInEther.toFixed(4).replace(/\.?0+$/, '');
+  }
+};
 
 const SignalDetailsModal: React.FC<SignalDetailsModalProps> = ({
   isOpen,
@@ -52,11 +78,11 @@ const SignalDetailsModal: React.FC<SignalDetailsModalProps> = ({
   const getSignalTitle = () => {
     switch (signalType) {
       case 'membrane':
-        return `Membrane ${signal.value}`;
+        return `Membrane ${formatToEther(signal.value)}`;
       case 'inflation':
         // Format inflation value as gwei/sec
-        const gweiValue = Number(signal.value) / 1e9; // Convert to gwei if needed
-        return `${gweiValue} gwei/sec`;
+        const gweiValue = Number(signal.value) / 1e9;
+        return `${gweiValue.toFixed(9)} gwei/sec`;
       case 'redistribution':
         return 'Redistribution Signal';
     }
@@ -107,7 +133,7 @@ const SignalDetailsModal: React.FC<SignalDetailsModalProps> = ({
                     </Box>
                   </Tooltip>
                 </HStack>
-                <Badge colorScheme="purple">{signal.support}</Badge>
+                <Badge colorScheme="purple">{formatToEther(signal.support)}</Badge>
               </HStack>
 
               {requiredSupport > 0 && (
@@ -119,7 +145,7 @@ const SignalDetailsModal: React.FC<SignalDetailsModalProps> = ({
                     borderRadius="full"
                   />
                   <Text fontSize="sm" color="gray.500" mt={1}>
-                    {supportPercentage.toFixed(1)}% of required support ({requiredSupport.toLocaleString()} tokens needed)
+                    {supportPercentage.toFixed(1)}% of required support ({formatToEther(requiredSupport)} tokens needed)
                   </Text>
                 </Box>
               )}
@@ -151,7 +177,7 @@ const SignalDetailsModal: React.FC<SignalDetailsModalProps> = ({
                           {supporter.address}
                         </Text>
                         <Badge colorScheme="purple">
-                          {supporter.support}
+                          {formatToEther(supporter.support)}
                         </Badge>
                       </HStack>
                       <Box>
