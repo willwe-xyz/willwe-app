@@ -105,6 +105,7 @@ export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId,
           onClick={onOpen}
           colorScheme="purple"
           size="sm"
+          isDisabled={!nodeData?.membersOfNode?.includes(userAddress || '')}
         >
           Create Movement
         </Button>

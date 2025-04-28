@@ -21,6 +21,7 @@ interface SignalValueSectionProps {
   userAddress: string;
   onSupportSignal: (signalType: 'membrane' | 'inflation', value: string) => Promise<void>;
   onSignalClick: (signal: SignalValue, type: 'membrane' | 'inflation' | 'redistribution') => void;
+  tokenSymbol?: string;
 }
 
 const SignalValueSection: React.FC<SignalValueSectionProps> = ({
@@ -30,6 +31,7 @@ const SignalValueSection: React.FC<SignalValueSectionProps> = ({
   userAddress,
   onSupportSignal,
   onSignalClick,
+  tokenSymbol = 'PSC' // Default to PSC if not provided
 }) => {
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -121,9 +123,12 @@ const SignalValueSection: React.FC<SignalValueSectionProps> = ({
         // For membrane signals, display the membrane ID
         return `Membrane ${signal.value}`;
       } else if (type === 'inflation') {
-        // For inflation signals, convert from wei to gwei/sec
-        const gweiValue = Number(signal.value) / 1e9;
-        return `${gweiValue.toFixed(9)} gwei/sec`;
+        // For inflation signals, value is in gwei/sec
+        const gweiPerSec = Number(signal.value);
+        const gweiPerDay = gweiPerSec * 86400; // Convert to gwei/day
+        const ethPerDay = gweiPerDay / 1e9; // Convert gwei to ETH
+        
+        return `${Math.round(gweiPerSec)} gwei/sec (${ethPerDay.toFixed(4)} ${tokenSymbol}/day)`;
       }
       return signal.value;
     };
@@ -180,6 +185,7 @@ const SignalValueSection: React.FC<SignalValueSectionProps> = ({
                 e.stopPropagation();
                 onSupportSignal(type, signal.value);
               }}
+              isDisabled={!nodeData?.membersOfNode?.includes(userAddress)}
             >
               Support
             </Button>

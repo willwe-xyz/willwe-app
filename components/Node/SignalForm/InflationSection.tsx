@@ -68,7 +68,7 @@ export const InflationSection: React.FC<InflationSectionProps> = ({
           bg="white"
         />
         <Text fontSize="sm" color="gray.600" mt={1}>
-          Daily rate: {dailyRate} {tokenSymbol}/day
+          Daily rate: {Number(dailyRate).toFixed(4)} {tokenSymbol}/day
         </Text>
       </FormControl>
     </Box>

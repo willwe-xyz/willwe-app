@@ -124,8 +124,8 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   const isEndpoint = nodeData?.basicInfo && 
     nodeData.rootPath && 
     nodeData.rootPath.length > 0 && 
-    nodeData.basicInfo.nodeId && 
-    nodeData.rootPath[0].slice(0, 12) !== nodeData.basicInfo.nodeId.slice(0, 12);
+    nodeData.basicInfo[0] && 
+    nodeData.rootPath[0].toString().slice(0, 12) !== nodeData.basicInfo[0].toString().slice(0, 12);
 
   // Loading state
   if (isLoading) {
@@ -206,7 +206,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             borderBottomWidth="1px"
             borderColor={borderColor}
           >
-            <NodeInfo node={nodeData} chainId={chainId} selectedTokenColor={selectedTokenColor} />
+            <NodeInfo node={nodeData} chainId={chainId} selectedTokenColor={selectedTokenColor} tokenSymbol={tokenSymbol} />
           </Box>
           
           <Box p={6}>
@@ -392,64 +392,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             </TabPanel>
           </TabPanels>
         </Tabs>
-        
-        {/* Permissions footer - only show if user is authenticated */}
-        {user?.wallet?.address && (
-          <Box 
-            p={4}
-            borderTopWidth="1px"
-            borderColor={borderColor}
-            bg={headerBg}
-          >
-            <Flex align="center" wrap="wrap" gap={3}>
-              <HStack spacing={2}>
-                <Info size={14} color={selectedTokenColor} />
-                <Text fontSize="sm" fontWeight="medium" color="gray.600">
-                  Permissions:
-                </Text>
-              </HStack>
-              <Spacer display={["none", "block"]} />
-              <HStack spacing={2} flexWrap="wrap">
-                <Badge 
-                  colorScheme="green" 
-                  px={3} 
-                  py={1} 
-                  borderRadius="full"
-                  variant="subtle"
-                >
-                  Mint
-                </Badge>
-                <Badge 
-                  colorScheme="green" 
-                  px={3} 
-                  py={1} 
-                  borderRadius="full"
-                  variant="subtle"
-                >
-                  Burn
-                </Badge>
-                <Badge 
-                  colorScheme="green" 
-                  px={3} 
-                  py={1} 
-                  borderRadius="full"
-                  variant="subtle"
-                >
-                  Signal
-                </Badge>
-                <Badge 
-                  colorScheme="green" 
-                  px={3} 
-                  py={1} 
-                  borderRadius="full"
-                  variant="subtle"
-                >
-                  Redistribute
-                </Badge>
-              </HStack>
-            </Flex>
-          </Box>
-        )}
       </Box>
     </Box>
   );

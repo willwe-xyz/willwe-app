@@ -636,16 +636,19 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 ))}
 
                 {/* Total Allocation */}
-                <Box width="100%" p={4} bg="gray.50" borderRadius="md">
-                  <HStack justify="space-between">
-                    <Text>Total Allocation:</Text>
-                    <Text 
-                      fontWeight="bold"
-                      color={Math.abs(totalAllocation - 100) < 0.01 ? 'green.500' : 'red.500'}
-                    >
-                      {Number(totalAllocation).toFixed(2)}%
+                <Box width="100%" p={4} borderWidth="1px" borderRadius="md">
+                  <VStack spacing={4} align="stretch">
+                    <Text fontWeight="medium">Total Allocation</Text>
+                    <Progress
+                      value={totalAllocation}
+                      colorScheme="purple"
+                      size="sm"
+                      borderRadius="full"
+                    />
+                    <Text fontSize="sm" color="gray.500">
+                      {totalAllocation.toFixed(1)}% allocated
                     </Text>
-                  </HStack>
+                  </VStack>
                 </Box>
 
                 {/* Submit Button */}
@@ -658,7 +661,8 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                   isDisabled={
                     isSubmitting || 
                     (childrenData.length > 0 && Math.abs(totalAllocation - 100) > 0.01) ||
-                    !user?.wallet?.address
+                    !user?.wallet?.address ||
+                    !parentNodeData?.membersOfNode?.includes(user?.wallet?.address || '')
                   }
                 >
                   Submit Signals
@@ -667,13 +671,12 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
             </VStack>
           </TabPanel>
           
-          {/* Existing Signals Tab */}
+          {/* Current Signals Tab */}
           <TabPanel p={0}>
-            <ExistingSignalsTab 
+            <ExistingSignalsTab
               nodeId={nodeId}
               chainId={chainId}
-              onSelectMembrane={handleSelectMembrane}
-              onSelectInflation={handleSelectInflation}
+              tokenSymbol={tokenSymbol}
             />
           </TabPanel>
         </TabPanels>

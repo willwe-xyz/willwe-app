@@ -32,6 +32,7 @@ interface ExistingSignalsTabProps {
   chainId: string;
   onSelectMembrane?: (membraneId: string) => void;
   onSelectInflation?: (inflationRate: string) => void;
+  tokenSymbol?: string;
 }
 
 const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
@@ -39,6 +40,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
   chainId,
   onSelectMembrane,
   onSelectInflation,
+  tokenSymbol = 'PSC'
 }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedSignal, setSelectedSignal] = useState<SignalValue | null>(null);
@@ -313,6 +315,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
               userAddress={userAddress}
               onSupportSignal={handleSupportSignal}
               onSignalClick={handleSignalClick}
+              tokenSymbol={tokenSymbol}
             />
           </TabPanel>
           

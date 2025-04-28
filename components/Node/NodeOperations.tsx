@@ -41,7 +41,12 @@ import {
   Slider,
   SliderTrack,
   SliderFilledTrack,
-  SliderThumb
+  SliderThumb,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper
 } from '@chakra-ui/react';
 import {
   GitBranchPlus,
@@ -52,7 +57,9 @@ import {
   Trash,
   ChevronDown,
   Trash2,
-  Info
+  Info,
+  AlertTriangle,
+  Check
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
@@ -122,18 +129,91 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const [userBalance, setUserBalance] = useState('0');
   const [useDirectParentMint, setUseDirectParentMint] = useState(false);
   const [useDirectParentBurn, setUseDirectParentBurn] = useState(false);
+  const [rootTokenSymbol, setRootTokenSymbol] = useState('PSC');
   const [formData, setFormData] = useState<SpawnFormData>({
     name: '',
     characteristics: [],
     tokenRequirements: [],
     inflation: 0
   });
+  const [burnBalance, setBurnBalance] = useState('0');
 
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
-  const { data: nodeData } = useNodeData(chainId, userAddress, nodeId);
+  const { data: nodeData } = useNodeData(chainId || '', userAddress || '', nodeId);
   const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address || '');
+
+  // Get root token symbol
+  const getRootTokenSymbol = useCallback(async () => {
+    try {
+      const provider = await getEthersProvider();
+      let tokenAddress;
+
+      // If we have a direct token address in nodeId, use that first
+      if (nodeId && nodeId.startsWith('0x')) {
+        tokenAddress = ethers.getAddress(nodeId);
+      } else if (nodeData?.rootPath?.[0] && nodeData.rootPath[0] !== '0') {
+        // Only use root path if it's not "0"
+        const rootNodeId = nodeData.rootPath[0];
+        tokenAddress = ethers.getAddress(ethers.toBeHex(rootNodeId, 20));
+      } else {
+        // If we don't have a valid address, return default
+        console.warn('No valid token address found, using default symbol');
+        return 'PSC';
+      }
+      
+      console.log('Getting symbol for token:', {
+        tokenAddress,
+        nodeId,
+        rootPath: nodeData?.rootPath
+      });
+
+      // Verify we have a valid non-zero address
+      if (tokenAddress === ethers.ZeroAddress) {
+        console.warn('Zero address detected, returning default symbol');
+        return 'PSC';
+      }
+
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        [
+          'function symbol() view returns (string)',
+          'function name() view returns (string)'
+        ],
+        provider as unknown as ethers.ContractRunner
+      );
+
+      try {
+        // First try to get the symbol
+        const symbol = await tokenContract.symbol();
+        console.log('Retrieved token symbol:', symbol);
+        return symbol || 'PSC';
+      } catch (symbolError) {
+        console.warn('Failed to get symbol, trying name:', symbolError);
+        try {
+          // If symbol fails, try to get the name
+          const name = await tokenContract.name();
+          // Use first 3-4 characters of name as symbol if name exists
+          return name ? name.slice(0, 4).toUpperCase() : 'PSC';
+        } catch (nameError) {
+          console.warn('Failed to get name:', nameError);
+          // If both fail, return default
+          return 'PSC';
+        }
+      }
+    } catch (error) {
+      console.error('Error getting token symbol:', error);
+      return 'PSC';
+    }
+  }, [nodeData?.rootPath, nodeId, getEthersProvider]);
+
+  useEffect(() => {
+    getRootTokenSymbol().then(symbol => {
+      console.log('Setting root token symbol:', symbol);
+      setRootTokenSymbol(symbol);
+    });
+  }, [getRootTokenSymbol]);
 
   useEffect(() => {
     // If isOpen prop changes to true, set activeModal to 'spawn'
@@ -274,43 +354,60 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const checkNodeBalance = useCallback(async () => {
     try {
       if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
-        console.warn('Token address or user address not available');
+        console.warn('Token address or user address not available', {
+          rootPath: nodeData?.rootPath,
+          userAddress: user?.wallet?.address
+        });
         return;
       }
   
       const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
+      const rootTokenAddress = ethers.getAddress(ethers.toBeHex(nodeData.rootPath[0], 20));
       
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-  
+      console.log('Checking root token balance with params:', {
+        rootTokenAddress,
+        userAddress: user.wallet.address,
+        rootNodeId: nodeData.rootPath[0]
+      });
+      
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
       
-      const contract = new ethers.Contract(
-        contractAddress,
-        ['function balanceOf(address account, uint256 id) view returns (uint256)'],
+      // Use ERC20 interface for root token balance
+      const rootTokenContract = new ethers.Contract(
+        rootTokenAddress,
+        ['function balanceOf(address) view returns (uint256)'],
         //@ts-ignore
         signer
       );
   
-      const balance = await contract.balanceOf(
-        user.wallet.address,
-        BigInt(nodeId)
-      );
+      const balance = await rootTokenContract.balanceOf(user.wallet.address);
+      
+      console.log('Retrieved root token balance:', {
+        rawBalance: balance.toString(),
+        formattedBalance: formatBalance(balance.toString()),
+        rootTokenAddress
+      });
       
       setUserBalance(balance.toString());
     } catch (error) {
-      console.error('Error checking node balance:', error);
+      console.error('Error checking root token balance:', error);
       toast({
         title: 'Error',
-        description: 'Failed to check node token balance',
+        description: 'Failed to check root token balance',
         status: 'error',
         duration: 5000
       });
     }
-  }, [chainId, nodeData?.rootPath, user?.wallet?.address, nodeId, getEthersProvider, toast]);
+  }, [chainId, nodeData?.rootPath, user?.wallet?.address, getEthersProvider, toast]);
+
+  // Call checkNodeBalance when the modal opens
+  useEffect(() => {
+    if (activeModal === 'mint') {
+      checkNodeBalance();
+      checkAllowance();
+    }
+  }, [activeModal, checkNodeBalance, checkAllowance]);
 
   // Continue to Part 3 for handler functions
 
@@ -576,12 +673,79 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     }
   }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
+  const checkBurnBalance = useCallback(async () => {
+    try {
+      if (!user?.wallet?.address) {
+        console.warn('User address not available');
+        return;
+      }
+  
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        console.error(`No contract deployment found for chain ${cleanChainId}`);
+        return;
+      }
+  
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      
+      console.log('Checking burn balance with params:', {
+        contractAddress,
+        userAddress: user.wallet.address,
+        nodeId: BigInt(nodeId)
+      });
+      
+      const contract = new ethers.Contract(
+        contractAddress,
+        ['function balanceOf(address account, uint256 id) view returns (uint256)'],
+        //@ts-ignore
+        signer
+      );
+  
+      const balance = await contract.balanceOf(
+        user.wallet.address,
+        BigInt(nodeId)
+      );
+      
+      console.log('Retrieved burn balance:', {
+        rawBalance: balance.toString(),
+        formattedBalance: formatBalance(balance.toString())
+      });
+      
+      setBurnBalance(balance.toString());
+    } catch (error) {
+      console.error('Error checking burn balance:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to check token balance',
+        status: 'error',
+        duration: 5000
+      });
+    }
+  }, [chainId, nodeId, user?.wallet?.address, getEthersProvider, toast]);
+
+  // Call checkBurnBalance when the burn modal opens
+  useEffect(() => {
+    if (activeModal === 'burn') {
+      checkBurnBalance();
+    }
+  }, [activeModal, checkBurnBalance]);
+
   // Mint Modal Content
-  const renderMintModalContent = () => (
-    <VStack spacing={4}>
-      <HStack width="100%" justify="space-between" align="center" pb={2}>
-        <FormControl display="flex" alignItems="center">
-          <FormLabel htmlFor="mint-from-parent" mb="0">
+  const renderMintModalContent = () => {
+    // Calculate max amount user can mint based on actual token balance
+    const maxBalance = parseFloat(formatBalance(userBalance)).toFixed(4);
+    const currentAllowance = parseFloat(ethers.formatUnits(allowance || '0', 18)).toFixed(4);
+    const hasTokens = parseFloat(maxBalance) > 0;
+
+    return (
+    <VStack spacing={6} align="stretch">
+      {/* Mint Type Switch */}
+      <Box bg="gray.50" p={4} borderRadius="lg">
+        <FormControl display="flex" alignItems="center" justifyContent="space-between">
+          <FormLabel htmlFor="mint-from-parent" mb="0" fontWeight="medium">
             Mint from Parent
           </FormLabel>
           <Switch 
@@ -589,109 +753,202 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             isChecked={useDirectParentMint}
             onChange={(e) => setUseDirectParentMint(e.target.checked)}
             colorScheme="purple"
+            size="lg"
           />
         </FormControl>
-      </HStack>
-      
+      </Box>
+
+      {/* Amount Input Section */}
       <FormControl isRequired>
-        <FormLabel>Amount</FormLabel>
-        <HStack width="100%" spacing={4}>
-          <Slider
-            value={parseFloat(mintAmount) || 0}
-            onChange={(value) => {
-              const newAmount = value.toFixed(4);
-              setMintAmount(newAmount);
-              // Skip allowance check if amount is empty or 0
-              if (!newAmount || parseFloat(newAmount) === 0) {
-                setNeedsApproval(false);
-                return;
-              }
-              checkAllowance();
-            }}
-            min={0}
-            max={parseFloat(formatBalance(userBalance))}
-            step={0.01}
-            colorScheme="purple"
-          >
-            <SliderTrack>
-              <SliderFilledTrack />
-            </SliderTrack>
-            <SliderThumb />
-          </Slider>
-          <Button
-            size="sm"
-            onClick={() => {
-              const maxBalance = formatBalance(userBalance);
-              setMintAmount(maxBalance);
-              checkAllowance();
-            }}
-            colorScheme="purple"
-            variant="outline"
-          >
-            Max
-          </Button>
-        </HStack>
-        <Text fontSize="sm" color="gray.500" mt={2} textAlign="center">
-          {parseFloat(mintAmount || '0').toFixed(4)}
-        </Text>
-        <FormHelperText>
+        <FormLabel fontWeight="medium">Amount</FormLabel>
+        <VStack width="100%" spacing={4}>
+          <HStack width="100%" spacing={3}>
+            <NumberInput
+              value={mintAmount}
+              onChange={(valueString) => {
+                const value = parseFloat(valueString || '0');
+                const newAmount = isNaN(value) ? '0' : value.toFixed(4);
+                setMintAmount(newAmount);
+                if (!newAmount || parseFloat(newAmount) === 0) {
+                  setNeedsApproval(false);
+                  return;
+                }
+                checkAllowance();
+              }}
+              onBlur={() => {
+                // Validate and format on blur
+                const value = parseFloat(mintAmount || '0');
+                if (isNaN(value)) {
+                  setMintAmount('0.0000');
+                } else {
+                  const formatted = value.toFixed(4);
+                  setMintAmount(formatted);
+                  checkAllowance();
+                }
+              }}
+              min={0}
+              max={parseFloat(maxBalance)}
+              step={1}
+              precision={4}
+              isDisabled={!hasTokens}
+              flex={1}
+              size="lg"
+              keepWithinRange={true}
+              clampValueOnBlur={true}
+            >
+              <NumberInputField 
+                borderColor="gray.200" 
+                _hover={{ borderColor: selectedTokenColor }}
+                _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+              />
+              <NumberInputStepper>
+                <NumberIncrementStepper />
+                <NumberDecrementStepper />
+              </NumberInputStepper>
+            </NumberInput>
+            <Button
+              size="lg"
+              onClick={() => {
+                setMintAmount(maxBalance);
+                checkAllowance();
+              }}
+              variant="outline"
+              borderColor={selectedTokenColor}
+              color={selectedTokenColor}
+              _hover={{ bg: `${selectedTokenColor}10` }}
+              isDisabled={!hasTokens}
+              minW="80px"
+            >
+              Max
+            </Button>
+          </HStack>
+
+          <Box width="100%" px={1}>
+            <Slider
+              value={parseFloat(mintAmount || '0')}
+              onChange={(value) => {
+                const newAmount = value.toFixed(4);
+                setMintAmount(newAmount);
+                if (!newAmount || parseFloat(newAmount) === 0) {
+                  setNeedsApproval(false);
+                  return;
+                }
+                checkAllowance();
+              }}
+              onChangeEnd={(value) => {
+                const newAmount = value.toFixed(4);
+                setMintAmount(newAmount);
+                checkAllowance();
+              }}
+              min={0}
+              max={parseFloat(maxBalance)}
+              step={1}
+              isDisabled={!hasTokens}
+            >
+              <SliderTrack bg="gray.200">
+                <SliderFilledTrack bg={selectedTokenColor} />
+              </SliderTrack>
+              <SliderThumb 
+                boxSize={6} 
+                bg={needsApproval ? 'yellow.400' : selectedTokenColor}
+                _focus={{ boxShadow: `0 0 0 3px ${needsApproval ? 'yellow.200' : `${selectedTokenColor}40`}` }}
+              >
+                <Box 
+                  color="white" 
+                  as={needsApproval ? AlertTriangle : Check} 
+                  size={needsApproval ? "12px" : "10px"}
+                  style={{ strokeWidth: needsApproval ? 3 : 2 }}
+                />
+              </SliderThumb>
+            </Slider>
+          </Box>
+
+          <Alert status="info" size="sm">
+            <AlertIcon />
+            <Text fontSize="sm">
+              Approved amount: {currentAllowance} {rootTokenSymbol}
+            </Text>
+          </Alert>
+        </VStack>
+
+        <Text fontSize="sm" color="gray.600" mt={3} textAlign="center">
           {useDirectParentMint 
             ? "Mints tokens directly from parent node's reserve"
             : "Mints tokens through the entire path from root"
           }
-        </FormHelperText>
+        </Text>
       </FormControl>
 
-      {mintAmount && parseFloat(mintAmount) > 0 && (
-        <Alert status={needsApproval ? "warning" : "success"}>
-          <AlertIcon />
-          <VStack align="start" spacing={1} width="100%">
-            <Text>
-              {needsApproval 
-                ? "Approval required before minting" 
-                : "Ready to mint"}
-            </Text>
-            <Text fontSize="sm" color="gray.600">
-              Current allowance: {ethers.formatUnits(allowance || '0', 18)}
-              {needsApproval && ` (Need: ${mintAmount})`}
-            </Text>
-          </VStack>
-        </Alert>
-      )}
+      {/* Status and Action Section */}
+      <Box>
+        {hasTokens ? (
+          mintAmount && parseFloat(mintAmount) > 0 && (
+            <Alert 
+              status={needsApproval ? "warning" : "success"}
+              borderRadius="lg"
+              bg={needsApproval ? "orange.50" : "green.50"}
+            >
+              <AlertIcon />
+              <VStack align="start" spacing={1} width="100%">
+                <Text fontWeight="medium">
+                  {needsApproval 
+                    ? "Approval required before minting" 
+                    : "Ready to mint"}
+                </Text>
+                <Text fontSize="sm" color="gray.600">
+                  Available balance: {maxBalance} {rootTokenSymbol}
+                  {needsApproval && ` (Need to approve: ${parseFloat(mintAmount).toFixed(4)})`}
+                </Text>
+              </VStack>
+            </Alert>
+          )
+        ) : (
+          <Alert 
+            status="warning"
+            borderRadius="lg"
+            bg="orange.50"
+          >
+            <AlertIcon />
+            <Text>No tokens available to mint</Text>
+          </Alert>
+        )}
 
-      {needsApproval ? (
-        <Button
-          onClick={handleApprove}
-          isLoading={isProcessing}
-          width="100%"
-          bg={selectedTokenColor}
-          color="white"
-          _hover={{ bg: `${selectedTokenColor}90` }}
-        >
-          Approve Tokens
-        </Button>
-      ) : (
-        <Button
-          onClick={() => useDirectParentMint ? handleMint() : handleMintPath()}
-          isLoading={isProcessing}
-          width="100%"
-          isDisabled={!mintAmount || parseFloat(mintAmount) === 0}
-          bg={selectedTokenColor}
-          color="white"
-          _hover={{ bg: `${selectedTokenColor}90` }}
-        >
-          {useDirectParentMint ? 'Mint from Parent' : 'Mint Path'}
-        </Button>
-      )}
+        {hasTokens && (
+          <Button
+            onClick={needsApproval ? handleApprove : () => useDirectParentMint ? handleMint() : handleMintPath()}
+            isLoading={isProcessing}
+            width="100%"
+            size="lg"
+            mt={4}
+            isDisabled={!mintAmount || parseFloat(mintAmount) === 0}
+            bg={selectedTokenColor}
+            color="white"
+            _hover={{ bg: `${selectedTokenColor}90` }}
+            _active={{ bg: `${selectedTokenColor}80` }}
+            _disabled={{ bg: `${selectedTokenColor}40`, cursor: 'not-allowed' }}
+          >
+            {needsApproval ? 'Approve Tokens' : (useDirectParentMint ? 'Mint from Parent' : 'Mint')}
+          </Button>
+        )}
+      </Box>
     </VStack>
-  );
+    );
+  };
 
   // Burn Modal Content
-  const renderBurnModalContent = () => (
-    <VStack spacing={4}>
-      <HStack width="100%" justify="space-between" align="center" pb={2}>
-        <FormControl display="flex" alignItems="center">
-          <FormLabel htmlFor="burn-to-parent" mb="0">
+  const renderBurnModalContent = () => {
+    const maxBurnBalance = formatBalance(burnBalance);
+    const hasTokensToBurn = parseFloat(maxBurnBalance) > 0;
+
+    return (
+    <VStack spacing={4} align="stretch">
+      <Alert status="info" mb={4}>
+        <AlertIcon />
+        Available to burn: {Number(maxBurnBalance).toFixed(4)} {rootTokenSymbol}
+      </Alert>
+      <Box bg="gray.50" p={4} borderRadius="lg" mb={4}>
+        <FormControl display="flex" alignItems="center" justifyContent="space-between">
+          <FormLabel htmlFor="burn-to-parent" mb="0" fontWeight="medium">
             Burn to Parent
           </FormLabel>
           <Switch 
@@ -699,85 +956,139 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             isChecked={useDirectParentBurn}
             onChange={(e) => setUseDirectParentBurn(e.target.checked)}
             colorScheme="purple"
+            size="lg"
           />
         </FormControl>
-      </HStack>
-
+      </Box>
+      
       <FormControl isRequired>
-        <FormLabel>Amount</FormLabel>
-        <HStack width="100%" spacing={4}>
-          <Slider
-            value={parseFloat(burnAmount) || 0}
-            onChange={(value) => {
-              const newAmount = value.toFixed(4);
-              setBurnAmount(newAmount);
-              checkNodeBalance();
-            }}
-            min={0}
-            max={parseFloat(formatBalance(userBalance))}
-            step={0.01}
-            colorScheme="purple"
-          >
-            <SliderTrack>
-              <SliderFilledTrack />
-            </SliderTrack>
-            <SliderThumb />
-          </Slider>
-          <Button
-            size="sm"
-            onClick={() => {
-              const maxBalance = formatBalance(userBalance);
-              setBurnAmount(maxBalance);
-              checkNodeBalance();
-            }}
-            colorScheme="purple"
-            variant="outline"
-          >
-            Max
-          </Button>
-        </HStack>
-        <Text fontSize="sm" color="gray.500" mt={2} textAlign="center">
-          {parseFloat(burnAmount || '0').toFixed(4)}
-        </Text>
-        <FormHelperText>
+        <FormLabel fontWeight="medium">Amount</FormLabel>
+        <VStack width="100%" spacing={4}>
+          <HStack width="100%" spacing={3}>
+            <NumberInput
+              value={burnAmount}
+              onChange={(valueString) => {
+                const value = parseFloat(valueString || '0');
+                const newAmount = isNaN(value) ? '0' : value.toFixed(4);
+                setBurnAmount(newAmount);
+              }}
+              onBlur={() => {
+                const value = parseFloat(burnAmount || '0');
+                if (isNaN(value)) {
+                  setBurnAmount('0.0000');
+                } else {
+                  setBurnAmount(value.toFixed(4));
+                }
+              }}
+              min={0}
+              max={parseFloat(maxBurnBalance)}
+              step={1}
+              precision={4}
+              isDisabled={!hasTokensToBurn}
+              flex={1}
+              size="lg"
+              keepWithinRange={true}
+              clampValueOnBlur={true}
+            >
+              <NumberInputField 
+                borderColor="gray.200" 
+                _hover={{ borderColor: selectedTokenColor }}
+                _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+              />
+              <NumberInputStepper>
+                <NumberIncrementStepper />
+                <NumberDecrementStepper />
+              </NumberInputStepper>
+            </NumberInput>
+            <Button
+              size="lg"
+              onClick={() => setBurnAmount(maxBurnBalance)}
+              variant="outline"
+              borderColor={selectedTokenColor}
+              color={selectedTokenColor}
+              _hover={{ bg: `${selectedTokenColor}10` }}
+              isDisabled={!hasTokensToBurn}
+              minW="80px"
+            >
+              Max
+            </Button>
+          </HStack>
+
+          <Box width="100%" px={1}>
+            <Slider
+              value={parseFloat(burnAmount || '0')}
+              onChange={(value) => setBurnAmount(value.toFixed(4))}
+              min={0}
+              max={parseFloat(maxBurnBalance)}
+              step={1}
+              isDisabled={!hasTokensToBurn}
+            >
+              <SliderTrack bg="gray.200">
+                <SliderFilledTrack bg={selectedTokenColor} />
+              </SliderTrack>
+              <SliderThumb 
+                boxSize={6} 
+                bg={selectedTokenColor}
+                _focus={{ boxShadow: `0 0 0 3px ${selectedTokenColor}40` }}
+              />
+            </Slider>
+          </Box>
+        </VStack>
+
+        <Text fontSize="sm" color="gray.600" mt={3} textAlign="center">
           {useDirectParentBurn 
             ? "Burns tokens directly to parent node"
             : "Burns tokens through the entire path to root"
           }
-        </FormHelperText>
+        </Text>
       </FormControl>
 
-      {burnAmount && (
+      {hasTokensToBurn ? (
+        burnAmount && parseFloat(burnAmount) > 0 && (
+          <Alert 
+            status="info"
+            borderRadius="lg"
+            bg="blue.50"
+            mt={4}
+          >
+            <AlertIcon />
+            <Text fontWeight="medium">
+              Ready to burn {parseFloat(burnAmount).toFixed(4)} {rootTokenSymbol}
+            </Text>
+          </Alert>
+        )
+      ) : (
         <Alert 
-          status={
-            BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
-              ? "success" 
-              : "error"
-          }
+          status="warning"
+          borderRadius="lg"
+          bg="orange.50"
+          mt={4}
         >
           <AlertIcon />
-          <Text>
-            {BigInt(ethers.parseUnits(burnAmount || '0', 18)) <= BigInt(userBalance)
-              ? "Ready to burn"
-              : "Insufficient balance"
-            }
-          </Text>
+          <Text>No tokens available to burn</Text>
         </Alert>
       )}
 
-      <Button
-        onClick={() => useDirectParentBurn ? handleBurn() : handleBurnPath()}
-        isLoading={isProcessing}
-        width="100%"
-        isDisabled={!burnAmount}
-        bg={selectedTokenColor}
-        color="white"
-        _hover={{ bg: `${selectedTokenColor}90` }}
-      >
-        {useDirectParentBurn ? 'Burn to Parent' : 'Burn Path'}
-      </Button>
+      {hasTokensToBurn && (
+        <Button
+          onClick={() => useDirectParentBurn ? handleBurn() : handleBurnPath()}
+          isLoading={isProcessing}
+          width="100%"
+          size="lg"
+          mt={4}
+          isDisabled={!burnAmount || parseFloat(burnAmount) === 0}
+          bg={selectedTokenColor}
+          color="white"
+          _hover={{ bg: `${selectedTokenColor}90` }}
+          _active={{ bg: `${selectedTokenColor}80` }}
+          _disabled={{ bg: `${selectedTokenColor}40`, cursor: 'not-allowed' }}
+        >
+          {useDirectParentBurn ? 'Burn to Parent' : 'Burn'}
+        </Button>
+      )}
     </VStack>
-  );
+    );
+  };
 
   return (
     <>
@@ -823,6 +1134,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                isDisabled={!isMember}
               >
                 Spawn Node
               </Button>
@@ -895,6 +1207,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
               onSuccess={onSuccess}
               onClose={handleClose}
               selectedTokenColor={selectedTokenColor}
+              rootTokenSymbol={rootTokenSymbol}
             />
           </ModalBody>
         </ModalContent>

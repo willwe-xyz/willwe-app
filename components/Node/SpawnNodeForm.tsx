@@ -40,6 +40,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { deployments, ABIs, getExplorerLink } from '../../config/contracts';
 import { validateToken } from '../../utils/tokenValidation';
 import { useTransaction } from '../../contexts/TransactionContext';
+import { useNodeData } from '../../hooks/useNodeData';
 
 interface Characteristic {
   title: string;
@@ -58,6 +59,7 @@ interface SpawnNodeFormProps {
   onSuccess?: () => void;
   onClose?: () => void;
   selectedTokenColor?: string;
+  rootTokenSymbol?: string;
 }
 
 const SpawnNodeForm = ({
@@ -65,7 +67,8 @@ const SpawnNodeForm = ({
   chainId,
   onSuccess,
   onClose,
-  selectedTokenColor = '#805AD5'
+  selectedTokenColor = '#805AD5',
+  rootTokenSymbol = 'PSC' // Default to PSC if not provided
 }: SpawnNodeFormProps) => {
   // Form state
   const [entityName, setEntityName] = useState('');
@@ -498,8 +501,8 @@ const SpawnNodeForm = ({
                     <NumberDecrementStepper />
                   </NumberInputStepper>
                 </NumberInput>
-                <Text fontSize="sm" color="gray.600" mt={2}>
-                  Daily rate: {ethers.formatEther(BigInt(inflationRate || 1) * BigInt(86400) * BigInt(10 ** 9))} PSC/day
+                <Text fontSize="sm" color="gray.600" mt={1}>
+                  Daily rate: {Number(ethers.formatEther(BigInt(inflationRate || 1) * BigInt(86400) * BigInt(10 ** 9))).toFixed(4)} {rootTokenSymbol}/day
                 </Text>
               </Box>
             </FormControl>

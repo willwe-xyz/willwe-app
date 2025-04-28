@@ -14,6 +14,7 @@ import ExistingSignalsTabRefactored from './ExistingSignalsTab/index';
 interface ExistingSignalsTabProps {
   nodeId: string;
   chainId: string;
+  tokenSymbol?: string;
   onSelectMembrane?: (membraneId: string) => void;
   onSelectInflation?: (inflationRate: string) => void;
 }
@@ -21,6 +22,7 @@ interface ExistingSignalsTabProps {
 const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
   nodeId,
   chainId,
+  tokenSymbol,
   onSelectMembrane,
   onSelectInflation,
 }) => {
@@ -29,6 +31,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
     <ExistingSignalsTabRefactored 
       nodeId={nodeId}
       chainId={chainId}
+      tokenSymbol={tokenSymbol}
       onSelectMembrane={onSelectMembrane}
       onSelectInflation={onSelectInflation}
     />
