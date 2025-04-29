@@ -1,53 +1,228 @@
-import { ActivityItem } from '../types/chainData';
+import { ActivityItem } from '@/types/chainData';
+import { resolveENS } from './ensUtils';
 
+export async function transformActivities(activities: any[]): Promise<ActivityItem[]> {
+  if (!Array.isArray(activities)) {
+    console.warn('transformActivities received non-array input:', activities);
+    return [];
+  }
 
+  const transformedActivities = await Promise.all(
+    activities.map(async (activity) => {
+      try {
+        // Ensure all required fields are present with defaults
+        const transformed: ActivityItem = {
+          id: activity.id || `activity-${Date.now()}-${Math.random()}`,
+          nodeId: activity.nodeId || activity.node_id || '0',
+          who: activity.who || activity.userAddress || activity.user_address || 'unknown',
+          eventName: activity.eventName || activity.eventName || 'Unknown Activity',
+          eventType: activity.eventType || activity.event_type || 'unknown',
+          when: activity.when || activity.timestamp || new Date().toISOString(),
+          createdBlockNumber: activity.createdBlockNumber || activity.blockNumber || 0,
+          network: activity.network || 'unknown',
+          networkId: activity.networkId || activity.chainId || '0',
+          description: activity.description || `Activity in node ${activity.nodeId || 'unknown'}`
+        };
 
-export function transformActivities(activities: ActivityItem[], includeDebug: boolean): ActivityItem[] {
-  return activities.map(activity => {
-    try {
-      // Ensure all required fields are present
-      const {
-        id,
-        nodeId,
-        who,
-        eventName,
-        eventType,
-        when,
-        createdBlockNumber,
-        network,
-        networkId,
-        amount,
-        tokenSymbol,
-      } = activity;
+        // Add optional fields if present
+        if (activity.amount) transformed.amount = activity.amount;
+        if (activity.tokenSymbol) transformed.tokenSymbol = activity.tokenSymbol;
 
-      // Generate a description based on the activity type
-      const description = generateDescription(activity);
+        return transformed;
+      } catch (error) {
+        console.error('Error transforming activity:', error);
+        return null;
+      }
+    })
+  );
 
-      return {
-        ...activity,
-        description,
-      };
-    } catch (error) {
-      console.error('Error transforming activity:', activity, error);
-      return {
-        ...activity,
-        description: 'Error processing activity',
-      };
-    }
-  });
+  // Filter out any null values from failed transformations
+  return transformedActivities.filter((activity): activity is ActivityItem => activity !== null);
 }
 
-function generateDescription(activity: ActivityItem): string {
-  const { eventType, amount, tokenSymbol, who } = activity;
-
-  switch (eventType) {
-    case 'mint':
-      return `${who} minted ${amount} ${tokenSymbol}`;
-    case 'burn':
-      return `${who} burned ${amount} ${tokenSymbol}`;
-    case 'transfer':
-      return `${who} transferred ${amount} ${tokenSymbol}`;
+async function generateActivityDescription(
+  activity: ActivityItem,
+  resolvedActor: string,
+  resolvedObject: string
+): Promise<string> {
+  const { verb, target, context } = activity;
+  
+  switch (verb) {
+    case 'joined':
+      return `${resolvedActor} joined the network`;
+    case 'left':
+      return `${resolvedActor} left the network`;
+    case 'created':
+      return `${resolvedActor} created ${resolvedObject}`;
+    case 'updated':
+      return `${resolvedActor} updated ${resolvedObject}`;
+    case 'deleted':
+      return `${resolvedActor} deleted ${resolvedObject}`;
+    case 'commented':
+      return `${resolvedActor} commented on ${resolvedObject}`;
+    case 'liked':
+      return `${resolvedActor} liked ${resolvedObject}`;
+    case 'shared':
+      return `${resolvedActor} shared ${resolvedObject}`;
+    case 'followed':
+      return `${resolvedActor} followed ${resolvedObject}`;
+    case 'unfollowed':
+      return `${resolvedActor} unfollowed ${resolvedObject}`;
+    case 'mentioned':
+      return `${resolvedActor} mentioned ${resolvedObject}`;
+    case 'tagged':
+      return `${resolvedActor} tagged ${resolvedObject}`;
+    case 'replied':
+      return `${resolvedActor} replied to ${resolvedObject}`;
+    case 'reacted':
+      return `${resolvedActor} reacted to ${resolvedObject}`;
+    case 'invited':
+      return `${resolvedActor} invited ${resolvedObject}`;
+    case 'accepted':
+      return `${resolvedActor} accepted ${resolvedObject}`;
+    case 'rejected':
+      return `${resolvedActor} rejected ${resolvedObject}`;
+    case 'requested':
+      return `${resolvedActor} requested ${resolvedObject}`;
+    case 'approved':
+      return `${resolvedActor} approved ${resolvedObject}`;
+    case 'denied':
+      return `${resolvedActor} denied ${resolvedObject}`;
+    case 'completed':
+      return `${resolvedActor} completed ${resolvedObject}`;
+    case 'started':
+      return `${resolvedActor} started ${resolvedObject}`;
+    case 'stopped':
+      return `${resolvedActor} stopped ${resolvedObject}`;
+    case 'paused':
+      return `${resolvedActor} paused ${resolvedObject}`;
+    case 'resumed':
+      return `${resolvedActor} resumed ${resolvedObject}`;
+    case 'archived':
+      return `${resolvedActor} archived ${resolvedObject}`;
+    case 'restored':
+      return `${resolvedActor} restored ${resolvedObject}`;
+    case 'moved':
+      return `${resolvedActor} moved ${resolvedObject}`;
+    case 'copied':
+      return `${resolvedActor} copied ${resolvedObject}`;
+    case 'renamed':
+      return `${resolvedActor} renamed ${resolvedObject}`;
+    case 'assigned':
+      return `${resolvedActor} assigned ${resolvedObject}`;
+    case 'unassigned':
+      return `${resolvedActor} unassigned ${resolvedObject}`;
+    case 'scheduled':
+      return `${resolvedActor} scheduled ${resolvedObject}`;
+    case 'unscheduled':
+      return `${resolvedActor} unscheduled ${resolvedObject}`;
+    case 'published':
+      return `${resolvedActor} published ${resolvedObject}`;
+    case 'unpublished':
+      return `${resolvedActor} unpublished ${resolvedObject}`;
+    case 'subscribed':
+      return `${resolvedActor} subscribed to ${resolvedObject}`;
+    case 'unsubscribed':
+      return `${resolvedActor} unsubscribed from ${resolvedObject}`;
+    case 'bookmarked':
+      return `${resolvedActor} bookmarked ${resolvedObject}`;
+    case 'unbookmarked':
+      return `${resolvedActor} unbookmarked ${resolvedObject}`;
+    case 'voted':
+      return `${resolvedActor} voted on ${resolvedObject}`;
+    case 'rated':
+      return `${resolvedActor} rated ${resolvedObject}`;
+    case 'reviewed':
+      return `${resolvedActor} reviewed ${resolvedObject}`;
+    case 'reported':
+      return `${resolvedActor} reported ${resolvedObject}`;
+    case 'blocked':
+      return `${resolvedActor} blocked ${resolvedObject}`;
+    case 'unblocked':
+      return `${resolvedActor} unblocked ${resolvedObject}`;
+    case 'muted':
+      return `${resolvedActor} muted ${resolvedObject}`;
+    case 'unmuted':
+      return `${resolvedActor} unmuted ${resolvedObject}`;
+    case 'verified':
+      return `${resolvedActor} verified ${resolvedObject}`;
+    case 'unverified':
+      return `${resolvedActor} unverified ${resolvedObject}`;
+    case 'featured':
+      return `${resolvedActor} featured ${resolvedObject}`;
+    case 'unfeatured':
+      return `${resolvedActor} unfeatured ${resolvedObject}`;
+    case 'pinned':
+      return `${resolvedActor} pinned ${resolvedObject}`;
+    case 'unpinned':
+      return `${resolvedActor} unpinned ${resolvedObject}`;
+    case 'locked':
+      return `${resolvedActor} locked ${resolvedObject}`;
+    case 'unlocked':
+      return `${resolvedActor} unlocked ${resolvedObject}`;
+    case 'hidden':
+      return `${resolvedActor} hidden ${resolvedObject}`;
+    case 'unhidden':
+      return `${resolvedActor} unhidden ${resolvedObject}`;
+    case 'delegated':
+      return `${resolvedActor} delegated ${resolvedObject}`;
+    case 'undelegated':
+      return `${resolvedActor} undelegated ${resolvedObject}`;
+    case 'transferred':
+      return `${resolvedActor} transferred ${resolvedObject}`;
+    case 'received':
+      return `${resolvedActor} received ${resolvedObject}`;
+    case 'sent':
+      return `${resolvedActor} sent ${resolvedObject}`;
+    case 'withdrawn':
+      return `${resolvedActor} withdrawn ${resolvedObject}`;
+    case 'deposited':
+      return `${resolvedActor} deposited ${resolvedObject}`;
+    case 'staked':
+      return `${resolvedActor} staked ${resolvedObject}`;
+    case 'unstaked':
+      return `${resolvedActor} unstaked ${resolvedObject}`;
+    case 'claimed':
+      return `${resolvedActor} claimed ${resolvedObject}`;
+    case 'burned':
+      return `${resolvedActor} burned ${resolvedObject}`;
+    case 'minted':
+      return `${resolvedActor} minted ${resolvedObject}`;
+    case 'swapped':
+      return `${resolvedActor} swapped ${resolvedObject}`;
+    case 'provided':
+      return `${resolvedActor} provided ${resolvedObject}`;
+    case 'removed':
+      return `${resolvedActor} removed ${resolvedObject}`;
+    case 'added':
+      return `${resolvedActor} added ${resolvedObject}`;
+    case 'modified':
+      return `${resolvedActor} modified ${resolvedObject}`;
+    case 'configured':
+      return `${resolvedActor} configured ${resolvedObject}`;
+    case 'initialized':
+      return `${resolvedActor} initialized ${resolvedObject}`;
+    case 'finalized':
+      return `${resolvedActor} finalized ${resolvedObject}`;
+    case 'cancelled':
+      return `${resolvedActor} cancelled ${resolvedObject}`;
+    case 'expired':
+      return `${resolvedActor} expired ${resolvedObject}`;
+    case 'renewed':
+      return `${resolvedActor} renewed ${resolvedObject}`;
+    case 'revoked':
+      return `${resolvedActor} revoked ${resolvedObject}`;
+    case 'granted':
+      return `${resolvedActor} granted ${resolvedObject}`;
+    case 'withdrawn':
+      return `${resolvedActor} withdrawn ${resolvedObject}`;
+    case 'executed':
+      return `${resolvedActor} executed ${resolvedObject}`;
+    case 'failed':
+      return `${resolvedActor} failed ${resolvedObject}`;
+    case 'succeeded':
+      return `${resolvedActor} succeeded ${resolvedObject}`;
     default:
-      return `${who} performed ${eventType}`;
+      return `${resolvedActor} ${verb} ${resolvedObject}`;
   }
 }

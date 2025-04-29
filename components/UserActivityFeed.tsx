@@ -49,7 +49,10 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
     
     try {
       const result = await getUserFeed(userAddress, chainId, 50, 0);
-      setActivities(result.events || []);
+      if (!result || !Array.isArray(result.events)) {
+        throw new Error('Invalid response format from getUserFeed');
+      }
+      setActivities(result.events);
       setPaginationMeta(result.meta || { total: 0, limit: 50, offset: 0, nodeCount: 0 });
       
       // Update debug info
@@ -83,52 +86,56 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
 
   // Transform activities when they change
   useEffect(() => {
-    if (activities.length) {
-      try {
-        const transformed = transformActivities(activities, true);
-        setTransformedActivities(transformed);
-        
-        // Update debug info
-        setDebugInfo(prev => ({
-          ...prev,
-          activitiesCount: activities.length,
-          transformedCount: transformed.length,
-          sampleActivity: activities[0],
-          sampleTransformed: transformed[0]
-        }));
-      } catch (err) {
-        console.error('Error transforming activities:', err);
-        toast({
-          title: 'Error processing activities',
-          description: err instanceof Error ? err.message : 'Unknown error in data transformation',
-          status: 'warning',
-          duration: 5000,
-          isClosable: true,
-        });
-        
-        // If transformation fails, create a simple version of the activities
-        const simpleActivities = activities.map((activity, index) => ({
-          id: activity.id || `activity-${index}`,
-          type: activity.eventType || 'unknown',
-          timestamp: activity.when || new Date().toISOString(),
-          title: activity.eventName || 'Unknown Activity',
-          description: `Activity related to node ${activity.nodeId}`,
-          node: {
-            id: activity.nodeId || '',
-            name: activity.nodeName || 'Unknown Node',
-            link: `/nodes/${chainId}/${activity.nodeId}`
-          },
-          network: activity.network || 'unknown',
-          user: {
-            address: activity.who || ''
-          }
-        }));
-        
-        setTransformedActivities(simpleActivities);
+    const transformAndSetActivities = async () => {
+      if (activities.length > 0) {
+        try {
+          const transformed = await transformActivities(activities);
+          setTransformedActivities(transformed);
+          
+          // Update debug info
+          setDebugInfo(prev => ({
+            ...prev,
+            activitiesCount: activities.length,
+            transformedCount: transformed.length,
+            sampleActivity: activities[0],
+            sampleTransformed: transformed[0]
+          }));
+        } catch (err) {
+          console.error('Error transforming activities:', err);
+          toast({
+            title: 'Error processing activities',
+            description: err instanceof Error ? err.message : 'Unknown error in data transformation',
+            status: 'warning',
+            duration: 5000,
+            isClosable: true,
+          });
+          
+          // If transformation fails, create a simple version of the activities
+          const simpleActivities = activities.map((activity, index) => ({
+            id: activity.id || `activity-${index}`,
+            type: activity.eventType || 'unknown',
+            timestamp: activity.when || new Date().toISOString(),
+            title: activity.eventName || 'Unknown Activity',
+            description: `Activity related to node ${activity.nodeId}`,
+            node: {
+              id: activity.nodeId || '',
+              name: activity.nodeName || 'Unknown Node',
+              link: `/nodes/${chainId}/${activity.nodeId}`
+            },
+            network: activity.network || 'unknown',
+            user: {
+              address: activity.who || ''
+            }
+          }));
+          
+          setTransformedActivities(simpleActivities);
+        }
+      } else {
+        setTransformedActivities([]);
       }
-    } else {
-      setTransformedActivities([]);
-    }
+    };
+
+    transformAndSetActivities();
   }, [activities, toast, chainId]);
 
   // Update debug info on mount
@@ -192,12 +199,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
       </Box>
       ) : (
       <ActivityFeed 
-        activities={transformedActivities.map((activity, index) => ({
-        ...activity,
-        // Ensure each activity has a unique id and valid timestamp to prevent previous errors
-        id: activity.id || `activity-${index}`,
-        when: activity.when || Date.now(),
-        }))} 
+        activities={transformedActivities}
         isLoading={isLoading || isPonderLoading} 
         error={combinedError ? combinedError.message : null}
         emptyStateMessage={`No activities found for this user. Activities will appear here when you interact with nodes or when activity occurs in nodes where you're a member.`}

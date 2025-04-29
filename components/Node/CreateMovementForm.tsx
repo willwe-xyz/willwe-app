@@ -13,28 +13,44 @@ import {
   FormErrorMessage,
   useToast,
   Progress,
-  HStack
+  HStack,
+  Box,
+  useColorModeValue,
+  Divider,
+  Badge,
+  Tooltip,
+  Icon,
 } from '@chakra-ui/react';
 import { MovementType } from '../../types/chainData';
 import { getEndpointActions } from '../../config/endpointActions';
 import { nodeIdToAddress } from '../../utils/formatters';
+import { Info, Plus } from 'lucide-react';
 
 interface CreateMovementFormProps {
   nodeData: any;
   onSubmit: (data: FormState) => Promise<void>;
   onClose: () => void;
+  selectedTokenColor?: string;
 }
 
 const CreateMovementForm: React.FC<CreateMovementFormProps> = ({ 
   nodeData,
   onSubmit,
-  onClose 
+  onClose,
+  selectedTokenColor = '#7C3AED' // Default to brand purple if no color provided
 }) => {
   const [formData, setFormData] = useState<FormState>(DEFAULT_FORM_STATE);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Theme colors
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const textColor = useColorModeValue('gray.700', 'gray.200');
+  const labelColor = useColorModeValue('gray.600', 'gray.400');
+  
   // Initialize validation based on action type
   const [validation, setValidation] = useState<MovementFormValidation>({
     target: true,
@@ -43,7 +59,7 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
     value: true,
     to: true
   });
-  // const { description, isUploading, error, uploadDescription } = useMovementDescription();
+  
   const toast = useToast();
 
   // ERC20 minimal ABI for transfer function
@@ -69,31 +85,51 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
   }
 
   const endpointOptions = useMemo(() => {
-    if (!nodeData?.movementEndpoints?.length) return [];
+    console.log('Node Data:', nodeData); // Debug log
+    console.log('Movement Endpoints:', nodeData?.movementEndpoints); // Debug log
     
-    return nodeData.movementEndpoints.map((endpoint: string) => ({
-      value: endpoint,
-      label: `${endpoint.slice(0, 6)}...${endpoint.slice(-4)}`,
-      authType: nodeData.childrenNodes.includes(endpoint) ? 
-        MovementType.AgentMajority : 
-        MovementType.EnergeticMajority,
-      balance: nodeData.basicInfo[2] // Use balance anchor
-    }));
-  }, [nodeData?.movementEndpoints, nodeData?.childrenNodes, nodeData?.basicInfo]);
+    // Always start with the "Create New Endpoint" option
+    const options = [{
+      value: 'new',
+      label: 'Create New Endpoint',
+      authType: formData.type || MovementType.AgentMajority,
+      balance: '0'
+    }];
+    
+    // Add existing endpoints if available
+    if (nodeData?.movementEndpoints) {
+      nodeData.movementEndpoints.forEach((endpoint: string) => {
+        if (!endpoint) return; // Skip if endpoint is empty/null
+        
+        options.push({
+          value: endpoint,
+          label: `${endpoint.slice(0, 6)}...${endpoint.slice(-4)}`,
+          authType: MovementType.AgentMajority, // Endpoints created through Execution.sol are always AgentMajority
+          balance: nodeData.basicInfo?.[2] || '0'
+        });
+      });
+    }
+    
+    console.log('Final options:', options); // Debug log
+    return options;
+  }, [nodeData?.movementEndpoints, nodeData?.basicInfo, formData.type]);
 
-  // Update the handleEndpointChange to allow movement type selection for new endpoints
   const handleEndpointChange = (endpoint: string) => {
-    const selectedEndpoint = endpointOptions.find((opt: {value: string, label: string, authType: number, balance: string}) => opt.value === endpoint);
+    const selectedEndpoint = endpointOptions.find(opt => opt.value === endpoint);
+    
+    if (!selectedEndpoint) return;
+    
     setFormData(prev => ({
       ...prev,
       endpoint,
-      // Only set the type if it's an existing endpoint
-      type: endpoint === 'new' ? prev.type : (selectedEndpoint ? selectedEndpoint.authType : prev.type),
-      target: selectedEndpoint ? selectedEndpoint.value : ethers.ZeroAddress,
+      // Lock movement type to the endpoint's auth type for existing endpoints
+      type: endpoint === 'new' ? prev.type : selectedEndpoint.authType,
+      // Set target to the endpoint address for existing endpoints
+      target: endpoint === 'new' ? ethers.ZeroAddress : endpoint,
       calldata: '0x',
       value: '0'
     }));
-    // Reset validations on endpoint change
+    
     setValidation({
       target: true,
       calldata: true,
@@ -103,9 +139,6 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
     });
     setTouchedFields({});
   };
-
-  // Allow movement type selection for new endpoints
-  const canSelectMovementType = formData.endpoint === 'new';
 
   const isValidHexString = (value: string) => /^0x[0-9a-fA-F]*$/.test(value);
 
@@ -448,106 +481,170 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
   };
 
   return (
-    <VStack spacing={4}>
-      <FormControl>
-        <FormLabel>Execution Endpoint</FormLabel>
-        <Select
-          value={formData.endpoint}
-          onChange={(e) => handleEndpointChange(e.target.value)}
-        >
-          <option value="new">Create New Execution Endpoint</option>
-          {endpointOptions.map((option: EndpointOption) => (
-            <option key={option.value} value={option.value}>
-              {option.label} {option.authType === MovementType.AgentMajority ? '(Agent)' : '(Value)'} - {ethers.formatEther(option.balance || '0')} tokens
-            </option>
-          ))}
-        </Select>
-        <FormHelperText>
-          {formData.endpoint === 'new' 
-            ? 'A new execution endpoint will be created for this movement'
-            : 'Using existing endpoint with matching authorization type'}
-        </FormHelperText>
-      </FormControl>
-
-      <FormControl>
-        <FormLabel>Movement Type</FormLabel>
-        <Select
-          value={formData.type}
-          onChange={(e) => handleInputChange('type', parseInt(e.target.value))}
-          isDisabled={!canSelectMovementType}
-        >
-          <option value={MovementType.AgentMajority}>Agent Majority</option>
-          <option value={MovementType.EnergeticMajority}>Value Majority</option>
-        </Select>
-        <FormHelperText>
-          {canSelectMovementType 
-            ? 'Select the type of consensus required for this movement' 
-            : 'Movement type is determined by the selected endpoint'}
-        </FormHelperText>
-      </FormControl>
-
-      <FormControl isInvalid={touchedFields.description && !validation.description}>
-        <FormLabel>Description</FormLabel>
-        <Textarea
-          value={typeof formData.description === 'string' ? formData.description : JSON.stringify(formData.description)}
-          onChange={(e) => handleInputChange('description', e.target.value)}
-          onBlur={() => setTouchedFields(prev => ({ ...prev, description: true }))}
-          placeholder="Describe the purpose of this movement..."
-          minH="100px"
-          isDisabled={isUploading}
-        />
-        <FormErrorMessage>
-          {error || 'Description must be at least 10 characters long'}
-        </FormErrorMessage>
-      </FormControl>
-
-      <FormControl>
-        <FormLabel>Expires In (Days)</FormLabel>
-        <HStack>
-          <Button 
-            onClick={() => handleInputChange('expiryDays', Math.max(1, formData.expiryDays - 1))}
-            aria-label="Decrease expiry days"
+    <VStack 
+      spacing={6} 
+      align="stretch"
+      p={4}
+      bg={bgColor}
+      borderRadius="lg"
+      borderWidth="1px"
+      borderColor={borderColor}
+    >
+      <Box>
+        <FormControl>
+          <FormLabel color={labelColor} display="flex" alignItems="center" gap={2}>
+            Execution Endpoint
+            <Tooltip 
+              label={
+                formData.endpoint === 'new' 
+                  ? 'Create a new execution endpoint for this movement'
+                  : 'Select an existing endpoint - movement type will match the endpoint\'s authorization type'
+              }
+              placement="top"
+            >
+              <Icon as={Info} boxSize={4} color="gray.400" />
+            </Tooltip>
+          </FormLabel>
+          <Select
+            value={formData.endpoint}
+            onChange={(e) => handleEndpointChange(e.target.value)}
+            borderColor={borderColor}
+            _hover={{ borderColor: selectedTokenColor }}
+            _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
           >
-            -
-          </Button>
-          <Input
-            type="number"
-            value={formData.expiryDays}
-            onChange={(e) => handleInputChange('expiryDays', e.target.value)}
-            onBlur={(e) => {
-              const value = parseInt(e.target.value);
-              handleInputChange('expiryDays', isNaN(value) ? 1 : Math.max(1, value));
-            }}
-            min={1}
-            textAlign="center"
-            width="80px"
+            {endpointOptions.map((option) => {
+              console.log('Rendering option:', option); // Debug log
+              return (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                  {option.value !== 'new' && (
+                    ` (${option.authType === MovementType.AgentMajority ? 'Agent' : 'Value'})`
+                  )}
+                </option>
+              );
+            })}
+          </Select>
+        </FormControl>
+      </Box>
+
+      <Divider borderColor={borderColor} />
+
+      <Box>
+        <FormControl>
+          <FormLabel color={labelColor} display="flex" alignItems="center" gap={2}>
+            Movement Type
+            <Tooltip label="Select the type of consensus required for this movement">
+              <Icon as={Info} boxSize={4} color="gray.400" />
+            </Tooltip>
+          </FormLabel>
+          <Select
+            value={formData.type}
+            onChange={(e) => handleInputChange('type', parseInt(e.target.value))}
+            isDisabled={formData.endpoint !== 'new'}
+            borderColor={borderColor}
+            _hover={{ borderColor: selectedTokenColor }}
+            _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+          >
+            <option value={MovementType.AgentMajority}>Agent Majority</option>
+            <option value={MovementType.EnergeticMajority}>Value Majority</option>
+          </Select>
+          <FormHelperText color={labelColor}>
+            {formData.endpoint !== 'new' 
+              ? 'Movement type is determined by the selected endpoint'
+              : 'Select the type of consensus required for this movement'}
+          </FormHelperText>
+        </FormControl>
+      </Box>
+
+      <Divider borderColor={borderColor} />
+
+      <Box>
+        <FormControl isInvalid={touchedFields.description && !validation.description}>
+          <FormLabel color={labelColor}>Description</FormLabel>
+          <Textarea
+            value={typeof formData.description === 'string' ? formData.description : JSON.stringify(formData.description)}
+            onChange={(e) => handleInputChange('description', e.target.value)}
+            onBlur={() => setTouchedFields(prev => ({ ...prev, description: true }))}
+            placeholder="Describe the purpose of this movement..."
+            minH="100px"
+            isDisabled={isUploading}
+            borderColor={borderColor}
+            _hover={{ borderColor: selectedTokenColor }}
+            _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
           />
-          <Button 
-            onClick={() => handleInputChange('expiryDays', formData.expiryDays + 1)}
-            aria-label="Increase expiry days"
-          >
-            +
-          </Button>
-        </HStack>
-        <FormHelperText>Number of days until this movement expires</FormHelperText>
-      </FormControl>
+          <FormErrorMessage>
+            {error || 'Description must be at least 10 characters long'}
+          </FormErrorMessage>
+        </FormControl>
+      </Box>
 
-      <FormControl isRequired>
-        <FormLabel>Action Type</FormLabel>
-        <Select
-          value={formData.actionType || 'customCall'}
-          onChange={(e) => handleActionChange(e.target.value)}
-        >
-          {getActionOptions.map(action => (
-            <option key={action.id} value={action.id}>
-              {action.label}
-            </option>
-          ))}
-        </Select>
-        <FormHelperText>
-          {getActionOptions.find(a => a.id === formData.actionType)?.description}
-        </FormHelperText>
-      </FormControl>
+      <Box>
+        <FormControl>
+          <FormLabel color={labelColor}>Expires In (Days)</FormLabel>
+          <HStack>
+            <Button 
+              onClick={() => handleInputChange('expiryDays', Math.max(1, formData.expiryDays - 1))}
+              aria-label="Decrease expiry days"
+              colorScheme="gray"
+              variant="outline"
+              size="sm"
+            >
+              -
+            </Button>
+            <Input
+              type="number"
+              value={formData.expiryDays}
+              onChange={(e) => handleInputChange('expiryDays', e.target.value)}
+              onBlur={(e) => {
+                const value = parseInt(e.target.value);
+                handleInputChange('expiryDays', isNaN(value) ? 1 : Math.max(1, value));
+              }}
+              min={1}
+              textAlign="center"
+              width="80px"
+              borderColor={borderColor}
+              _hover={{ borderColor: selectedTokenColor }}
+              _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+            />
+            <Button 
+              onClick={() => handleInputChange('expiryDays', formData.expiryDays + 1)}
+              aria-label="Increase expiry days"
+              colorScheme="gray"
+              variant="outline"
+              size="sm"
+            >
+              +
+            </Button>
+          </HStack>
+          <FormHelperText color={labelColor}>
+            Number of days until this movement expires
+          </FormHelperText>
+        </FormControl>
+      </Box>
+
+      <Divider borderColor={borderColor} />
+
+      <Box>
+        <FormControl isRequired>
+          <FormLabel color={labelColor}>Action Type</FormLabel>
+          <Select
+            value={formData.actionType || 'customCall'}
+            onChange={(e) => handleActionChange(e.target.value)}
+            borderColor={borderColor}
+            _hover={{ borderColor: selectedTokenColor }}
+            _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+          >
+            {getActionOptions.map(action => (
+              <option key={action.id} value={action.id}>
+                {action.label}
+              </option>
+            ))}
+          </Select>
+          <FormHelperText color={labelColor}>
+            {getActionOptions.find(a => a.id === formData.actionType)?.description}
+          </FormHelperText>
+        </FormControl>
+      </Box>
 
       {/* Dynamic fields based on selected action */}
       {renderDynamicFields()}
@@ -559,12 +656,21 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
         isLoading={isSubmitting || isUploading}
         loadingText={isUploading ? "Uploading Description..." : "Creating Movement..."}
         isDisabled={!Object.values(validation).every(Boolean)}
+        bg={selectedTokenColor}
+        _hover={{ bg: `${selectedTokenColor}90` }}
+        _active={{ bg: `${selectedTokenColor}80` }}
       >
         Create Movement
       </Button>
 
       {(isSubmitting || isUploading) && (
-        <Progress size="xs" isIndeterminate width="100%" colorScheme="purple" />
+        <Progress 
+          size="xs" 
+          isIndeterminate 
+          width="100%" 
+          colorScheme="purple"
+          bg={`${selectedTokenColor}20`}
+        />
       )}
     </VStack>
   );

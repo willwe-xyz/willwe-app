@@ -220,12 +220,12 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
               borderRadius="lg"
               bg={`${selectedTokenColor}10`}
             >
-              <Activity size={20} color={selectedTokenColor} />
+              <Activity size={14} color={selectedTokenColor} />
             </Box>
-            <Heading size="md">Network Activity</Heading>
+            <Heading size="sm">Network Activity</Heading>
           </HStack>
           <Button 
-            size="sm" 
+            size="sx" 
             onClick={handleRefresh} 
             isLoading={isLoading || isPonderLoading}
             borderColor={selectedTokenColor}
