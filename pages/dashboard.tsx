@@ -10,7 +10,8 @@ import {
   AlertIcon, 
   useToast,
   Grid,
-  GridItem
+  GridItem,
+  Button
 } from '@chakra-ui/react';
 import { MainLayout } from '../components/Layout/MainLayout';
 import { RootNodeDetails } from '../components/RootNodeDetails';
@@ -52,8 +53,8 @@ export default function DashboardPage() {
   // Find supported networks from deployments
   const supportedChainIds = Object.keys(deployments.WillWe);
   
-  // Default to a valid chain ID where WillWe is deployed (e.g. Optimism Sepolia)
-  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '11155420';
+  // Default to Base chain ID
+  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '84532';
   
   // Get chain ID from URL, wallet, or default to a supported chain
   let chainId = router.query.chainId as string || wallets[0]?.chainId?.replace('eip155:', '');
@@ -67,23 +68,60 @@ export default function DashboardPage() {
   
   // Update URL if needed to reflect the correct chain
   useEffect(() => {
-    if (ready && !isValidChain && router.isReady) {
-      router.replace({
-        pathname: router.pathname,
-        query: { 
-          ...router.query,
-          chainId: defaultChainId 
-        }
-      }, undefined, { shallow: true });
+    if (ready && router.isReady) {
+      const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
       
-      console.log({
-        title: "Network Changed",
-        description: `Switched to supported network (Chain ID: ${defaultChainId})`,
-        status: "info",
+      // If user is on a supported network, switch to it
+      if (walletChainId && supportedChainIds.includes(walletChainId) && walletChainId !== effectiveChainId) {
+        router.replace({
+          pathname: router.pathname,
+          query: { 
+            ...router.query,
+            chainId: walletChainId 
+          }
+        }, undefined, { shallow: true });
+      }
+      // If user is on an unsupported network, switch to default
+      else if (!isValidChain) {
+        router.replace({
+          pathname: router.pathname,
+          query: { 
+            ...router.query,
+            chainId: defaultChainId 
+          }
+        }, undefined, { shallow: true });
+        
+        toast({
+          title: "Network Changed",
+          description: `Switched to supported network (Chain ID: ${defaultChainId})`,
+          status: "info",
+          duration: 5000,
+        });
+      }
+    }
+  }, [ready, isValidChain, router, defaultChainId, toast, wallets, supportedChainIds, effectiveChainId]);
+
+  // Handle network switch
+  const handleSwitchNetwork = async () => {
+    if (!wallets[0]) return;
+    
+    try {
+      await wallets[0].switchChain(Number(defaultChainId));
+      toast({
+        title: "Network Switched",
+        description: `Successfully switched to Chain ID: ${defaultChainId}`,
+        status: "success",
+        duration: 5000,
+      });
+    } catch (error) {
+      toast({
+        title: "Network Switch Failed",
+        description: error instanceof Error ? error.message : "Failed to switch network",
+        status: "error",
         duration: 5000,
       });
     }
-  }, [ready, isValidChain, router, defaultChainId]);
+  };
 
   // Fetch nodes data (using the validated chainId)
   const { 
@@ -146,17 +184,29 @@ export default function DashboardPage() {
     </Box>
   );
 
-  // Display notification when using a different chain than user's wallet
+  // Display notification when using an unsupported network
   const renderChainMismatchWarning = () => {
     const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
-    if (walletChainId && walletChainId !== effectiveChainId) {
+    if (walletChainId && !supportedChainIds.includes(walletChainId)) {
       return (
         <Alert status="warning" mb={4}>
           <AlertIcon />
-          <Text>
-            Your wallet is connected to a different network (Chain ID: {walletChainId}). 
-            This dashboard is displaying data for Chain ID: {effectiveChainId}.
-          </Text>
+          <Box flex="1">
+            <Text>
+              Your wallet is connected to an unsupported network (Chain ID: {walletChainId}). 
+              Please switch to a supported network to continue.
+            </Text>
+            <Button
+              size="sm"
+              colorScheme="yellow"
+              variant="outline"
+              ml={4}
+              mt={2}
+              onClick={handleSwitchNetwork}
+            >
+              Switch to Base (Chain ID: {defaultChainId})
+            </Button>
+          </Box>
         </Alert>
       );
     }

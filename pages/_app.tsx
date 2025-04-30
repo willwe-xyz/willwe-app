@@ -97,15 +97,11 @@ function MyApp(props: AppProps) {
           appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
           config={{
             loginMethods: ['wallet', 'farcaster', 'email'],
-            defaultChain: taikoHekla,
+            defaultChain: base,
             supportedChains: [
-              localhost,
-              baseSepolia,
               base,
-              taikoHekla,
-              taiko,
-              optimismSepolia,
-              optimism
+              baseSepolia,
+              optimismSepolia
             ],
             appearance: {
               theme: 'light',
@@ -113,8 +109,8 @@ function MyApp(props: AppProps) {
               showWalletLoginFirst: true,
             },
             embeddedWallets: {
-              noPrompt: true,
-            },
+              noPromptOnSignature: false
+            }
           }}
         >
           <WagmiProvider config={config}>
