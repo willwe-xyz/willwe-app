@@ -24,32 +24,41 @@ type ABIKP = { [key: string]: InterfaceAbi };
 //   Control [0,1]: 0x4f536e57DaAE247d88978a2E7fc613e2D454dD36 0x0000000000000000000000000000000000000000
 //   Will Price in ETH: 1000000000
 
+// === Final Deployment Addresses === Base Mainnet
+//   Will: 0xcbA568d1B4A109dD27cDFd0e6912371757228D5E
+//   Membrane: 0x22de6fC419db073ABCb639bF09167a9dF282Eaf1
+//   Execution: 0x3c5fb94ba7209e6F276B9002902A124Af07Fc713
+//   WillWe: 0xFAd753cE0DA676c3BdF0499d1Aba05796908CE28
+//   Kibern Director: 0x0000000000000000000000000000000000000000
+//   Control [0,1]: 0xcE7D363b53A6909379769BD02E6A32F7Fcf307E5 0x0000000000000000000000000000000000000000
+//   Will Price in ETH: 1000000000
+
 export const deployments: Deployments = {
     "Will": {
         "84532": "0x912Ecd9E3460ac06a58203548Fcf251D16905996", /// Base Sepolia
         "11155420": "0x0b0bF864988c9F9BB101360c12247A5FffCBCc99", /// OP Sepolia
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6", /// Base Sepolia
-        "8453" : "0x0000000000000000000000000000000000000000" /// Base Mainnet
+        "8453" : "0xcbA568d1B4A109dD27cDFd0e6912371757228D5E" /// Base Mainnet
     },
     "Membrane": {
         "84532": "0x7C2120cf9ba204cc3C7A3546C3f1F683e2b3484D",
         "11155420": "0x2fD4AF362a6cf34236B9b12056c23946d1BE10d5",
         "167009" : "0x07BC28304C6D0fb926F25B1917c1F64BeF1587Ac",
-        "8453" : "0x0000000000000000000000000000000000000000" /// Base Mainnet
+        "8453" : "0x22de6fC419db073ABCb639bF09167a9dF282Eaf1" /// Base Mainnet
 
     },
     "Execution": {
         "84532": "0x7cbC260971aFa9f748eF530396A77C1cB6aB8925",
         "11155420": "0xD488915b3Ea8707a87D278928029Dd1cD46C00c2",
         "167009" : "0x3d7A9839935333C7C373e1338C12B593F78318D3",
-        "8453" : "0x0000000000000000000000000000000000000000" /// Base Mainnet
+        "8453" : "0x3c5fb94ba7209e6F276B9002902A124Af07Fc713" /// Base Mainnet
 
     },
     "WillWe": {
         "84532": "0x81fc83ef76eadfB6653eC77BFD10bb2926F4b2Ff",
         "11155420": "0xbb3388475F387d93d5E8ba709F05717c5Ee8C344",
         "167009" : "0x88AB91578876A7fC13F9F4A9332083Ddfb062049",
-        "8453" : "0x0000000000000000000000000000000000000000" /// Base Mainnet
+        "8453" : "0xFAd753cE0DA676c3BdF0499d1Aba05796908CE28" /// Base Mainnet
 
     }
 };
@@ -111,7 +120,7 @@ export function getAlchemyNetwork(chainId: number | string): Network {
 
 
 export const ABIs: ABIKP = {
-    "WillWe" :[
+    "WillWe" :  [
         {
             "type": "constructor",
             "inputs": [
