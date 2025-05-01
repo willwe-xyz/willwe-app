@@ -19,7 +19,6 @@ export function useRootNodes(chainId: string, tokenAddress: string, userAddress?
 
     try {
       setIsLoading(true);
-      console.log('Fetching nodes for:', { chainId, tokenAddress, userAddress: addressToUse });
       
       const cleanChainId = chainId.replace('eip155:', '');
       const willWeAddress = deployments.WillWe[cleanChainId];
@@ -32,7 +31,6 @@ export function useRootNodes(chainId: string, tokenAddress: string, userAddress?
       const contract = new ethers.Contract(willWeAddress, ABIs.WillWe, provider);
 
       const nodesData = await contract.getAllNodesForRoot(tokenAddress, addressToUse);
-      console.log('Received nodes data:', nodesData);
 
       setData(nodesData);
       setError(null);

@@ -48,15 +48,11 @@ export function useMembraneOperations(chainId: string) {
 
           const receipt = await tx.wait();
 
-          console.log('Transaction receipt logs:', JSON.stringify(receipt.logs, null, 2));
-          
           // The event signature for MembraneCreated(address,uint256,string)
           const membraneCreatedSignature = ethers.id("MembraneCreated(address,uint256,string)");
           
           const membraneCreatedLog = receipt.logs.find((log: any) => {
             try {
-              console.log('Checking log topic:', log.topics[0]);
-              console.log('Expected topic:', membraneCreatedSignature);
               return log.topics[0] === membraneCreatedSignature;
             } catch (e) {
               console.error('Error checking log topic:', e);
@@ -65,12 +61,9 @@ export function useMembraneOperations(chainId: string) {
           });
           
           if (!membraneCreatedLog) {
-            console.log('All log topics:', receipt.logs.map((log: any) => log.topics[0]));
             throw new Error('Failed to find MembraneCreated event in logs');
           }
 
-          console.log('Found membrane event:', membraneCreatedLog);
-          
           // Extract membraneId from the data field since parameters are not indexed
           let membraneId;
           try {
@@ -84,8 +77,6 @@ export function useMembraneOperations(chainId: string) {
               membraneCreatedLog.data
             );
             
-            console.log('Decoded event data:', decodedData);
-            
             // The membraneId is the second parameter (index 1)
             membraneId = decodedData[1].toString();
             
@@ -97,8 +88,6 @@ export function useMembraneOperations(chainId: string) {
             throw new Error('Failed to parse membrane ID from transaction logs');
           }
           
-          console.log('Membrane created with ID:', membraneId);
-
           return tx;
         },
         {

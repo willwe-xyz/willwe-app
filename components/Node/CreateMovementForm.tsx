@@ -85,9 +85,6 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
   }
 
   const endpointOptions = useMemo(() => {
-    console.log('Node Data:', nodeData); // Debug log
-    console.log('Movement Endpoints:', nodeData?.movementEndpoints); // Debug log
-    
     // Always start with the "Create New Endpoint" option
     const options = [{
       value: 'new',
@@ -110,7 +107,6 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
       });
     }
     
-    console.log('Final options:', options); // Debug log
     return options;
   }, [nodeData?.movementEndpoints, nodeData?.basicInfo, formData.type]);
 
@@ -261,12 +257,6 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
             amount
           ]);
 
-          console.log('Token transfer parameters:', {
-            to: recipient,
-            amount: amount.toString(),
-            encodedCalldata: transferCalldata
-          });
-
           innerCall = {
             target: targetAddress,
             callData: transferCalldata,
@@ -304,18 +294,10 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
         throw new Error('Invalid calldata format');
       }
 
-      console.log('Inner call to be encoded:', {
-        target: innerCall.target,
-        callData: innerCall.callData,
-        value: innerCall.value
-      });
-
       const encodedCalldata = multicallInterface.encodeFunctionData('tryAggregate', [
         true, // requireSuccess
         [innerCall]
       ]);
-
-      console.log('Encoded tryAggregate calldata:', encodedCalldata);
 
       // Prepare final submission data
       const submissionData = {
@@ -513,7 +495,6 @@ const CreateMovementForm: React.FC<CreateMovementFormProps> = ({
             _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
           >
             {endpointOptions.map((option) => {
-              console.log('Rendering option:', option); // Debug log
               return (
                 <option key={option.value} value={option.value}>
                   {option.label}

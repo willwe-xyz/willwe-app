@@ -265,8 +265,6 @@ export function usePonderData() {
       };
       
       // Send message to the server API with correct endpoint
-      // Log the message data for debugging
-      console.log('Sending chat message data:', messageData);
       
       // Use fetch with our Next.js API endpoint (not directly to Ponder)
       const response = await fetch('/api/chat/messages', {
@@ -286,7 +284,6 @@ export function usePonderData() {
       const data = await response.json();
       setIsLoading(false);
       
-      console.log('Message sent successfully:', data);
       return data;
     } catch (err) {
       console.error('Error sending chat message:', err);
@@ -294,12 +291,10 @@ export function usePonderData() {
       setIsLoading(false);
       
       // Local storage fallback is removed since we're just using the Ponder server directly
-      console.log("Using Ponder server directly for chat messages");
       
       // For backwards compatibility, keep this stub
       try {
         if (typeof window !== 'undefined') {
-          console.log("Local storage fallback is disabled"); 
           const newMessage = {
             id: `remote-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
             nodeId,
@@ -310,8 +305,7 @@ export function usePonderData() {
           };
           
           // Don't actually modify localStorage, just log for debugging
-          console.log("Would have added message:", newMessage);
-          // Don't actually store in localStorage
+          console.log("Local storage fallback is disabled");
           return newMessage;
         }
       } catch (localError) {
@@ -397,7 +391,6 @@ export function usePonderData() {
    * Get user feed based on nodes they are members of
    */
   const getUserFeed = useCallback(async (userAddress: string, networkId: string, limit = 50, offset = 0) => {
-    console.log('Fetching user feed for address:', userAddress, 'and networkId:', networkId);
     if (!userAddress) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     
     setIsLoading(true);
@@ -444,7 +437,6 @@ export function usePonderData() {
    * Get events for a root node and all its derived nodes
    */
   const getRootNodeEvents = useCallback(async (rootNodeId: string, networkId: string, limit = 50, offset = 0) => {
-    console.log('Fetching root node events for rootNodeId:', rootNodeId, 'and networkId:', networkId);
     if (!rootNodeId) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     
     setIsLoading(true);

@@ -15,9 +15,6 @@ export const useNodeData = (chainId: string, userAddress: string, nodeId: string
         const nodeIdBN = ethers.toBigInt(nodeId);
         const data = await contract.getNodeData(nodeIdBN, userAddress);
         
-        // Log the raw data for debugging
-        console.log('Raw node data:', data);
-
         // Validate and transform the data
         if (!data || !Array.isArray(data.basicInfo) || data.basicInfo.length < 12) {
           throw new Error('Invalid node data structure');

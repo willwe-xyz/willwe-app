@@ -49,9 +49,7 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         provider
       );
 
-      console.log('Fetching movements for node:', nodeId);
       const rawMovements = await executionContract.getLatentMovements(nodeId);
-      console.log('Raw movements:', rawMovements);
 
       // Process only valid movements
       const processedMovements = rawMovements
@@ -71,8 +69,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
           }
         })
         .filter((m: any) => m !== null && m.signatureQueue.state !== SignatureQueueState.Stale);
-
-      console.log('Processed movements:', processedMovements);
 
       // Calculate signature progress for each movement
       const signatureDetails = await Promise.all(
@@ -222,8 +218,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         executedPayload: movement.movement.executedPayload
       };
       
-      console.log('Formatted movement:', formattedMovement);
-      
       // Define EIP-712 domain and types
       const domain = {
         name: 'WillWe.xyz',
@@ -251,8 +245,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         formattedMovement
       );
       
-      console.log('EIP-712 signature:', signature);
-      
       // Verify locally that the signature is correct
       const recoveredAddress = ethers.verifyTypedData(
         domain,
@@ -261,12 +253,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         signature
       );
       
-      console.log('Local verification:', {
-        recoveredAddress,
-        expectedSigner: signerAddress,
-        match: recoveredAddress.toLowerCase() === signerAddress.toLowerCase()
-      });
-
       // Always create arrays at least as long as existing ones
       const currentLength = movement.signatureQueue.Signers.length;
       const signers = Array(Math.max(currentLength, 1)).fill(ethers.ZeroAddress);
@@ -295,15 +281,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
         }
       }
 
-      console.log('Submitting signatures:', {
-        movementHash: movement.movementHash,
-        existingIndex,
-        signers,
-        signatures,
-        currentLength,
-        newLength: signers.length
-      });
-      
       return await executeTransaction(
         chainId,
         async () => {
@@ -363,14 +340,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
             ABIs.Execution,
             signer as unknown as ethers.Signer
           );
-
-          console.log('Removing signature:', {
-            movementHash: movement.movementHash,
-            signerIndex,
-            signerAddress,
-            currentSigners: movement.signatureQueue.Signers,
-            currentSignatures: movement.signatureQueue.Sigs
-          });
 
           // Call removeSignature with the exact index where the signature is found
           return executionContract.removeSignature(
@@ -464,8 +433,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
   };
 
   const processMovementData = (rawMovement: any): LatentMovement => {
-    console.log('Processing movement:', rawMovement);
-
     // Extract movement data, ensuring all required fields are present
     const movement = {
       category: Number(rawMovement.movement.category || 0),
@@ -492,7 +459,6 @@ export const useMovements = ({ nodeId, chainId, userAddress }: UseMovementsProps
       movementHash: rawMovement.movementHash
     };
 
-    console.log('Processed movement result:', processed);
     return processed;
   };
 

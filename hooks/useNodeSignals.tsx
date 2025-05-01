@@ -136,7 +136,6 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
       }
       
       const result = await response.json();
-      console.log('Node config signals API response:', result);
       
       // Process raw signals into categorized signals based on signalType
       const processedSignals: ProcessedSignals = {
@@ -174,7 +173,6 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
       // Update the result with processed signals
       result.signals = processedSignals;
       
-      console.log('Processed signals:', processedSignals);
       setData(result);
     } catch (err) {
       console.error('Error fetching node config signals:', err);
