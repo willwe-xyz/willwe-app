@@ -21,10 +21,12 @@ import {
   LogIn,
   Coins,
   Users,
-  Plus 
+  Plus,
+  DollarSign 
 } from 'lucide-react';
-import  CreateToken  from './CreateToken';
+import CreateToken from './CreateToken';
 import { DefineEntity } from './DefineEntity';
+import WillTokenPanel from './WillTokenPanel';
 
 interface HeaderButtonsProps {
   userAddress: string;
@@ -47,7 +49,8 @@ export default function HeaderButtons({
   buttonHoverBg = 'purple.50',
   selectedTokenColor,
 }: HeaderButtonsProps) {
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isComposeOpen, onOpen: onComposeOpen, onClose: onComposeClose } = useDisclosure();
+  const { isOpen: isWillOpen, onOpen: onWillOpen, onClose: onWillClose } = useDisclosure();
 
   const modalContentStyles = {
     maxH: 'calc(100vh - 200px)',
@@ -73,11 +76,23 @@ export default function HeaderButtons({
   return (
     <>
       <HStack spacing={4}>
-        {/* Compose Button - Always Visible */}
+        
+        {/* Will Button */}
+        <Tooltip label="Will Token Operations">
+          <Button
+            leftIcon={<DollarSign size={18} />}
+            onClick={onWillOpen}
+            {...buttonStyles}
+          >
+            $will
+          </Button>
+        </Tooltip>
+
+        {/* Compose Button */}
         <Tooltip label="Create new token or entity">
           <Button
             leftIcon={<Plus size={18} />}
-            onClick={onOpen}
+            onClick={onComposeOpen}
             {...buttonStyles}
           >
             Compose
@@ -104,10 +119,45 @@ export default function HeaderButtons({
         )}
       </HStack>
 
+      {/* Will Modal */}
+      <Modal 
+        isOpen={isWillOpen} 
+        onClose={onWillClose}
+        size="4xl"
+        isCentered
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay 
+          bg="blackAlpha.300"
+          backdropFilter="blur(10px)"
+        />
+        <ModalContent 
+          sx={modalContentStyles}
+          maxW="1000px"
+          bg="white"
+          rounded="lg"
+          shadow="xl"
+          overflow="hidden"
+        >
+          <ModalHeader 
+            borderBottom="1px solid"
+            borderColor="gray.100"
+          >
+            Will Token
+            <ModalCloseButton />
+          </ModalHeader>
+          <WillTokenPanel 
+            chainId={chainId}
+            userAddress={userAddress}
+            onClose={onWillClose}
+          />
+        </ModalContent>
+      </Modal>
+
       {/* Compose Modal */}
       <Modal 
-        isOpen={isOpen} 
-        onClose={onClose}
+        isOpen={isComposeOpen} 
+        onClose={onComposeClose}
         size="4xl"
         isCentered
         motionPreset="slideInBottom"
@@ -175,7 +225,7 @@ export default function HeaderButtons({
                   <CreateToken
                     chainId={chainId}
                     userAddress={userAddress}
-                    onSuccess={onClose}
+                    onSuccess={onComposeClose}
                   />
                 </TabPanel>
                 <TabPanel h="full" p={0}>
