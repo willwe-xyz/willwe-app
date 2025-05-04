@@ -352,8 +352,8 @@ const SpawnNodeForm = ({
                       <Table size="sm" variant="simple">
                         <Thead bg="gray.50">
                           <Tr>
-                            <Th>Title</Th>
-                            <Th>Link</Th>
+                            <Th>Label</Th>
+                            <Th>Value</Th>
                             <Th width="50px"></Th>
                           </Tr>
                         </Thead>
@@ -362,10 +362,14 @@ const SpawnNodeForm = ({
                             <Tr key={idx}>
                               <Td fontWeight="medium">{char.title}</Td>
                               <Td>
-                                <Link href={char.link} isExternal color="purple.500">
-                                  {char.link.substring(0, 30)}...
-                                  <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
-                                </Link>
+                                {char.link.startsWith('http') || char.link.startsWith('www') ? (
+                                  <Link href={char.link} isExternal color="purple.500">
+                                    {char.link.substring(0, 30)}...
+                                    <ExternalLink size={12} style={{ display: 'inline', marginLeft: '4px' }} />
+                                  </Link>
+                                ) : (
+                                  <Text>{char.link}</Text>
+                                )}
                               </Td>
                               <Td>
                                 <IconButton

@@ -1154,7 +1154,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
               </Button>
             </Tooltip>
 
-            <Tooltip label="Mint tokens">
+            <Tooltip label="Mint token">
               <Button
                 leftIcon={<Plus size={16} color={selectedTokenColor} />}
                 onClick={() => setActiveModal('mint')}
@@ -1222,7 +1222,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
           <ModalHeader borderBottom="1px solid" borderColor="gray.200">
-            Mint Tokens
+            Mint Node Shares
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
@@ -1240,7 +1240,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent mx={4} bg="white" shadow="xl" borderRadius="xl">
           <ModalHeader borderBottom="1px solid" borderColor="gray.200">
-            Burn Tokens
+            Burn Node Shares
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>

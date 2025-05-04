@@ -13,7 +13,7 @@ import {
   useColorModeValue,
   Grid
 } from '@chakra-ui/react';
-import { Copy, ChevronRight } from 'lucide-react';
+import { Copy, ChevronRight, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
@@ -48,6 +48,15 @@ interface NodeMetrics {
 interface MemberData {
   address: string;
   ensName: string | null;
+}
+
+// Add interface for membrane characteristics
+interface MembraneMetadata {
+  name: string;
+  characteristics: Array<{
+    title: string;
+    link: string;
+  }>;
 }
 
 const calculateMetrics = (node: NodeState): NodeMetrics => {
@@ -99,8 +108,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   tokenSymbol
 }) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
+  const [membraneCharacteristics, setMembraneCharacteristics] = useState<Array<{title: string; link: string}>>([]);
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
+  const [isLoadingCharacteristics, setIsLoadingCharacteristics] = useState(true);
   const toast = useToast();
+  const [expandedCharIndex, setExpandedCharIndex] = useState<number | null>(null);
 
   const borderColor = useColorModeValue('gray.100', 'gray.700');
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -132,26 +144,31 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   const [copied, setCopied] = useState(false);
   console.log("Ndoe State: ",node);
   useEffect(() => {
-    const fetchMembraneTitle = async () => {
+    const fetchMembraneMetadata = async () => {
       if (!node?.membraneMeta) {
         setIsLoadingTitle(false);
+        setIsLoadingCharacteristics(false);
         return;
       }
 
       try {
         setIsLoadingTitle(true);
+        setIsLoadingCharacteristics(true);
         const response = await fetch(`${IPFS_GATEWAY}${node.membraneMeta}`);
         const data = await response.json();
         setMembraneTitle(data.name || 'Unnamed Membrane');
+        setMembraneCharacteristics(data.characteristics || []);
       } catch (error) {
-        console.error('Error fetching membrane title:', error);
+        console.error('Error fetching membrane metadata:', error);
         setMembraneTitle('Unknown Membrane');
+        setMembraneCharacteristics([]);
       } finally {
         setIsLoadingTitle(false);
+        setIsLoadingCharacteristics(false);
       }
     };
 
-    fetchMembraneTitle();
+    fetchMembraneMetadata();
   }, [node]);
 
   const formatCurrency = (value: string) => {
@@ -276,6 +293,9 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
     };
   };
 
+  // Helper to check if a string is a link
+  const isLink = (link: string | undefined) => link && link.startsWith('http');
+
   return (
     <Box
       bg={bgColor}
@@ -305,11 +325,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
         px={3}
         pb={3}
       >
-        {/* Left column - Stats */}
+        {/* Left column - Stats, Characteristics, Members */}
         <VStack
           w="67%"
           align="stretch"
-          spacing={3}
+          spacing={4}
           overflowY="auto"
           minH={0}
         >
@@ -388,65 +408,156 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             </Box>
           </Grid>
 
-          {/* Members section */}
-          {node.membersOfNode && node.membersOfNode.length > 0 && (
-            <Box
-              flex={1}
-              bg={cardBg}
-              borderRadius="lg"
-              borderWidth="1px"
-              borderColor={borderColor}
-              overflowY="auto"
-              minH={0}
-            >
-              <VStack align="stretch" spacing={2} p={3}>
-                <HStack justify="space-between">
-                  <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
-                  <Badge colorScheme="purple" variant="subtle" borderRadius="full">
-                    Active
-                  </Badge>
-                </HStack>
-                
-                <Box 
-                  sx={{
-                    '&::-webkit-scrollbar': {
-                      width: '4px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      width: '6px',
-                      bg: 'transparent',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      bg: 'gray.300',
-                      borderRadius: '24px',
-                    },
-                  }}
-                >
-                  {memberData.map(({ address, ensName }, index) => (
-                    <HStack
-                      key={index}
-                      py={1.5}
-                      px={2}
-                      borderRadius="md"
-                      _hover={{ bg: hoverBg }}
-                      transition="all 0.2s"
-                    >
-                      <Text fontSize="sm" isTruncated>
-                        {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
-                      </Text>
-                      <IconButton
-                        aria-label="Copy address"
-                        icon={<Copy size={14} />}
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => handleCopy(address)}
-                      />
-                    </HStack>
-                  ))}
-                </Box>
-              </VStack>
-            </Box>
-          )}
+          {/* Characteristics and Members side by side */}
+          <HStack align="stretch" spacing={4} w="100%" minH={0}>
+            {/* Characteristics section */}
+            {membraneCharacteristics.length > 0 && (
+              <Box
+                bg={cardBg}
+                borderRadius="lg"
+                borderWidth="1px"
+                borderColor={borderColor}
+                overflowY="auto"
+                minH={0}
+                flex={1}
+                maxH="220px"
+              >
+                <VStack align="stretch" spacing={2} p={3} h="100%">
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium">Characteristics</Text>
+                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                      {membraneCharacteristics.length}
+                    </Badge>
+                  </HStack>
+                  <Box 
+                    sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '4px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        width: '6px',
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'gray.300',
+                        borderRadius: '24px',
+                      },
+                    }}
+                  >
+                    {membraneCharacteristics.map((char, index) => {
+                      const linkIsLink = isLink(char.link);
+                      return (
+                        <Box key={index}>
+                          <HStack
+                            py={1.5}
+                            px={2}
+                            borderRadius="md"
+                            _hover={{ bg: hoverBg, cursor: linkIsLink ? 'pointer' : 'pointer' }}
+                            transition="all 0.2s"
+                            onClick={() => {
+                              if (linkIsLink) {
+                                window.open(char.link, '_blank');
+                              } else {
+                                setExpandedCharIndex(expandedCharIndex === index ? null : index);
+                              }
+                            }}
+                          >
+                            <Text fontSize="sm" isTruncated flex={1}>
+                              {char.title}
+                            </Text>
+                            {linkIsLink ? (
+                              <ExternalLink size={16} color={selectedTokenColor} />
+                            ) : (
+                              expandedCharIndex === index ? (
+                                <ChevronUp size={16} color={selectedTokenColor} />
+                              ) : (
+                                <ChevronDown size={16} color={selectedTokenColor} />
+                              )
+                            )}
+                          </HStack>
+                          {/* Expandable description drawer */}
+                          {!linkIsLink && expandedCharIndex === index && (
+                            <Box
+                              bg={hoverBg}
+                              borderRadius="md"
+                              mt={1}
+                              mb={2}
+                              px={3}
+                              py={2}
+                            >
+                              <Text fontSize="sm" color={mutedColor} whiteSpace="pre-line">
+                                {char.link || char.title}
+                              </Text>
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                </VStack>
+              </Box>
+            )}
+
+            {/* Members section */}
+            {node.membersOfNode && node.membersOfNode.length > 0 && (
+              <Box
+                bg={cardBg}
+                borderRadius="lg"
+                borderWidth="1px"
+                borderColor={borderColor}
+                overflowY="auto"
+                minH={0}
+                flex={1}
+                maxH="220px"
+              >
+                <VStack align="stretch" spacing={2} p={3} h="100%">
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
+                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                      Active
+                    </Badge>
+                  </HStack>
+                  <Box 
+                    sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '4px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        width: '6px',
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'gray.300',
+                        borderRadius: '24px',
+                      },
+                    }}
+                  >
+                    {memberData.map(({ address, ensName }, index) => (
+                      <HStack
+                        key={index}
+                        py={1.5}
+                        px={2}
+                        borderRadius="md"
+                        _hover={{ bg: hoverBg }}
+                        transition="all 0.2s"
+                      >
+                        <Text fontSize="sm" isTruncated>
+                          {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
+                        </Text>
+                        <IconButton
+                          aria-label="Copy address"
+                          icon={<Copy size={14} />}
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => handleCopy(address)}
+                        />
+                      </HStack>
+                    ))}
+                  </Box>
+                </VStack>
+              </Box>
+            )}
+          </HStack>
         </VStack>
 
         {/* Right column - Chart */}
