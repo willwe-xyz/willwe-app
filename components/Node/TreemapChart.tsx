@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { NodeState } from '../../types/chainData';
 import { Box, useColorModeValue } from '@chakra-ui/react';
@@ -12,6 +12,59 @@ const Plot = dynamic(() => import('react-plotly.js'), {
   ssr: false,
   loading: () => <Box>Loading...</Box>
 });
+
+// Token metadata cache
+const tokenMetadataCache = new Map<string, {
+  decimals: number;
+  logo: string | null;
+  name: string;
+  symbol: string;
+}>();
+
+// Rate limiting
+const RATE_LIMIT_DELAY = 1000; // 1 second between requests
+let lastRequestTime = 0;
+
+const getTokenMetadata = async (tokenAddress: string) => {
+  // Check cache first
+  if (tokenMetadataCache.has(tokenAddress)) {
+    return tokenMetadataCache.get(tokenAddress);
+  }
+
+  // Rate limiting
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < RATE_LIMIT_DELAY) {
+    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
+
+  try {
+    const response = await fetch(process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL || '', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'alchemy_getTokenMetadata',
+        params: [tokenAddress],
+        id: 1,
+      }),
+    });
+
+    const data = await response.json();
+    if (data.result) {
+      // Cache the result
+      tokenMetadataCache.set(tokenAddress, data.result);
+      return data.result;
+    }
+  } catch (error) {
+    console.error('Error fetching token metadata:', error);
+  }
+
+  return null;
+};
 
 interface TreemapChartProps {
   nodeData: NodeState;
@@ -81,6 +134,8 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
     const colorShades = generateColorShades(selectedTokenColor, nodeData.rootPath.length);
 
     const rawValues: number[] = [];
+    const tokenMetadataPromises: Promise<any>[] = [];
+
     for (let index = 0; index < nodeData.rootPath.length; index++) {
       const nodeId = nodeData.rootPath[index];
       if (!nodeId) continue;
@@ -90,11 +145,24 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
         const balanceAnchor = data[0]?.[2]?.toString() || '0';
         const formattedValue = Number(ethers.formatUnits(balanceAnchor, 'ether')) || MIN_DISPLAY_VALUE;
         rawValues.push(formattedValue);
+
+        // Get token metadata for the first node (root token)
+        if (index === 0) {
+          const hexAddress = ethers.toBigInt(nodeId)
+            .toString(16)
+            .padStart(40, '0');
+          const tokenAddress = `0x${hexAddress.toLowerCase()}`;
+          tokenMetadataPromises.push(getTokenMetadata(tokenAddress));
+        }
       } catch (error) {
         console.error(`Error fetching data for node ${nodeId}:`, error);
         rawValues.push(MIN_DISPLAY_VALUE);
       }
     }
+
+    // Wait for all token metadata to be fetched
+    const tokenMetadataResults = await Promise.all(tokenMetadataPromises);
+    const tokenMetadata = tokenMetadataResults[0];
 
     const maxRawValue = Math.max(...rawValues, MIN_DISPLAY_VALUE);
     for (let index = 0; index < nodeData.rootPath.length; index++) {
@@ -108,7 +176,10 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
       const rawValue = rawValues[index];
       const displayValue = rawValue > 0 ? rawValue : maxRawValue * MIN_DISPLAY_VALUE;
       values.push(displayValue);
-      text.push(`${rawValue.toLocaleString()} ${tokenSymbol}`);
+      
+      // Use token symbol from metadata if available
+      const symbol = index === 0 && tokenMetadata ? tokenMetadata.symbol : tokenSymbol;
+      text.push(`${rawValue.toLocaleString()} ${symbol}`);
       colors.push(colorShades[index]);
     }
 

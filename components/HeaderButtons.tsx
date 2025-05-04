@@ -84,7 +84,7 @@ export default function HeaderButtons({
             onClick={onWillOpen}
             {...buttonStyles}
           >
-            $will
+            WILL
           </Button>
         </Tooltip>
 

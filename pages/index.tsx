@@ -338,7 +338,9 @@ const Home: React.FC = () => {
                   style={{
                     position: 'relative',
                     zIndex: 2,
-                    marginTop: '20px'  // Added spacing to account for the shadow
+                    marginTop: '20px',
+                    width: '100%',
+                    textAlign: 'center'
                   }}
                 >
                   <WideText 

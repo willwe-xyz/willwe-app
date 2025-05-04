@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Box, 
   Text, 
@@ -43,6 +43,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const pollTimeoutRef = useRef<NodeJS.Timeout>();
+  const isMountedRef = useRef(true);
   const toast = useToast();
   
   const authenticatedAddress = user?.wallet?.address || address;
@@ -52,36 +57,95 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const inputBg = useColorModeValue('gray.50', 'gray.700');
 
+  // Cleanup function
   useEffect(() => {
-    if (!nodeId) return;
-    
-    const fetchMessages = async () => {
-      try {
-        const data = await getNodeChatMessages(nodeId, 200);
-        const sortedMessages = data.sort((a: ChatMessage, b: ChatMessage) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
-        setMessages(sortedMessages);
-      } catch (error) {
-        console.error('Error fetching chat messages:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load chat messages",
-          status: "error",
-          duration: 5000,
-          isClosable: true,
-        });
+    return () => {
+      isMountedRef.current = false;
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
       }
     };
+  }, []);
 
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 10000);
-    return () => clearInterval(interval);
+  const fetchMessages = useCallback(async () => {
+    if (!nodeId || !isMountedRef.current) return;
+    
+    try {
+      const data = await getNodeChatMessages(nodeId, 200);
+      
+      // If we get an empty array or null, don't update the state
+      if (!data || !Array.isArray(data)) {
+        return;
+      }
+      
+      const messages = data as ChatMessage[];
+      const sortedMessages = messages.sort((a, b) => 
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      
+      // Check if we actually have new messages
+      const latestMessageId = sortedMessages[sortedMessages.length - 1]?.id;
+      if (latestMessageId === lastMessageIdRef.current) {
+        return; // No new messages, don't update state
+      }
+      
+      // Preserve scroll position when updating messages
+      const container = messagesContainerRef.current;
+      const wasAtBottom = container ? 
+        container.scrollHeight - container.scrollTop === container.clientHeight : 
+        true;
+      
+      if (isMountedRef.current) {
+        setMessages(sortedMessages);
+        lastMessageIdRef.current = latestMessageId;
+        
+        // Only scroll to bottom if we were already at the bottom
+        if (wasAtBottom) {
+          setShouldScrollToBottom(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching chat messages:', error);
+      // Don't show error toast for 404s or when the server is not available
+      if (error instanceof Error && !error.message.includes('404') && !error.message.includes('Failed to fetch')) {
+        if (isMountedRef.current) {
+          toast({
+            title: "Error",
+            description: "Failed to load chat messages",
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+          });
+        }
+      }
+    } finally {
+      // Schedule next poll only if component is still mounted and we're not in an error state
+      if (isMountedRef.current) {
+        pollTimeoutRef.current = setTimeout(fetchMessages, 10000);
+      }
+    }
   }, [nodeId, getNodeChatMessages, toast]);
 
+  // Initial fetch and start polling
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (nodeId) {
+      fetchMessages();
+    }
+    return () => {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
+    };
+  }, [nodeId, fetchMessages]);
+
+  // Only scroll when we explicitly want to
+  useEffect(() => {
+    if (shouldScrollToBottom && messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+      setShouldScrollToBottom(false);
+    }
+  }, [shouldScrollToBottom]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,8 +173,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       
       // Handle different response formats from the Ponder server
       const messageToAdd = result.message || result;
-      setMessages(prev => [messageToAdd, ...prev]);
-      setNewMessage('');
+      if (messageToAdd) {
+        setMessages(prev => [...prev, messageToAdd]);
+        setNewMessage('');
+        setShouldScrollToBottom(true);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
@@ -170,18 +237,26 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       flexDirection="column"
     >
       <Box p={4} borderBottom="1px solid" borderColor={borderColor}>
-        <Text fontSize="lg" fontWeight="bold">Node Chat</Text>
+        <Text fontSize="lg" fontWeight="bold">(Unsecure)Node Chat</Text>
         <Text fontSize="sm" color="gray.500">
-          Discuss with other members of this node ***(!!!!)
+          Trollbox for members of this node.
         </Text>
       </Box>
       
       <VStack 
+        ref={messagesContainerRef}
         flex="1" 
         overflowY="auto" 
         spacing={4} 
         p={4} 
         align="stretch"
+        onScroll={() => {
+          const container = messagesContainerRef.current;
+          if (container) {
+            const isAtBottom = container.scrollHeight - container.scrollTop === container.clientHeight;
+            setShouldScrollToBottom(isAtBottom);
+          }
+        }}
       >
         {messages.length === 0 ? (
           <Box textAlign="center" py={10}>
