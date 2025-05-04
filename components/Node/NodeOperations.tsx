@@ -61,14 +61,14 @@ import {
   AlertTriangle,
   Check
 } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
 import { deployments } from '../../config/deployments';
 import { ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
 import { formatBalance } from '../../utils/formatters';
-import  SpawnNodeForm  from './SpawnNodeForm';
+import SpawnNodeForm from './SpawnNodeForm';
 
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
 
@@ -140,9 +140,74 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
+  const { wallets } = useWallets();
   const { executeTransaction } = useTransaction();
   const { data: nodeData } = useNodeData(chainId || '', userAddress || '', nodeId);
   const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address || '');
+
+  // Find supported networks from deployments
+  const supportedChainIds = Object.keys(deployments.WillWe);
+  const cleanChainId = chainId?.replace('eip155:', '') || '';
+  const isValidChain = supportedChainIds.includes(cleanChainId);
+
+  // Function to check and switch network if needed
+  const checkAndSwitchNetwork = async () => {
+    if (!wallets[0]) return false;
+    
+    const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
+    
+    // If already on the correct network, return true
+    if (walletChainId === cleanChainId) return true;
+    
+    try {
+      // If on an unsupported network, switch to the node's network
+      if (!supportedChainIds.includes(walletChainId)) {
+        await wallets[0].switchChain(Number(cleanChainId));
+        toast({
+          title: "Network Switched",
+          description: `Switched to Chain ID: ${cleanChainId}`,
+          status: "success",
+          duration: 5000,
+        });
+        return true;
+      }
+      
+      // If on a different supported network, prompt to switch
+      toast({
+        title: "Network Mismatch",
+        description: `Please switch to Chain ID: ${cleanChainId} to perform this operation`,
+        status: "warning",
+        duration: 5000,
+      });
+      return false;
+    } catch (error) {
+      toast({
+        title: "Network Switch Failed",
+        description: error instanceof Error ? error.message : "Failed to switch network",
+        status: "error",
+        duration: 5000,
+      });
+      return false;
+    }
+  };
+
+  // Wrapper function for operations that require network check
+  const withNetworkCheck = async (operation: () => Promise<void>) => {
+    if (isProcessing) return;
+    
+    const isCorrectNetwork = await checkAndSwitchNetwork();
+    if (!isCorrectNetwork) {
+      // If we're on a different supported network, don't proceed with the operation
+      return;
+    }
+    
+    setIsProcessing(true);
+    try {
+      await operation();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Get root token symbol
   const getRootTokenSymbol = useCallback(async () => {
@@ -412,265 +477,281 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   // Continue to Part 3 for handler functions
 
   const handleMintPath = useCallback(async () => {
-    if (!mintAmount || isProcessing) return;
+    if (!mintAmount) return;
     
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            // @ts-ignore
-            signer
-          );
-          
-          return await contract.mintPath(nodeId, ethers.parseUnits(mintAmount, 18), {
-            gasLimit: BigInt(500000)
-          });
-        },
-        {
-          successMessage: 'Tokens minted successfully via path',
-          onSuccess: () => {
-            setActiveModal(null);
-            onSuccess?.();
-          }
+    await withNetworkCheck(async () => {
+      try {
+        const cleanChainId = chainId.replace('eip155:', '');
+        const contractAddress = deployments.WillWe[cleanChainId];
+        
+        if (!contractAddress) {
+          throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
-      );
-    } catch (error) {
-      console.error('Failed to mint tokens via path:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to mint tokens',
-        status: 'error',
-        duration: 5000
-      });
-    }
+
+        await executeTransaction(
+          chainId,
+          async () => {
+            const provider = await getEthersProvider();
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(
+              contractAddress,
+              ABIs.WillWe,
+              // @ts-ignore
+              signer
+            );
+            
+            return await contract.mintPath(nodeId, ethers.parseUnits(mintAmount, 18), {
+              gasLimit: BigInt(500000)
+            });
+          },
+          {
+            successMessage: 'Tokens minted successfully via path',
+            onSuccess: () => {
+              setActiveModal(null);
+              onSuccess?.();
+            }
+          }
+        );
+      } catch (error) {
+        console.error('Failed to mint tokens via path:', error);
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to mint tokens',
+          status: 'error',
+          duration: 5000
+        });
+      }
+    });
   }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
   const handleMint = useCallback(async () => {
-    if (!mintAmount || isProcessing) return;
+    if (!mintAmount) return;
     
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            // @ts-ignore
-            signer
-          );
-          
-          return await contract.mint(nodeId, ethers.parseUnits(mintAmount, 18), {
-            gasLimit: BigInt(300000)
-          });
-        },
-        {
-          successMessage: 'Tokens minted successfully from parent',
-          onSuccess: () => {
-            setActiveModal(null);
-            onSuccess?.();
-          }
+    await withNetworkCheck(async () => {
+      try {
+        const cleanChainId = chainId.replace('eip155:', '');
+        const contractAddress = deployments.WillWe[cleanChainId];
+        
+        if (!contractAddress) {
+          throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
-      );
-    } catch (error) {
-      console.error('Failed to mint tokens from parent:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to mint tokens',
-        status: 'error',
-        duration: 5000
-      });
-    }
+
+        await executeTransaction(
+          chainId,
+          async () => {
+            const provider = await getEthersProvider();
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(
+              contractAddress,
+              ABIs.WillWe,
+              // @ts-ignore
+              signer
+            );
+            
+            return await contract.mint(nodeId, ethers.parseUnits(mintAmount, 18), {
+              gasLimit: BigInt(300000)
+            });
+          },
+          {
+            successMessage: 'Tokens minted successfully from parent',
+            onSuccess: () => {
+              setActiveModal(null);
+              onSuccess?.();
+            }
+          }
+        );
+      } catch (error) {
+        console.error('Failed to mint tokens from parent:', error);
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to mint tokens',
+          status: 'error',
+          duration: 5000
+        });
+      }
+    });
   }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
   const handleBurnPath = useCallback(async () => {
-    if (!burnAmount || isProcessing) return;
+    if (!burnAmount) return;
     
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            // @ts-ignore
-            signer
-          );
-          
-          const amountToBurn = ethers.parseUnits(burnAmount, 18);
-          return contract.burnPath(nodeId, amountToBurn);
-        },
-        {
-          successMessage: 'Tokens burned successfully via path',
-          onSuccess: () => {
-            setActiveModal(null);
-            onSuccess?.();
-          } 
+    await withNetworkCheck(async () => {
+      try {
+        const cleanChainId = chainId.replace('eip155:', '');
+        const contractAddress = deployments.WillWe[cleanChainId];
+        
+        if (!contractAddress) {
+          throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
-      );
-    } catch (error) {
-      console.error('Failed to burn tokens via path:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to burn tokens',
-        status: 'error',
-        duration: 5000
-      });
-    }
+
+        await executeTransaction(
+          chainId,
+          async () => {
+            const provider = await getEthersProvider();
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(
+              contractAddress,
+              ABIs.WillWe,
+              // @ts-ignore
+              signer
+            );
+            
+            const amountToBurn = ethers.parseUnits(burnAmount, 18);
+            return contract.burnPath(nodeId, amountToBurn);
+          },
+          {
+            successMessage: 'Tokens burned successfully via path',
+            onSuccess: () => {
+              setActiveModal(null);
+              onSuccess?.();
+            } 
+          }
+        );
+      } catch (error) {
+        console.error('Failed to burn tokens via path:', error);
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to burn tokens',
+          status: 'error',
+          duration: 5000
+        });
+      }
+    });
   }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
   const handleBurn = useCallback(async () => {
-    if (!burnAmount || isProcessing) return;
+    if (!burnAmount) return;
     
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            /// @ts-ignore
-            signer
-          );
-          
-          const amountToBurn = ethers.parseUnits(burnAmount, 18);
-          return contract.burn(nodeId, amountToBurn);
-        },
-        {
-          successMessage: 'Tokens burned successfully to parent',
-          onSuccess: () => {
-            setActiveModal(null);
-            onSuccess?.();
-          } 
+    await withNetworkCheck(async () => {
+      try {
+        const cleanChainId = chainId.replace('eip155:', '');
+        const contractAddress = deployments.WillWe[cleanChainId];
+        
+        if (!contractAddress) {
+          throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
-      );
-    } catch (error) {
-      console.error('Failed to burn tokens to parent:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to burn tokens',
-        status: 'error',
-        duration: 5000
-      });
-    }
+
+        await executeTransaction(
+          chainId,
+          async () => {
+            const provider = await getEthersProvider();
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(
+              contractAddress,
+              ABIs.WillWe,
+              /// @ts-ignore
+              signer
+            );
+            
+            const amountToBurn = ethers.parseUnits(burnAmount, 18);
+            return contract.burn(nodeId, amountToBurn);
+          },
+          {
+            successMessage: 'Tokens burned successfully to parent',
+            onSuccess: () => {
+              setActiveModal(null);
+              onSuccess?.();
+            } 
+          }
+        );
+      } catch (error) {
+        console.error('Failed to burn tokens to parent:', error);
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to burn tokens',
+          status: 'error',
+          duration: 5000
+        });
+      }
+    });
   }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
   const handleMintMembership = useCallback(async () => {
-    setIsProcessing(true);
-    try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            deployments.WillWe[chainId.replace('eip155:', '')],
-            ABIs.WillWe,
-            /// @ts-ignore
-            signer
-          );
-          return contract.mintMembership(nodeId);
-        },
-        {
-          successMessage: 'Membership minted successfully',
-          onSuccess
+    await withNetworkCheck(async () => {
+      try {
+        // Double check the network before proceeding
+        const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
+        if (walletChainId !== cleanChainId) {
+          toast({
+            title: "Network Error",
+            description: "Please switch to the correct network before joining",
+            status: "error",
+            duration: 5000,
+          });
+          return;
         }
-      );
-    } catch (error) {
-      console.error('Failed to mint membership:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to mint membership',
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, toast]);
+
+        await executeTransaction(
+          chainId,
+          async () => {
+            const provider = await getEthersProvider();
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(
+              deployments.WillWe[chainId.replace('eip155:', '')],
+              ABIs.WillWe,
+              /// @ts-ignore
+              signer
+            );
+            return contract.mintMembership(nodeId);
+          },
+          {
+            successMessage: 'Membership minted successfully',
+            onSuccess
+          }
+        );
+      } catch (error) {
+        console.error('Failed to mint membership:', error);
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to mint membership',
+          status: 'error',
+          duration: 5000
+        });
+      }
+    });
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast, wallets, cleanChainId]);
 
   const handleRedistribute = useCallback(async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-  
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            // @ts-ignore
-            signer
-          );
-  
-          return contract.redistributePath(nodeId, { gasLimit: 500000 });
-        },
-        {
-          successMessage: 'Value redistributed successfully',
-          onSuccess: () => {
-            onSuccess?.();
-          }
+    await withNetworkCheck(async () => {
+      try {
+        const cleanChainId = chainId.replace('eip155:', '');
+        const contractAddress = deployments.WillWe[cleanChainId];
+        
+        if (!contractAddress) {
+          throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
-      );
-    } catch (error) {
-      console.error('Failed to redistribute:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Transaction failed',
-        status: 'error',
-        duration: 5000
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+    
+        await executeTransaction(
+          chainId,
+          async () => {
+            const provider = await getEthersProvider();
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(
+              contractAddress,
+              ABIs.WillWe,
+              // @ts-ignore
+              signer
+            );
+    
+            return contract.redistributePath(nodeId, { gasLimit: 500000 });
+          },
+          {
+            successMessage: 'Value redistributed successfully',
+            onSuccess: () => {
+              onSuccess?.();
+            }
+          }
+        );
+      } catch (error) {
+        console.error('Failed to redistribute:', error);
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Transaction failed',
+          status: 'error',
+          duration: 5000
+        });
+      }
+    });
   }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
 
   const checkBurnBalance = useCallback(async () => {

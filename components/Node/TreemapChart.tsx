@@ -20,7 +20,6 @@ const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const RATE_LIMIT_DELAY = 2000; // 2 seconds between requests to be more conservative
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second between retries
-const ALCHEMY_API_URL = process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL || '';
 
 // Cache for in-memory membrane data
 const membraneDataCache = new Map<string, {
@@ -28,9 +27,6 @@ const membraneDataCache = new Map<string, {
   timestamp: number;
 }>();
 
-if (!ALCHEMY_API_URL) {
-  console.error('Alchemy API URL is not configured');
-}
 
 interface TokenMetadata {
   decimals: number;
@@ -77,66 +73,7 @@ const batchTokenMetadataRequests = async (tokenAddresses: string[]): Promise<Rec
     return results;
   }
 
-  // Batch fetch remaining addresses
-  try {
-    const response = await fetch(ALCHEMY_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'alchemy_getTokenMetadata',
-        params: [addressesToFetch],
-        id: 1,
-      }),
-    });
 
-    if (!response.ok) {
-      // If we get a non-200 response, just return null for all addresses
-      addressesToFetch.forEach(address => {
-        results[address] = null;
-      });
-      return results;
-    }
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('application/json')) {
-      // If response is not JSON, just return null for all addresses
-      addressesToFetch.forEach(address => {
-        results[address] = null;
-      });
-      return results;
-    }
-
-    const data = await response.json();
-    if (data.result) {
-      const timestamp = Date.now();
-      addressesToFetch.forEach((address, index) => {
-        const metadata = data.result[index];
-        if (metadata) {
-          const entry = {
-            ...metadata,
-            timestamp
-          };
-          results[address] = entry;
-          cache[address] = entry;
-        } else {
-          results[address] = null;
-        }
-      });
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-    }
-  } catch (error) {
-    // Only log errors that aren't related to HTML responses
-    if (!(error instanceof SyntaxError) || !error.message.includes('<!DOCTYPE')) {
-      console.warn('Error fetching token metadata:', error);
-    }
-    // Return null for all addresses on error
-    addressesToFetch.forEach(address => {
-      results[address] = null;
-    });
-  }
 
   return results;
 };
