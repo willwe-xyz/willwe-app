@@ -93,7 +93,20 @@ const batchTokenMetadataRequests = async (tokenAddresses: string[]): Promise<Rec
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      // If we get a non-200 response, just return null for all addresses
+      addressesToFetch.forEach(address => {
+        results[address] = null;
+      });
+      return results;
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      // If response is not JSON, just return null for all addresses
+      addressesToFetch.forEach(address => {
+        results[address] = null;
+      });
+      return results;
     }
 
     const data = await response.json();
@@ -115,7 +128,11 @@ const batchTokenMetadataRequests = async (tokenAddresses: string[]): Promise<Rec
       localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
     }
   } catch (error) {
-    console.error('Error fetching batch token metadata:', error);
+    // Only log errors that aren't related to HTML responses
+    if (!(error instanceof SyntaxError) || !error.message.includes('<!DOCTYPE')) {
+      console.warn('Error fetching token metadata:', error);
+    }
+    // Return null for all addresses on error
     addressesToFetch.forEach(address => {
       results[address] = null;
     });
