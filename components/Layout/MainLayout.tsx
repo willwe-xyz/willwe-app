@@ -1,6 +1,6 @@
 // File: ./components/Layout/MainLayout.tsx
 
-import React, { ReactNode, useCallback } from 'react';
+import React, { ReactNode, useCallback, useMemo } from 'react';
 import { Box } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
@@ -23,6 +23,7 @@ interface MainLayoutProps {
     reverseColor: string;
     cycleColors: () => void;
     onNodeSelect: (nodeId: string) => void;
+    selectedTokenColor: string;
   };
   rootToken?: string;
   onTokenSelect?: (tokenAddress: string) => void;
@@ -38,14 +39,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const { selectedToken, selectToken } = useNode();
   const router = useRouter();
   
+  // Only fetch balances if user is connected and chainId is available
+  const shouldFetchBalances = useMemo(() => 
+    Boolean(user?.wallet?.address && headerProps?.chainId),
+    [user?.wallet?.address, headerProps?.chainId]
+  );
+  
   // Fetch balances for top bar using combined hook
   const { 
     balances, 
     protocolBalances,
     isLoading: balancesLoading 
   } = useBalances(
-    user?.wallet?.address,
-    headerProps?.chainId
+    shouldFetchBalances ? user?.wallet?.address : undefined,
+    shouldFetchBalances ? headerProps?.chainId : undefined
   );
 
   // Handle token selection with navigation
@@ -66,8 +73,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
       {/* Header */}
       {headerProps && <Header {...headerProps} />}
       
-      {/* Token Balance Bar - Always visible */}
-      {user?.wallet?.address && (
+      {/* Token Balance Bar - Only show when user is connected */}
+      {shouldFetchBalances && (
         <Box width="100%" borderBottom="1px solid" borderColor="gray.200">
           <BalanceList
             selectedToken={selectedToken}

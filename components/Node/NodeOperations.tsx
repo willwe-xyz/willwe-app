@@ -64,7 +64,7 @@ import {
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
-import { deployments } from '../../config/deployments';
+import { deployments, getChainById } from '../../config/deployments';
 import { ABIs } from '../../config/contracts';
 import { nodeIdToAddress } from '../../utils/formatters';
 import { formatBalance } from '../../utils/formatters';
@@ -150,6 +150,16 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const cleanChainId = chainId?.replace('eip155:', '') || '';
   const isValidChain = supportedChainIds.includes(cleanChainId);
 
+  // Function to get network name from chain ID
+  const getNetworkName = (chainId: string): string => {
+    try {
+      const chain = getChainById(chainId);
+      return chain.name;
+    } catch (error) {
+      return chainId; // Return chain ID if name not found
+    }
+  };
+
   // Function to check and switch network if needed
   const checkAndSwitchNetwork = async () => {
     if (!wallets[0]) return false;
@@ -165,7 +175,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         await wallets[0].switchChain(Number(cleanChainId));
         toast({
           title: "Network Switched",
-          description: `Switched to Chain ID: ${cleanChainId}`,
+          description: `Switched to ${getNetworkName(cleanChainId)}`,
           status: "success",
           duration: 5000,
         });
@@ -175,7 +185,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       // If on a different supported network, prompt to switch
       toast({
         title: "Network Mismatch",
-        description: `Please switch to Chain ID: ${cleanChainId} to perform this operation`,
+        description: `Please switch to ${getNetworkName(cleanChainId)} to perform this operation`,
         status: "warning",
         duration: 5000,
       });
@@ -674,7 +684,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         if (walletChainId !== cleanChainId) {
           toast({
             title: "Network Error",
-            description: "Please switch to the correct network before joining",
+            description: `Please switch to ${getNetworkName(cleanChainId)} before joining`,
             status: "error",
             duration: 5000,
           });
@@ -709,7 +719,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         });
       }
     });
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast, wallets, cleanChainId]);
+  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast, wallets, cleanChainId, getNetworkName]);
 
   const handleRedistribute = useCallback(async () => {
     await withNetworkCheck(async () => {

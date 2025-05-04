@@ -25,6 +25,9 @@ export const getRPCUrl = (chainId: string): string => {
     case '534351': // Scroll Testnet
       url = process.env.NEXT_PUBLIC_RPC_URL_SCROLL_TESTNET;
       break;
+    case '8453': // Base
+      url = process.env.NEXT_PUBLIC_RPC_URL_BASE || 'https://base.llamarpc.com';
+      break;
     default:
       url = process.env[`NEXT_PUBLIC_RPC_URL_${cleanChainId}`]; /// use getChainByID or set some defaults via viem
   }

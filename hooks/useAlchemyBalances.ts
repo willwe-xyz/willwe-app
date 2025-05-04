@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Alchemy } from "alchemy-sdk";
 import { getAlchemyNetwork } from '../config/deployments';
 
@@ -22,11 +22,18 @@ export interface UseAlchemyBalancesResult {
   refetch: () => Promise<void>;
 }
 
-
-
 const alchemyConfig = {
   apiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || '',
 };
+
+// Cache for storing balance results
+const balanceCache = new Map<string, {
+  balances: AlchemyTokenBalance[];
+  timestamp: number;
+}>();
+
+// Cache expiration time in milliseconds (5 minutes)
+const CACHE_EXPIRATION = 5 * 60 * 1000;
 
 export const useAlchemyBalances = (
   address: string | undefined,
@@ -35,10 +42,22 @@ export const useAlchemyBalances = (
   const [balances, setBalances] = useState<AlchemyTokenBalance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout>();
 
   const fetchBalances = async () => {
     if (!address || !chainId) {
       setBalances([]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Check cache first
+    const cacheKey = `${address}-${chainId}`;
+    const cachedData = balanceCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cachedData && (now - cachedData.timestamp) < CACHE_EXPIRATION) {
+      setBalances(cachedData.balances);
       setIsLoading(false);
       return;
     }
@@ -83,6 +102,12 @@ export const useAlchemyBalances = (
         })
       );
 
+      // Update cache
+      balanceCache.set(cacheKey, {
+        balances: formattedBalances,
+        timestamp: now
+      });
+
       setBalances(formattedBalances);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch balances'));
@@ -93,7 +118,21 @@ export const useAlchemyBalances = (
   };
 
   useEffect(() => {
-    fetchBalances();
+    // Clear any existing timeout
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+    }
+
+    // Set a new timeout to debounce the fetch
+    fetchTimeoutRef.current = setTimeout(() => {
+      fetchBalances();
+    }, 300); // 300ms debounce
+
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
   }, [address, chainId]);
 
   return {

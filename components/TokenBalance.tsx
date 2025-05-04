@@ -71,6 +71,9 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
           fontWeight="medium" 
           fontSize={isCompact ? "xs" : "sm"}
           lineHeight={isCompact ? "1.2" : "normal"}
+          maxW="120px"
+          isTruncated
+          title={balanceItem.symbol || 'Unknown Token'}
         >
           {balanceItem.symbol || 'Unknown Token'}
         </Text>
@@ -78,6 +81,9 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
           fontSize={isCompact ? "2xs" : "xs"} 
           color="gray.500"
           lineHeight={isCompact ? "1" : "normal"}
+          maxW="120px"
+          isTruncated
+          title={balanceItem.name || 'Unknown Name'}
         >
           {balanceItem.name || 'Unknown Name'}
         </Text>
