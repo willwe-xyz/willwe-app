@@ -78,7 +78,7 @@ export default function HeaderButtons({
       <HStack spacing={4}>
         
         {/* Will Button */}
-        <Tooltip label="Will Token Operations">
+        <Tooltip label="$WILL Token Hub">
           <Button
             leftIcon={<DollarSign size={18} />}
             onClick={onWillOpen}
@@ -215,7 +215,7 @@ export default function HeaderButtons({
                 >
                   <HStack spacing={2}>
                     <Users size={16} />
-                    <span>Define Entity</span>
+                    <span>Define</span>
                   </HStack>
                 </Tab>
               </TabList>

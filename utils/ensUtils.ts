@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { getRPCUrl } from '../config/contracts';
 
 /**
  * Resolves an Ethereum address to its ENS name if available, otherwise returns a truncated address
@@ -11,8 +12,8 @@ export async function resolveENS(address: string): Promise<string> {
   }
 
   try {
-    // Use Ethereum mainnet for ENS resolution
-    const mainnetProvider = new ethers.JsonRpcProvider('https://eth-mainnet.g.alchemy.com/v2/demo');
+    // Use the same provider configuration as NodeInfo.tsx
+    const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
     const ensName = await mainnetProvider.lookupAddress(address);
     
     if (ensName) {

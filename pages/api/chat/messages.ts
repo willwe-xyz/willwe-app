@@ -24,6 +24,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         throw new Error(`Error from Ponder server: ${response.statusText}`);
       }
       
+      // Forward cache control headers from Ponder server
+      const cacheControl = response.headers.get('cache-control');
+      const pragma = response.headers.get('pragma');
+      const expires = response.headers.get('expires');
+      
+      if (cacheControl) res.setHeader('Cache-Control', cacheControl);
+      if (pragma) res.setHeader('Pragma', pragma);
+      if (expires) res.setHeader('Expires', expires);
+      
       const data = await response.json();
       return res.status(200).json(data);
     } 

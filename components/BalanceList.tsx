@@ -36,6 +36,11 @@ const BalanceList: React.FC<BalanceListProps> = ({
   const [showRightScroll, setShowRightScroll] = useState(true);
   const [baseColor] = useToken('colors', [contrastingColor]);
 
+  // Sort balances by token name
+  const sortedBalances = [...balances].sort((a, b) => 
+    (a.name || '').localeCompare(b.name || '')
+  );
+
   // Handle scroll visibility
   const checkScrollButtons = useCallback(() => {
     if (scrollContainer.current) {
@@ -107,7 +112,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
         }}
       >
         <HStack spacing={4} height="100%">
-          {balances.map((balance) => {
+          {sortedBalances.map((balance) => {
             const protocolBalance = protocolBalances.find(
               p => p.contractAddress.toLowerCase() === balance.contractAddress.toLowerCase()
             );

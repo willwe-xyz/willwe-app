@@ -1227,7 +1227,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 _hover={{ bg: `${selectedTokenColor}20` }}
                 isDisabled={!isMember}
               >
-                Spawn Node
+                Add Node
               </Button>
             </Tooltip>
 
@@ -1255,7 +1255,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
               >
-                Mint
+                Deposit
               </Button>
             </Tooltip>
 
@@ -1272,7 +1272,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
               >
-                Burn
+                Withdraw
               </Button>
             </Tooltip>
           </ButtonGroup>

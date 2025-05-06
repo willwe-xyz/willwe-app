@@ -19,6 +19,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { NodeState } from '../types/chainData';
 import { usePonderData } from '@/hooks/usePonderData';
 import { limits } from 'chroma-js';
+import { resolveENS } from '@/utils/ensUtils';
 
 interface NodeChatProps {
   nodeId: string;
@@ -33,6 +34,7 @@ interface ChatMessage {
   sender: string;
   content: string;
   timestamp: string;
+  ensName?: string;
 }
 
 const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddress }) => {
@@ -49,6 +51,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
   const pollTimeoutRef = useRef<NodeJS.Timeout>();
   const isMountedRef = useRef(true);
   const toast = useToast();
+  const [ensNames, setEnsNames] = useState<Record<string, string>>({});
   
   const authenticatedAddress = user?.wallet?.address || address;
   const isMember = userAddress ? nodeData?.membersOfNode?.includes(userAddress) : false;
@@ -96,6 +99,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
         true;
       
       if (isMountedRef.current) {
+        console.log('Updating messages:', sortedMessages); // Debug log
         setMessages(sortedMessages);
         lastMessageIdRef.current = latestMessageId;
         
@@ -146,6 +150,31 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       setShouldScrollToBottom(false);
     }
   }, [shouldScrollToBottom]);
+
+  // Add ENS resolution effect
+  useEffect(() => {
+    const resolveMessageSenders = async () => {
+      const uniqueSenders = Array.from(new Set(messages.map(msg => msg.sender)));
+      const newEnsNames: Record<string, string> = {};
+      
+      for (const sender of uniqueSenders) {
+        if (!ensNames[sender]) {
+          const ensName = await resolveENS(sender);
+          if (ensName && ensName !== sender) {
+            newEnsNames[sender] = ensName;
+          }
+        }
+      }
+      
+      if (Object.keys(newEnsNames).length > 0) {
+        setEnsNames(prev => ({ ...prev, ...newEnsNames }));
+      }
+    };
+
+    if (messages.length > 0) {
+      resolveMessageSenders();
+    }
+  }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,6 +245,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     });
   };
 
+  const getDisplayName = (address: string) => {
+    if (address === authenticatedAddress) return 'You';
+    return ensNames[address] || formatAddress(address);
+  };
+
   if (isLoading && messages.length === 0) {
     return (
       <Box p={6} textAlign="center">
@@ -268,7 +302,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
               <HStack spacing={3} align="start">
                 <Avatar 
                   size="sm" 
-                  name={formatAddress(message.sender)} 
+                  name={getDisplayName(message.sender)} 
                   bg={message.sender === authenticatedAddress ? "purple.500" : "gray.500"}
                 />
                 <Box flex="1">
@@ -281,7 +315,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
                         _hover={{ textDecoration: 'underline' }}
                         onClick={() => copyAddressToClipboard(message.sender)}
                       >
-                        {message.sender === authenticatedAddress ? 'You' : formatAddress(message.sender)}
+                        {getDisplayName(message.sender)}
                       </Text>
                     </Tooltip>
                     <Text fontSize="xs" color="gray.500">

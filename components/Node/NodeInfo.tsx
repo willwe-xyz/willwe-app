@@ -109,6 +109,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 }) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
   const [membraneCharacteristics, setMembraneCharacteristics] = useState<Array<{title: string; link: string}>>([]);
+  const [membraneRequirements, setMembraneRequirements] = useState<Array<{symbol: string; formattedBalance: string}>>([]);
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
   const [isLoadingCharacteristics, setIsLoadingCharacteristics] = useState(true);
   const toast = useToast();
@@ -158,10 +159,12 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
         const data = await response.json();
         setMembraneTitle(data.name || 'Unnamed Membrane');
         setMembraneCharacteristics(data.characteristics || []);
+        setMembraneRequirements(data.membershipConditions || []);
       } catch (error) {
         console.error('Error fetching membrane metadata:', error);
         setMembraneTitle('Unknown Membrane');
         setMembraneCharacteristics([]);
+        setMembraneRequirements([]);
       } finally {
         setIsLoadingTitle(false);
         setIsLoadingCharacteristics(false);
@@ -333,9 +336,9 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
           overflowY="auto"
           minH={0}
         >
-          {/* Stats grid */}
+          {/* Stats grid - Now in a single row */}
           <Grid 
-            templateColumns="repeat(2, 1fr)" 
+            templateColumns="repeat(4, 1fr)" 
             gap={3}
             flex="none"
           >
@@ -348,7 +351,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             >
               <Tooltip label="Daily token creation rate for this node" fontSize="sm">
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" color={mutedColor}>Daily Unlock</Text>
+                  <Text fontSize="sm" color={mutedColor}>Daily Budget</Text>
                   <Text fontSize="lg" fontWeight="semibold">
                     {formatCurrency(metrics.dailyUnlock)} {tokenSymbol}/day
                   </Text>
@@ -365,7 +368,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             >
               <Tooltip label="Total supply of tokens in the node" fontSize="sm">
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" color={mutedColor}>Total Gross Value</Text>
+                  <Text fontSize="sm" color={mutedColor}>Total Value</Text>
                   <Text fontSize="lg" fontWeight="semibold">
                     {formatCurrency(metrics.totalSupply)} {tokenSymbol}
                   </Text>
@@ -399,7 +402,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             >
               <Tooltip label="Current balance available in the node's budget" fontSize="sm">
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" color={mutedColor}>Active Shares</Text>
+                  <Text fontSize="sm" color={mutedColor}>Available Shares</Text>
                   <Text fontSize="lg" fontWeight="semibold">
                     {formatCurrency(metrics.availableShares)} {tokenSymbol}
                   </Text>
@@ -493,6 +496,58 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
                         </Box>
                       );
                     })}
+                  </Box>
+                </VStack>
+              </Box>
+            )}
+
+            {/* Membrane Requirements section */}
+            {membraneRequirements.length > 0 && (
+              <Box
+                bg={cardBg}
+                borderRadius="lg"
+                borderWidth="1px"
+                borderColor={borderColor}
+                overflowY="auto"
+                minH={0}
+                flex={1}
+                maxH="220px"
+              >
+                <VStack align="stretch" spacing={2} p={3} h="100%">
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium">Membrane Requirements</Text>
+                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                      {membraneRequirements.length}
+                    </Badge>
+                  </HStack>
+                  <Box 
+                    sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '4px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        width: '6px',
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'gray.300',
+                        borderRadius: '24px',
+                      },
+                    }}
+                  >
+                    {membraneRequirements.map((req, index) => (
+                      <HStack
+                        key={index}
+                        py={1.5}
+                        px={2}
+                        borderRadius="md"
+                        _hover={{ bg: hoverBg }}
+                        transition="all 0.2s"
+                      >
+                        <Badge colorScheme="purple">{req.symbol}</Badge>
+                        <Text fontSize="sm">{req.formattedBalance} tokens required</Text>
+                      </HStack>
+                    ))}
                   </Box>
                 </VStack>
               </Box>
