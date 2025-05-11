@@ -1,6 +1,6 @@
 // File: ./components/Layout/MainLayout.tsx
 
-import React, { ReactNode, useCallback, useMemo } from 'react';
+import React, { ReactNode, useCallback, useMemo, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
@@ -38,6 +38,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const { user } = usePrivy();
   const { selectedToken, selectToken } = useNode();
   const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Only fetch balances if user is connected and chainId is available
   const shouldFetchBalances = useMemo(() => 
@@ -71,7 +72,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   return (
     <Box height="100vh" display="flex" flexDirection="column">
       {/* Header */}
-      {headerProps && <Header {...headerProps} />}
+      {headerProps && (
+        <Header 
+          {...headerProps} 
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
+      )}
       
       {/* Token Balance Bar - Only show when user is connected */}
       {shouldFetchBalances && (
@@ -88,6 +95,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             isLoading={balancesLoading} 
             userAddress={headerProps?.userAddress || ''} 
             chainId={headerProps?.chainId || ''}
+            searchQuery={searchQuery}
           />
         </Box>
       )}

@@ -17,6 +17,8 @@ import {
   Spinner,
   Divider,
   Badge,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 import { ethers } from 'ethers';
 import { usePrivy } from '@privy-io/react-auth';
@@ -30,7 +32,7 @@ interface WillTokenPanelProps {
 }
 
 const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, onClose }) => {
-  const { ready, authenticated } = usePrivy();
+  const { ready, authenticated, login } = usePrivy();
   const toast = useToast();
   const [activeTab, setActiveTab] = useState(0);
   const [mintAmount, setMintAmount] = useState('');
@@ -40,6 +42,8 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
   const [isLoading, setIsLoading] = useState(false);
   const [willBalance, setWillBalance] = useState<string>('0');
   const [ethBalance, setEthBalance] = useState<string>('0');
+  const [mintCost, setMintCost] = useState<string>('0');
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
 
   // Get token balances using Alchemy
   const { balances: tokenBalances, isLoading: isLoadingBalances } = useAlchemyBalances(
@@ -47,13 +51,71 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
     chainId
   );
 
+  // Check wallet connection
+  useEffect(() => {
+    const checkWalletConnection = async () => {
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          setIsWalletConnected(accounts.length > 0);
+        } catch (error) {
+          console.error('Error checking wallet connection:', error);
+          setIsWalletConnected(false);
+        }
+      } else {
+        setIsWalletConnected(false);
+      }
+    };
+
+    checkWalletConnection();
+  }, []);
+
   // Get Will contract instance
   const getWillContract = async () => {
-    if (!ready || !authenticated) return null;
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const willAddress = deployments.Will[chainId];
-    return new ethers.Contract(willAddress, ABIs.Will, signer);
+    if (!ready || !authenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please connect your wallet to continue",
+        status: "warning",
+        duration: 5000,
+        isClosable: true,
+      });
+      return null;
+    }
+
+    if (!isWalletConnected) {
+      try {
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        setIsWalletConnected(true);
+      } catch (error) {
+        console.error('Error connecting wallet:', error);
+        toast({
+          title: "Connection Failed",
+          description: "Please connect your wallet to continue",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+        return null;
+      }
+    }
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const willAddress = deployments.Will[chainId];
+      return new ethers.Contract(willAddress, ABIs.Will, signer);
+    } catch (error) {
+      console.error('Error getting contract:', error);
+      toast({
+        title: "Error",
+        description: "Failed to connect to the contract. Please try again.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      return null;
+    }
   };
 
   // Fetch current price and balances
@@ -91,12 +153,26 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
 
     try {
       setIsLoading(true);
-      // Calculate the required ETH amount based on current price
-      const price = await contract.currentPrice();
-      const requiredEth = ethers.parseEther(mintAmount) * price / ethers.parseEther("1");
       
-      const tx = await contract.mintFromETH({ value: requiredEth });
+      // Get current price first
+      const price = await contract.currentPrice();
+      
+      // Convert mint amount to wei (1e18 units)
+      const amountToMint = ethers.parseEther(mintAmount);
+      
+      // Calculate required ETH: amount * price / 1e18
+      const requiredEth = (amountToMint * price) / ethers.parseEther("1");
+      
+      console.log('Minting details:', {
+        amountToMint: amountToMint.toString(),
+        price: price.toString(),
+        requiredEth: requiredEth.toString()
+      });
+
+      // Call mint function with the correct parameters
+      const tx = await contract.mint(amountToMint, { value: requiredEth });
       await tx.wait();
+      
       toast({
         title: "Success",
         description: "Tokens minted successfully",
@@ -105,11 +181,22 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
         isClosable: true,
       });
       setMintAmount('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error minting:', error);
+      let errorMessage = "Failed to mint tokens. ";
+      
+      // Handle specific error cases
+      if (error.message?.includes("InsufficientValue")) {
+        errorMessage += "Insufficient ETH provided for the requested amount.";
+      } else if (error.message?.includes("ValueMismatch")) {
+        errorMessage += "The provided ETH value does not match the required amount.";
+      } else {
+        errorMessage += "Please ensure you have enough ETH and the amount meets the minimum requirement.";
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to mint tokens",
+        description: errorMessage,
         status: "error",
         duration: 5000,
         isClosable: true,
@@ -118,6 +205,36 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
       setIsLoading(false);
     }
   };
+
+  // Calculate mint cost
+  useEffect(() => {
+    const calculateMintCost = async () => {
+      if (!mintAmount || !ready || !authenticated) {
+        setMintCost('0');
+        return;
+      }
+      try {
+        const contract = await getWillContract();
+        if (!contract) return;
+        
+        // Get current price first
+        const price = await contract.currentPrice();
+        
+        // Convert mint amount to wei (1e18 units)
+        const amountToMint = ethers.parseEther(mintAmount);
+        
+        // Calculate required ETH: amount * price / 1e18
+        const cost = (amountToMint * price) / ethers.parseEther("1");
+        
+        setMintCost(ethers.formatEther(cost));
+      } catch (error) {
+        console.error('Error calculating mint cost:', error);
+        setMintCost('0');
+      }
+    };
+
+    calculateMintCost();
+  }, [mintAmount, ready, authenticated]);
 
   // Handle burn
   const handleBurn = async () => {
@@ -189,6 +306,12 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
 
   return (
     <Box p={6}>
+      {!isWalletConnected && (
+        <Alert status="warning" mb={4}>
+          <AlertIcon />
+          Please connect your wallet to interact with Will tokens
+        </Alert>
+      )}
       <Tabs onChange={setActiveTab} isFitted>
         <TabList mb={4}>
           <Tab>Mint</Tab>
@@ -205,19 +328,25 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
               <Text>Your Will Balance: {willBalance} WILL</Text>
               <Text>Your ETH Balance: {ethBalance} ETH</Text>
               <Input
-                placeholder="Amount to mint"
+                placeholder="Amount of WILL tokens to mint"
                 value={mintAmount}
                 onChange={(e) => setMintAmount(e.target.value)}
                 type="number"
                 min="0"
                 step="0.0001"
+                isDisabled={!isWalletConnected}
               />
+              {mintAmount && parseFloat(mintAmount) > 0 && (
+                <Text color="blue.500">
+                  Cost: {mintCost} ETH
+                </Text>
+              )}
               <Button
                 onClick={handleMintFromETH}
                 isLoading={isLoading}
-                isDisabled={!mintAmount || parseFloat(mintAmount) <= 0}
+                isDisabled={!mintAmount || parseFloat(mintAmount) <= 0 || !isWalletConnected}
               >
-                Mint from ETH
+                {!isWalletConnected ? 'Connect Wallet' : 'Mint WILL Tokens'}
               </Button>
             </VStack>
           </TabPanel>
