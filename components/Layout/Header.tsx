@@ -80,15 +80,16 @@ const Header: React.FC<HeaderProps> = ({
               display="flex"
               alignItems="center"
               justifyContent="center"
-              width="28px"
-              height="28px"
+              width="24px"
+              height="24px"
               mr={2}
             >
               <Search size={18} color={contrastingColor} opacity={1} />
             </Box>
           </InputLeftElement>
           <Input
-            placeholder="context"
+            placeholder="🪙"
+            fontSize="20px"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             onFocus={() => setSearchFocused(true)}
@@ -98,8 +99,8 @@ const Header: React.FC<HeaderProps> = ({
             color={contrastingColor}
             _placeholder={{ color: `${contrastingColor}A0`, opacity: 1 }}
             borderRadius="none"
-            width="100%"
-            fontWeight={isActive ? 600 : 400}
+            width="80%"
+            fontWeight={isActive ? 400 : 450}
             boxShadow="none"
             _focus={{ outline: "none", boxShadow: "none" }}
           />

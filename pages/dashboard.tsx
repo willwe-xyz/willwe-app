@@ -54,7 +54,7 @@ export default function DashboardPage() {
   const supportedChainIds = Object.keys(deployments.WillWe);
   
   // Default to Base chain ID
-  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '84532';
+  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '8453';
   
   // Get chain ID from URL, wallet, or default to a supported chain
   let chainId = router.query.chainId as string || wallets[0]?.chainId?.replace('eip155:', '');
@@ -91,12 +91,12 @@ export default function DashboardPage() {
           }
         }, undefined, { shallow: true });
         
-        toast({
-          title: "Network Changed",
-          description: `Switched to supported network (Chain ID: ${defaultChainId})`,
-          status: "info",
-          duration: 5000,
-        });
+        // toast({
+        //   title: "Network Changed",
+        //   description: `Switched to supported network (Chain ID: ${defaultChainId})`,
+        //   status: "info",
+        //   duration: 5000,
+        // });
       }
     }
   }, [ready, isValidChain, router, defaultChainId, toast, wallets, supportedChainIds, effectiveChainId]);

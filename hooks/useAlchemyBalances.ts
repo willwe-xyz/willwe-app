@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Alchemy } from "alchemy-sdk";
+import { Alchemy, TokenBalanceType } from "alchemy-sdk";
 import { getAlchemyNetwork } from '../config/deployments';
 
 // New type to replace the Covalent BalanceItem
@@ -70,11 +70,10 @@ export const useAlchemyBalances = (
         ...alchemyConfig,
         network: getAlchemyNetwork(chainId)
       });
-
       // Get token balances
       const response = await alchemy.core.getTokenBalances(address);
 
-      // Filter out zero balances
+      // Filter out zero balances and suspicious tokens
       const nonZeroBalances = response.tokenBalances.filter(
         token => token.tokenBalance !== "0"
       );
@@ -86,29 +85,67 @@ export const useAlchemyBalances = (
             token.contractAddress
           );
 
+          // Skip tokens with suspicious characteristics
+          if (
+            !metadata.name || // Missing name
+            !metadata.symbol || // Missing symbol
+            metadata.symbol === '???' || // Unknown symbol
+            metadata.name === 'Unknown Token' || // Unknown name
+            metadata.name.toLowerCase().includes('!') || 
+            metadata.name.toLowerCase().includes('$') ||
+            metadata.name.toLowerCase().includes('Visit') ||
+            metadata.symbol.toLowerCase().includes('Visit') ||
+            metadata.symbol.toLowerCase().includes('Claim') ||
+            metadata.symbol.toLowerCase().includes(':') ||
+            metadata.symbol.toLowerCase().includes('!') ||
+            metadata.symbol.toLowerCase().includes('$') ||
+            metadata.symbol.toLowerCase().includes('spam')
+          ) {
+            return null;
+          }
+
           // Calculate human readable balance
           const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
           const formattedBalance = balance.toFixed(2);
 
-          return {
+          const balanceItem: AlchemyTokenBalance = {
             contractAddress: token.contractAddress,
             tokenBalance: token.tokenBalance,
-            name: metadata.name || 'Unknown Token',
-            symbol: metadata.symbol || '???',
+            name: metadata.name,
+            symbol: metadata.symbol,
             decimals: metadata.decimals,
-            logo: metadata.logo,
+            logo: metadata.logo || null,
             formattedBalance
           };
+
+          return balanceItem;
         })
       );
 
+      // Filter out null values from suspicious tokens
+      const filteredBalances = formattedBalances.filter((balance): balance is AlchemyTokenBalance => balance !== null);
+
+      // Sort balances by value, pushing zero balances to the end
+      const sortedBalances = filteredBalances.sort((a, b) => {
+        const balanceA = Number(a.formattedBalance);
+        const balanceB = Number(b.formattedBalance);
+        
+        // If either balance is 0, push it to the end
+        if (balanceA === 0 && balanceB !== 0) return 1;
+        if (balanceA !== 0 && balanceB === 0) return -1;
+        if (balanceA === 0 && balanceB === 0) return 0;
+        
+        // Otherwise sort by value in descending order
+        return balanceB - balanceA;
+      });
+
       // Update cache
       balanceCache.set(cacheKey, {
-        balances: formattedBalances,
+        balances: sortedBalances,
         timestamp: now
       });
 
-      setBalances(formattedBalances);
+      setBalances(sortedBalances);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch balances'));
       console.error('Error fetching balances:', err);
