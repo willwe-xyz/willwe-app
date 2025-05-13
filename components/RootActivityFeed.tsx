@@ -14,11 +14,6 @@ interface RootActivityFeedProps {
   selectedTokenColor?: string;
 }
 
-interface ExtendedActivityItem extends ActivityItem {
-  timeAgo: string;
-  when: string;
-}
-
 /**
  * Component for displaying activities from a root node and all its derived nodes
  */
@@ -29,7 +24,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   selectedTokenColor = 'blue.500'
 }) => {
   const [activities, setActivities] = useState<any[]>([]);
-  const [transformedActivities, setTransformedActivities] = useState<ExtendedActivityItem[]>([]);
+  const [transformedActivities, setTransformedActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [paginationMeta, setPaginationMeta] = useState({ total: 0, limit: 50, offset: 0, nodeCount: 0 });
@@ -120,51 +115,48 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
 
   // Transform activities when they change
   useEffect(() => {
-    if (activities.length) {
-      try {
-        const transformed = transformActivities(activities, true);
-        setTransformedActivities(transformed);
-        
-        // Update debug info
-        setDebugInfo(prev => ({
-          ...prev,
-          activitiesCount: activities.length,
-          transformedCount: transformed.length,
-          sampleActivity: activities[0],
-          sampleTransformed: transformed[0]
-        }));
-      } catch (err) {
-        console.error('Error transforming activities:', err);
-        toast({
-          title: 'Error processing activities',
-          description: err instanceof Error ? err.message : 'Unknown error in data transformation',
-          status: 'warning',
-          duration: 5000,
-          isClosable: true,
-        });
-        
-        // If transformation fails, create a simple version of the activities
-        const simpleActivities = activities.map((activity, index) => ({
-          id: activity.id || `activity-${index}`,
-          type: activity.eventType || 'unknown',
-          timestamp: activity.when || new Date().toISOString(),
-          title: activity.eventName || 'Unknown Activity',
-          description: `Activity related to node ${activity.nodeId}`,
-          node: {
-            id: activity.nodeId || '',
-            name: activity.nodeName || 'Unknown Node'
-          },
-          network: activity.network || 'unknown',
-          user: {
-            address: activity.who || ''
-          }
-        }));
-        
-        setTransformedActivities(simpleActivities);
+    const transformAndSetActivities = async () => {
+      if (activities.length) {
+        try {
+          const transformed = await transformActivities(activities);
+          setTransformedActivities(transformed);
+          // Update debug info
+          setDebugInfo(prev => ({
+            ...prev,
+            activitiesCount: activities.length,
+            transformedCount: transformed.length,
+            sampleActivity: activities[0],
+            sampleTransformed: transformed[0]
+          }));
+        } catch (err) {
+          console.error('Error transforming activities:', err);
+          toast({
+            title: 'Error processing activities',
+            description: err instanceof Error ? err.message : 'Unknown error in data transformation',
+            status: 'warning',
+            duration: 5000,
+            isClosable: true,
+          });
+          // If transformation fails, create a simple version of the activities
+          const simpleActivities = activities.map((activity, index) => ({
+            id: activity.id || `activity-${index}`,
+            nodeId: activity.nodeId || activity.node_id || '0',
+            who: activity.who || activity.userAddress || activity.user_address || 'unknown',
+            eventName: activity.eventName || 'Unknown Activity',
+            eventType: activity.eventType || activity.event_type || 'unknown',
+            when: activity.when || activity.timestamp || new Date().toISOString(),
+            createdBlockNumber: activity.createdBlockNumber || activity.blockNumber || 0,
+            network: activity.network || 'unknown',
+            networkId: activity.networkId || activity.chainId || '0',
+            description: `Activity related to node ${activity.nodeId || activity.node_id || 'unknown'}`
+          }));
+          setTransformedActivities(simpleActivities);
+        }
+      } else {
+        setTransformedActivities([]);
       }
-    } else {
-      setTransformedActivities([]);
-    }
+    };
+    transformAndSetActivities();
   }, [activities, toast]);
 
   // Update debug info on mount
@@ -296,7 +288,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
             }}
           >
             <ActivityFeed 
-              activities={activities}
+              activities={transformedActivities}
               isLoading={isLoading || isPonderLoading}
               error={combinedError ? combinedError.message : null}
               emptyStateMessage="No activities found for this root node. Activities will appear here when events occur in this node or any of its derived nodes."

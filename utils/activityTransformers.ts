@@ -1,6 +1,60 @@
 import { ActivityItem } from '@/types/chainData';
 import { resolveENS } from './ensUtils';
 
+function splitCamelCase(str: string): string {
+  return str.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function transformEventType(eventType: string, activity: any): string {
+  // Handle both MembershipMinted and generic mint of a membership
+  if (
+    eventType === 'MembershipMinted' ||
+    (eventType.toLowerCase() === 'mint' && (
+      activity?.membershipId ||
+      activity?.membership ||
+      (activity?.amount === '1' && activity?.tokenSymbol?.toLowerCase() === 'membership')
+    ))
+  ) {
+    return 'Joined';
+  }
+  if (eventType === 'InflationMinted') {
+    return 'Shares Generated';
+  }
+  switch (eventType) {
+    case 'MembraneCreated':
+      return 'Membrane Created';
+    case 'MovementCreated':
+      return 'Movement Created';
+    case 'MovementSigned':
+      return 'Movement Signed';
+    case 'MovementExecuted':
+      return 'Movement Executed';
+    default:
+      return splitCamelCase(eventType);
+  }
+}
+
+function generateDescription(activity: ActivityItem): string {
+  const shortAddress = `${activity.who.slice(0, 6)}...${activity.who.slice(-4)}`;
+  
+  switch (activity.eventType) {
+    case 'MembershipMinted':
+      return `${shortAddress} joined node ${activity.nodeId}`;
+    case 'InflationMinted':
+      return `Inflation of ${activity.amount || '0'} tokens minted for node ${activity.nodeId}`;
+    case 'MembraneCreated':
+      return `${shortAddress} created a new membrane for node ${activity.nodeId}`;
+    case 'MovementCreated':
+      return `${shortAddress} created a new movement in node ${activity.nodeId}`;
+    case 'MovementSigned':
+      return `${shortAddress} signed a movement in node ${activity.nodeId}`;
+    case 'MovementExecuted':
+      return `${shortAddress} executed a movement in node ${activity.nodeId}`;
+    default:
+      return `${shortAddress} performed ${splitCamelCase(activity.eventType)} in node ${activity.nodeId}`;
+  }
+}
+
 export async function transformActivities(activities: any[]): Promise<ActivityItem[]> {
   if (!Array.isArray(activities)) {
     console.warn('transformActivities received non-array input:', activities);
@@ -16,12 +70,17 @@ export async function transformActivities(activities: any[]): Promise<ActivityIt
           nodeId: activity.nodeId || activity.node_id || '0',
           who: activity.who || activity.userAddress || activity.user_address || 'unknown',
           eventName: activity.eventName || activity.eventName || 'Unknown Activity',
-          eventType: activity.eventType || activity.event_type || 'unknown',
+          eventType: transformEventType(activity.eventType || activity.event_type || 'unknown', activity),
           when: activity.when || activity.timestamp || new Date().toISOString(),
           createdBlockNumber: activity.createdBlockNumber || activity.blockNumber || 0,
           network: activity.network || 'unknown',
           networkId: activity.networkId || activity.chainId || '0',
-          description: activity.description || `Activity in node ${activity.nodeId || 'unknown'}`
+          description: activity.description || generateDescription({
+            ...activity,
+            eventType: activity.eventType || activity.event_type || 'unknown',
+            nodeId: activity.nodeId || activity.node_id || '0',
+            who: activity.who || activity.userAddress || activity.user_address || 'unknown'
+          })
         };
 
         // Add optional fields if present
@@ -144,85 +203,7 @@ async function generateActivityDescription(
       return `${resolvedActor} muted ${resolvedObject}`;
     case 'unmuted':
       return `${resolvedActor} unmuted ${resolvedObject}`;
-    case 'verified':
-      return `${resolvedActor} verified ${resolvedObject}`;
-    case 'unverified':
-      return `${resolvedActor} unverified ${resolvedObject}`;
-    case 'featured':
-      return `${resolvedActor} featured ${resolvedObject}`;
-    case 'unfeatured':
-      return `${resolvedActor} unfeatured ${resolvedObject}`;
-    case 'pinned':
-      return `${resolvedActor} pinned ${resolvedObject}`;
-    case 'unpinned':
-      return `${resolvedActor} unpinned ${resolvedObject}`;
-    case 'locked':
-      return `${resolvedActor} locked ${resolvedObject}`;
-    case 'unlocked':
-      return `${resolvedActor} unlocked ${resolvedObject}`;
-    case 'hidden':
-      return `${resolvedActor} hidden ${resolvedObject}`;
-    case 'unhidden':
-      return `${resolvedActor} unhidden ${resolvedObject}`;
-    case 'delegated':
-      return `${resolvedActor} delegated ${resolvedObject}`;
-    case 'undelegated':
-      return `${resolvedActor} undelegated ${resolvedObject}`;
-    case 'transferred':
-      return `${resolvedActor} transferred ${resolvedObject}`;
-    case 'received':
-      return `${resolvedActor} received ${resolvedObject}`;
-    case 'sent':
-      return `${resolvedActor} sent ${resolvedObject}`;
-    case 'withdrawn':
-      return `${resolvedActor} withdrawn ${resolvedObject}`;
-    case 'deposited':
-      return `${resolvedActor} deposited ${resolvedObject}`;
-    case 'staked':
-      return `${resolvedActor} staked ${resolvedObject}`;
-    case 'unstaked':
-      return `${resolvedActor} unstaked ${resolvedObject}`;
-    case 'claimed':
-      return `${resolvedActor} claimed ${resolvedObject}`;
-    case 'burned':
-      return `${resolvedActor} burned ${resolvedObject}`;
-    case 'minted':
-      return `${resolvedActor} minted ${resolvedObject}`;
-    case 'swapped':
-      return `${resolvedActor} swapped ${resolvedObject}`;
-    case 'provided':
-      return `${resolvedActor} provided ${resolvedObject}`;
-    case 'removed':
-      return `${resolvedActor} removed ${resolvedObject}`;
-    case 'added':
-      return `${resolvedActor} added ${resolvedObject}`;
-    case 'modified':
-      return `${resolvedActor} modified ${resolvedObject}`;
-    case 'configured':
-      return `${resolvedActor} configured ${resolvedObject}`;
-    case 'initialized':
-      return `${resolvedActor} initialized ${resolvedObject}`;
-    case 'finalized':
-      return `${resolvedActor} finalized ${resolvedObject}`;
-    case 'cancelled':
-      return `${resolvedActor} cancelled ${resolvedObject}`;
-    case 'expired':
-      return `${resolvedActor} expired ${resolvedObject}`;
-    case 'renewed':
-      return `${resolvedActor} renewed ${resolvedObject}`;
-    case 'revoked':
-      return `${resolvedActor} revoked ${resolvedObject}`;
-    case 'granted':
-      return `${resolvedActor} granted ${resolvedObject}`;
-    case 'withdrawn':
-      return `${resolvedActor} withdrawn ${resolvedObject}`;
-    case 'executed':
-      return `${resolvedActor} executed ${resolvedObject}`;
-    case 'failed':
-      return `${resolvedActor} failed ${resolvedObject}`;
-    case 'succeeded':
-      return `${resolvedActor} succeeded ${resolvedObject}`;
     default:
-      return `${resolvedActor} ${verb} ${resolvedObject}`;
+      return `${resolvedActor} performed ${activity.eventType} on ${resolvedObject}`;
   }
 }

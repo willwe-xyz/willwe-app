@@ -1,12 +1,10 @@
 import React from 'react';
-import { Box, VStack, Text, Badge, HStack, Link, useColorModeValue } from '@chakra-ui/react';
-import { formatDistanceToNow } from 'date-fns';
-import { ActivityItem } from '../../types/chainData';
-import { Users, ArrowUpRight } from 'lucide-react';
-import { formatRelativeTime } from './../../utils/timeUtils';
+import { Box, VStack, Text, Alert, AlertIcon, Spinner, Flex } from '@chakra-ui/react';
+import { ActivityItem } from './ActivityItem';
+import { ActivityItem as ActivityItemType } from '../../types/chainData';
 
 interface ActivityFeedProps {
-  activities: ActivityItem[];
+  activities: ActivityItemType[];
   isLoading: boolean;
   error: string | null;
   emptyStateMessage: string;
@@ -20,15 +18,20 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   emptyStateMessage,
   selectedTokenColor = 'blue.500'
 }) => {
-  const bgHover = useColorModeValue('gray.50', 'gray.700');
-  const borderColor = useColorModeValue('gray.100', 'gray.600');
-
   if (error) {
     return (
-      <Box p={4} bg="red.50" color="red.500" borderRadius="md">
-        <Text fontWeight="medium">Error:</Text>
+      <Alert status="error" variant="left-accent" borderRadius="md">
+        <AlertIcon />
         <Text>{error}</Text>
-      </Box>
+      </Alert>
+    );
+  }
+
+  if (isLoading && activities.length === 0) {
+    return (
+      <Flex align="center" justify="center" py={8}>
+        <Spinner size="xl" color={selectedTokenColor} />
+      </Flex>
     );
   }
 
@@ -47,94 +50,14 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
     );
   }
 
-  const getBadgeStyle = (eventType: string) => {
-    const baseStyle = {
-      bg: `${selectedTokenColor}10`,
-      color: selectedTokenColor,
-      borderColor: `${selectedTokenColor}30`
-    };
-
-    // Special cases can still have different styling if needed
-    switch (eventType.toLowerCase()) {
-      case 'burn':
-        return {
-          bg: 'red.50',
-          color: 'red.500',
-          borderColor: 'red.200'
-        };
-      default:
-        return baseStyle;
-    }
-  };
-
   return (
     <VStack spacing={3} align="stretch">
       {activities.map((activity, index) => (
-        <Box 
-          key={`${activity.id}-${index}`} 
-          p={4} 
-          borderWidth="1px" 
-          borderRadius="lg"
-          borderColor={borderColor}
-          transition="all 0.2s"
-          _hover={{
-            bg: bgHover,
-            transform: 'translateY(-1px)',
-            shadow: 'sm'
-          }}
-        >
-          <HStack justify="space-between" mb={2}>
-            <Badge 
-              px={2}
-              py={1}
-              borderRadius="full"
-              variant="subtle"
-              borderWidth="1px"
-              {...getBadgeStyle(activity.eventType)}
-            >
-              {activity.eventType}
-            </Badge>
-            <Text 
-              fontSize="sm" 
-              color={selectedTokenColor}
-              fontWeight="medium"
-            >
-              {activity.when ? formatRelativeTime(activity.when) : 'Unknown time'}
-            </Text>
-          </HStack>
-
-          <Text fontSize="sm" fontWeight="medium" mb={2}>
-            {activity.eventName}
-          </Text>
-
-          <HStack spacing={4} fontSize="sm" color="gray.500">
-            <HStack spacing={1}>
-              <Users size={14} />
-              <Text>{`${activity.who.slice(0, 6)}...${activity.who.slice(-4)}`}</Text>
-            </HStack>
-
-            <Link 
-              href={`/nodes/${activity.networkId}/${activity.nodeId}`}
-              color={selectedTokenColor}
-              display="inline-flex"
-              alignItems="center"
-              _hover={{ 
-                textDecoration: 'none', 
-                color: selectedTokenColor,
-                opacity: 0.8 
-              }}
-            >
-              <Text mr={1}>{`${activity.nodeId.slice(0, 6)}...${activity.nodeId.slice(-4)}`}</Text>
-              <ArrowUpRight size={14} />
-            </Link>
-          </HStack>
-
-          {activity.amount && activity.tokenSymbol && (
-            <Text fontSize="sm" color="gray.600" mt={2}>
-              Amount: {activity.amount} {activity.tokenSymbol}
-            </Text>
-          )}
-        </Box>
+        <ActivityItem
+          key={`${activity.id}-${index}`}
+          activity={activity}
+          selectedTokenColor={selectedTokenColor}
+        />
       ))}
     </VStack>
   );
