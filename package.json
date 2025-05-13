@@ -2,7 +2,7 @@
   "private": true,
   "engines": {
     "npm": ">=8.0.0 <10.8.2",
-    "node": ">=20.0.0"
+    "node": ">=20.0.0 <21.0.0"
   },
 
   "scripts": {
@@ -52,7 +52,7 @@
     "json-bignum": "^0.0.3",
     "json-bignumber": "^1.1.1",
     "lucide-react": "^0.399.0",
-    "next": "latest",
+    "next": "14.1.0",
     "next-unused": "^0.0.6",
     "node-fetch": "^2.7.0",
     "plotly.js": "^3.0.1",
