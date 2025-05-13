@@ -1,4 +1,4 @@
-import { ActivityLogEntry } from '../types/activity';
+import { ActivityLogEntry } from '../types/chainData';
 import { ponderConfig } from './config';
 
 /**

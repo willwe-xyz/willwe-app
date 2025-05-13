@@ -4,6 +4,13 @@ import { useAccount } from 'wagmi';
 // Environment variable for the Ponder API server URL with fallback to empty string (resolved at build time)
 const PONDER_SERVER_URL = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || '';
 
+// Add debug logging for Ponder server URL
+console.log('Ponder Server Configuration:', {
+  PONDER_SERVER_URL,
+  isConfigured: !!PONDER_SERVER_URL,
+  env: process.env.NODE_ENV
+});
+
 /**
  * Hook to fetch and interact with data indexed by Ponder
  */
@@ -25,7 +32,15 @@ export function usePonderData() {
     // Ensure endpoint starts with a slash
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     
-    return `${PONDER_SERVER_URL}${normalizedEndpoint}`;
+    const fullUrl = `${PONDER_SERVER_URL}${normalizedEndpoint}`;
+    console.log('API URL Construction:', {
+      baseUrl: PONDER_SERVER_URL,
+      endpoint: normalizedEndpoint,
+      fullUrl,
+      isConfigured: !!PONDER_SERVER_URL
+    });
+    
+    return fullUrl;
   }, []);
 
   /**
@@ -148,21 +163,66 @@ export function usePonderData() {
    * Fetch activity logs for a specific node
    */
   const getNodeActivityLogs = useCallback(async (nodeId: string, networkId: string, limit = 50) => {
-    if (!nodeId) return [];
+    if (!nodeId || !networkId) {
+      console.warn('Missing required parameters:', { nodeId, networkId });
+      return [];
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(apiUrl(`/events?nodeId=${nodeId}&limit=${limit}&networkId=${networkId}`));
+      // Construct URL with all required parameters
+      const params = new URLSearchParams({
+        nodeId,
+        networkId,
+        limit: limit.toString()
+      });
+      
+      const url = apiUrl(`/events?${params.toString()}`);
+      console.log('Making API request to:', {
+        url,
+        params: {
+          nodeId,
+          networkId,
+          limit
+        },
+        ponderServerUrl: PONDER_SERVER_URL,
+        fullUrl: url
+      });
+      
+      const response = await fetch(url);
+      console.log('API Response status:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      
       if (!response.ok) {
         throw new Error(`Error fetching activity logs: ${response.statusText}`);
       }
+      
       const data = await response.json();
+      console.log('API Response data:', {
+        hasEvents: !!data.events,
+        eventsLength: data.events?.length,
+        events: data.events,
+        rawData: data,
+        url: response.url,
+        meta: data.meta
+      });
+      
       setIsLoading(false);
       return data.events || [];
     } catch (err) {
-      console.error('Error fetching node activity logs:', err);
+      console.error('Error fetching node activity logs:', {
+        error: err,
+        errorMessage: err instanceof Error ? err.message : 'Unknown error',
+        nodeId,
+        networkId,
+        ponderServerUrl: PONDER_SERVER_URL
+      });
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];

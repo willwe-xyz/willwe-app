@@ -206,19 +206,18 @@ export interface ActivityLogEntry {
  * Activity item for display in the UI
  */
 export interface ActivityItem {
-  id: string; // Primary key
-  nodeId: string; // Node ID
-  who: string; // Actor
-  eventName: string; // Event name
-  eventType: string; // Event type
-  when: string; // Timestamp
-  createdBlockNumber: number; // Block number
-  network: string; // Network name
-  networkId: string; // Network ID
-  amount?: string; // Optional amount
-  tokenSymbol?: string; // Optional token symbol
-  description?: string; // Description of the activity
-  status?: 'pending' | 'success' | 'failed'; // Status of the activity
+  id: string;
+  nodeId: string;
+  who: string;
+  eventName: string;
+  eventType: string;
+  when: string;
+  createdBlockNumber: number;
+  network: string;
+  networkId: string;
+  description: string;
+  amount?: string;
+  tokenSymbol?: string;
 }
 
 ///////////////////////////////////////////

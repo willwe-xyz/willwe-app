@@ -1,87 +1,160 @@
-import React from 'react';
-import { Box, Text, Flex, Badge, Icon, Tooltip, HStack } from '@chakra-ui/react';
-import { FiArrowUp, FiArrowDown, FiSettings, FiUsers, FiStar, FiZap, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
+import React, { useEffect, useState } from 'react';
+import { Box, Text, Flex, Badge, Icon, Tooltip, HStack, Link } from '@chakra-ui/react';
 import { ActivityItem as ActivityItemType } from '../../types/chainData';
+import { formatRelativeTime } from '../../utils/timeUtils';
+import { Users, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { resolveENS } from '../../utils/ensUtils';
+import { getExplorerLink } from '../../config/contracts';
 
 interface ActivityItemProps {
   activity: ActivityItemType;
-  getActivityIcon: (type: string) => {
-    icon: React.ElementType;
-    color: string;
-    label: string;
-  };
+  selectedTokenColor?: string;
 }
 
-export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
-  // Define icon and color based on activity type
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'mint':
-        return { icon: FiArrowUp, color: 'green.500', label: 'Mint' };
-      case 'burn':
-        return { icon: FiArrowDown, color: 'red.500', label: 'Burn' };
-      case 'signal':
-        return { icon: FiStar, color: 'yellow.500', label: 'Signal' };
-      case 'resignal':
-        return { icon: FiRefreshCw, color: 'blue.500', label: 'Resignal' };
-      case 'transfer':
-        return { icon: FiArrowUp, color: 'purple.500', label: 'Transfer' };
-      case 'inflationChange':
-        return { icon: FiSettings, color: 'orange.500', label: 'Inflation Change' };
-      case 'membraneChange':
-        return { icon: FiSettings, color: 'teal.500', label: 'Membrane Change' };
-      case 'membership':
-        return { icon: FiUsers, color: 'blue.500', label: 'Membership' };
-      case 'configSignal':
-        return { icon: FiSettings, color: 'gray.500', label: 'Config Signal' };
-      case 'endpoint':
-        return { icon: FiZap, color: 'yellow.500', label: 'Endpoint Created' };
-      case 'newMovement':
-        return { icon: FiUsers, color: 'green.500', label: 'New Movement' };
-      case 'queueExecuted':
-        return { icon: FiZap, color: 'purple.500', label: 'Queue Executed' };
-      default:
-        return { icon: FiStar, color: 'gray.500', label: type };
+export const ActivityItem: React.FC<ActivityItemProps> = ({ 
+  activity,
+  selectedTokenColor = 'blue.500'
+}) => {
+  const [resolvedAddress, setResolvedAddress] = useState<string>('');
+
+  useEffect(() => {
+    const resolveAddress = async () => {
+      const resolved = await resolveENS(activity.who);
+      setResolvedAddress(resolved);
+    };
+    resolveAddress();
+  }, [activity.who]);
+
+  // Format amount to max 4 decimal places
+  const formatAmount = (amount: string) => {
+    try {
+      const num = parseFloat(amount);
+      if (isNaN(num)) return amount;
+      return num.toFixed(4).replace(/\.?0+$/, '');
+    } catch {
+      return amount;
     }
   };
 
-  const { icon, color, label } = getActivityIcon(activity.eventType);
-  
-  // Format date
-  const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
+  // Shorten node id
+  const shortNodeId = `${activity.nodeId.slice(0, 4)}...${activity.nodeId.slice(-6)}`;
+
+  // Get human-friendly action phrase
+  let actionPhrase = '';
+  if (activity.eventType.toLowerCase() === 'joined') {
+    actionPhrase = 'joined node';
+  } else if (activity.eventType.toLowerCase() === 'shares generated') {
+    actionPhrase = `generated ${formatAmount(activity.amount || '0')} new shares`;
+  } else if (activity.eventType.toLowerCase() === 'mint') {
+    actionPhrase = `minted ${formatAmount(activity.amount || '0')} tokens`;
+  } else if (activity.eventType.toLowerCase() === 'burn') {
+    actionPhrase = `burned ${formatAmount(activity.amount || '0')} tokens`;
+  } else {
+    actionPhrase = activity.description || activity.eventType;
+  }
+
+  // Get lowercase label/tag
+  const tagLabel = activity.eventType.toLowerCase();
+
+  // Get badge style based on event type
+  const getBadgeStyle = (eventType: string) => {
+    const baseStyle = {
+      bg: `${selectedTokenColor}10`,
+      color: selectedTokenColor,
+      borderColor: `${selectedTokenColor}30`
+    };
+    switch (eventType.toLowerCase()) {
+      case 'burn':
+        return { bg: 'red.50', color: 'red.500', borderColor: 'red.200' };
+      case 'mint':
+        return { bg: 'green.50', color: 'green.500', borderColor: 'green.200' };
+      case 'joined':
+        return { bg: 'blue.50', color: 'blue.500', borderColor: 'blue.200' };
+      default:
+        return baseStyle;
+    }
   };
 
   return (
     <Box 
-      p={4} 
+      p={3}
       borderWidth="1px" 
-      borderRadius="md" 
-      boxShadow="sm"
-      _hover={{ boxShadow: 'md' }}
+      borderRadius="lg"
       transition="all 0.2s"
+      _hover={{
+        transform: 'translateY(-1px)',
+        shadow: 'sm'
+      }}
     >
-      <Flex justify="space-between" align="center">
-        <HStack spacing={3}>
-          <Tooltip label={label}>
-            <Box>
-              <Icon as={icon} color={color} boxSize={5} />
-            </Box>
-          </Tooltip>
-          <Box>
-            <Text fontWeight="bold">{activity.description}</Text>
-            <Text fontSize="sm" color="gray.500">
-              {activity.userAddress && `By: ${activity.userAddress.slice(0, 6)}...${activity.userAddress.slice(-4)}`}
-            </Text>
-          </Box>
-        </HStack>
-        <Box textAlign="right">
-          <Badge colorScheme={color.split('.')[0]}>{label}</Badge>
-          <Text fontSize="xs" color="gray.500" mt={1}>
-            {formatDate(activity.timestamp)}
+      {/* Top: subject (ENS/address) and time */}
+      <Flex justify="space-between" align="flex-start" mb={1}>
+        <Link
+          href={getExplorerLink(activity.who, activity.networkId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          display="inline-flex"
+          alignItems="center"
+          gap={1}
+          color="inherit"
+          _hover={{
+            color: selectedTokenColor,
+            textDecoration: 'none',
+            '& .external-link-icon': {
+              opacity: 1
+            }
+          }}
+        >
+          <Text fontWeight="bold" fontSize="md">
+            {resolvedAddress || `${activity.who.slice(0, 6)}...${activity.who.slice(-4)}`}
           </Text>
-        </Box>
+          <ExternalLink 
+            size={14} 
+            className="external-link-icon"
+            style={{ 
+              opacity: 0,
+              transition: 'opacity 0.2s ease-in-out'
+            }} 
+          />
+        </Link>
+        <Text fontSize="sm" color={selectedTokenColor} fontWeight="medium">
+          {activity.when ? formatRelativeTime(activity.when) : 'Unknown time'}
+        </Text>
+      </Flex>
+
+      {/* Middle: action phrase */}
+      <Text fontSize="sm" fontWeight="medium" mb={0.5}>
+        {actionPhrase}
+      </Text>
+
+      {/* Node link (shortened) */}
+      <Link 
+        href={`/nodes/${activity.networkId}/${activity.nodeId}`}
+        color={selectedTokenColor}
+        fontSize="sm"
+        display="inline-flex"
+        alignItems="center"
+        _hover={{ textDecoration: 'none', color: selectedTokenColor, opacity: 0.8 }}
+        mb={2}
+      >
+        node {shortNodeId}
+        <ArrowUpRight size={14} style={{ marginLeft: 4 }} />
+      </Link>
+
+      {/* Bottom: tag/label at bottom right */}
+      <Flex justify="flex-end" align="center" mt={2}>
+        <Badge 
+          px={2}
+          py={0.5}
+          borderRadius="full"
+          variant="subtle"
+          borderWidth="1px"
+          textTransform="lowercase"
+          fontWeight="normal"
+          fontSize="xs"
+          {...getBadgeStyle(activity.eventType)}
+        >
+          {tagLabel}
+        </Badge>
       </Flex>
     </Box>
   );
