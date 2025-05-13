@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Alchemy, TokenBalanceType } from "alchemy-sdk";
+import { Alchemy } from "alchemy-sdk";
 import { getAlchemyNetwork } from '../config/deployments';
 
 // New type to replace the Covalent BalanceItem
@@ -13,6 +13,12 @@ export interface AlchemyTokenBalance {
   logo?: string | null;
   // Formatted balance in human readable form
   formattedBalance: string;
+  // Price information
+  price?: {
+    value: string;
+    currency: string;
+    lastUpdatedAt: string;
+  };
 }
 
 export interface UseAlchemyBalancesResult {
@@ -25,6 +31,12 @@ export interface UseAlchemyBalancesResult {
 const alchemyConfig = {
   apiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || '',
 };
+
+// Get exclusion list from environment variable
+const TOKEN_BALANCE_EXCLUDEIF = (process.env.NEXT_PUBLIC_TOKEN_BALANCE_EXCLUDEIF || '')
+  .split(',')
+  .map(item => item.trim().toLowerCase())
+  .filter(item => item.length > 0);
 
 // Cache for storing balance results
 const balanceCache = new Map<string, {
@@ -66,89 +78,201 @@ export const useAlchemyBalances = (
     setError(null);
 
     try {
-      const alchemy = new Alchemy({
-        ...alchemyConfig,
-        network: getAlchemyNetwork(chainId)
-      });
-      // Get token balances
-      const response = await alchemy.core.getTokenBalances(address);
+      const network = getAlchemyNetwork(chainId);
+      
+      // Try Routescan first
+      try {
+        const routescanUrl = `https://api.routescan.io/v2/network/mainnet/evm/${chainId}/etherscan/api?module=account&action=addresstokenbalance&address=${address}&apikey=${alchemyConfig.apiKey}`;
 
-      // Filter out zero balances and suspicious tokens
-      const nonZeroBalances = response.tokenBalances.filter(
-        token => token.tokenBalance !== "0"
-      );
 
-      // Fetch metadata and format balances
-      const formattedBalances = await Promise.all(
-        nonZeroBalances.map(async (token) => {
-          const metadata = await alchemy.core.getTokenMetadata(
-            token.contractAddress
-          );
-
-          // Skip tokens with suspicious characteristics
-          if (
-            !metadata.name || // Missing name
-            !metadata.symbol || // Missing symbol
-            metadata.symbol === '???' || // Unknown symbol
-            metadata.name === 'Unknown Token' || // Unknown name
-            metadata.name.toLowerCase().includes('!') || 
-            metadata.name.toLowerCase().includes('$') ||
-            metadata.name.toLowerCase().includes('Visit') ||
-            metadata.symbol.toLowerCase().includes('Visit') ||
-            metadata.symbol.toLowerCase().includes('Claim') ||
-            metadata.symbol.toLowerCase().includes(':') ||
-            metadata.symbol.toLowerCase().includes('!') ||
-            metadata.symbol.toLowerCase().includes('$') ||
-            metadata.symbol.toLowerCase().includes('spam')
-          ) {
-            return null;
+        const routescanResponse = await fetch(routescanUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
           }
+        });
 
-          // Calculate human readable balance
+        if (routescanResponse.ok) {
+          const data = await routescanResponse.json();
+          
+          // Transform the response into our format
+          const formattedBalances = data.result.map((token: any) => {
+            const balance = Number(token.TokenQuantity) / Math.pow(10, Number(token.TokenDivisor));
+            
+            return {
+              contractAddress: token.TokenAddress,
+              tokenBalance: token.TokenQuantity,
+              name: token.TokenName || 'Unknown Token',
+              symbol: token.TokenSymbol || '???',
+              decimals: Number(token.TokenDivisor),
+              logo: undefined,
+              formattedBalance: balance.toFixed(2),
+              price: undefined
+            };
+          });
+
+          // Enhanced filtering for suspicious tokens
+          const filteredBalances = formattedBalances.filter((token: AlchemyTokenBalance) => {
+            const symbol = token.symbol.toLowerCase();
+            const name = token.name.toLowerCase();
+            
+            // Check for invalid characters and patterns
+            const hasInvalidSymbol = /[\[\]!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(token.symbol) || 
+              /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(token.symbol);
+            const hasInvalidName = /^[^a-zA-Z]/.test(token.name);
+            
+            // Check if token contains any excluded keywords
+            const hasExcludedKeyword = TOKEN_BALANCE_EXCLUDEIF.some(keyword => 
+              symbol.includes(keyword) || name.includes(keyword)
+            );
+
+            return !(
+              !token.name || // Missing name
+              !token.symbol || // Missing symbol
+              token.symbol === '???' || // Unknown symbol
+              token.name === 'Unknown Token' || // Unknown name
+              hasInvalidSymbol || // Contains invalid characters in symbol
+              hasInvalidName || // Name starts with non-letter
+              hasExcludedKeyword // Contains excluded keywords
+            );
+          });
+
+          // Sort balances by value
+          const sortedBalances = filteredBalances.sort((a: AlchemyTokenBalance, b: AlchemyTokenBalance) => {
+            const balanceA = Number(a.formattedBalance);
+            const balanceB = Number(b.formattedBalance);
+            
+            if (balanceA === 0 && balanceB !== 0) return 1;
+            if (balanceA !== 0 && balanceB === 0) return -1;
+            if (balanceA === 0 && balanceB === 0) return 0;
+            
+            return balanceB - balanceA;
+          });
+
+          // Update cache
+          balanceCache.set(cacheKey, {
+            balances: sortedBalances,
+            timestamp: now
+          });
+
+          setBalances(sortedBalances);
+          return;
+        }
+      } catch (error) {
+        console.warn('Routescan API failed, falling back to Alchemy:', error);
+      }
+
+      // Fallback to Alchemy
+      try {
+        const alchemyUrl = `https://${network}.g.alchemy.com/v2/${alchemyConfig.apiKey}`;
+        
+        const requestBody = {
+          id: 1,
+          jsonrpc: "2.0",
+          method: "alchemy_getTokenBalances",
+          params: [address, "erc20"]
+        };
+
+        const alchemyResponse = await fetch(alchemyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!alchemyResponse.ok) {
+          throw new Error(`Alchemy API failed: ${alchemyResponse.statusText}`);
+        }
+
+        const data = await alchemyResponse.json();
+        
+        // Get token balances from the response
+        const tokenBalances = data.result.tokenBalances;
+        
+        // Filter out zero balances
+        const nonZeroBalances = tokenBalances.filter((token: any) => 
+          BigInt(token.tokenBalance) > BigInt(0)
+        );
+
+        // Fetch metadata for each token
+        const formattedBalances = await Promise.all(nonZeroBalances.map(async (token: any) => {
+          const metadataResponse = await fetch(alchemyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              id: 1,
+              jsonrpc: "2.0",
+              method: "alchemy_getTokenMetadata",
+              params: [token.contractAddress]
+            })
+          });
+
+          const metadataData = await metadataResponse.json();
+          const metadata = metadataData.result || {};
+          
           const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
-          const formattedBalance = balance.toFixed(2);
-
-          const balanceItem: AlchemyTokenBalance = {
+          
+          return {
             contractAddress: token.contractAddress,
             tokenBalance: token.tokenBalance,
-            name: metadata.name,
-            symbol: metadata.symbol,
+            name: metadata.name || 'Unknown Token',
+            symbol: metadata.symbol || '???',
             decimals: metadata.decimals,
-            logo: metadata.logo || null,
-            formattedBalance
+            logo: metadata.logo,
+            formattedBalance: balance.toFixed(2),
+            price: undefined
           };
+        }));
 
-          return balanceItem;
-        })
-      );
+        // Apply the same filtering as Routescan
+        const filteredBalances = formattedBalances.filter((token: AlchemyTokenBalance) => {
+          const symbol = token.symbol.toLowerCase();
+          const name = token.name.toLowerCase();
+          
+          const hasInvalidSymbol = /[\[\]!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(token.symbol) || 
+            /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(token.symbol);
+          const hasInvalidName = /^[^a-zA-Z]/.test(token.name);
+          
+          // Check if token contains any excluded keywords
+          const hasExcludedKeyword = TOKEN_BALANCE_EXCLUDEIF.some(keyword => 
+            symbol.includes(keyword) || name.includes(keyword)
+          );
 
-      // Filter out null values from suspicious tokens
-      const filteredBalances = formattedBalances.filter((balance): balance is AlchemyTokenBalance => balance !== null);
+          return !(
+            !token.name ||
+            !token.symbol ||
+            token.symbol === '???' ||
+            token.name === 'Unknown Token' ||
+            hasInvalidSymbol ||
+            hasInvalidName ||
+            hasExcludedKeyword
+          );
+        });
 
-      // Sort balances by value, pushing zero balances to the end
-      const sortedBalances = filteredBalances.sort((a, b) => {
-        const balanceA = Number(a.formattedBalance);
-        const balanceB = Number(b.formattedBalance);
-        
-        // If either balance is 0, push it to the end
-        if (balanceA === 0 && balanceB !== 0) return 1;
-        if (balanceA !== 0 && balanceB === 0) return -1;
-        if (balanceA === 0 && balanceB === 0) return 0;
-        
-        // Otherwise sort by value in descending order
-        return balanceB - balanceA;
-      });
+        const sortedBalances = filteredBalances.sort((a: AlchemyTokenBalance, b: AlchemyTokenBalance) => {
+          const balanceA = Number(a.formattedBalance);
+          const balanceB = Number(b.formattedBalance);
+          
+          if (balanceA === 0 && balanceB !== 0) return 1;
+          if (balanceA !== 0 && balanceB === 0) return -1;
+          if (balanceA === 0 && balanceB === 0) return 0;
+          
+          return balanceB - balanceA;
+        });
 
-      // Update cache
-      balanceCache.set(cacheKey, {
-        balances: sortedBalances,
-        timestamp: now
-      });
+        balanceCache.set(cacheKey, {
+          balances: sortedBalances,
+          timestamp: now
+        });
 
-      setBalances(sortedBalances);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch balances'));
-      console.error('Error fetching balances:', err);
+        setBalances(sortedBalances);
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error('Failed to fetch balances'));
+        console.error('Error fetching balances:', error);
+      }
     } finally {
       setIsLoading(false);
     }
