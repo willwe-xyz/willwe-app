@@ -19,6 +19,18 @@ module.exports = {
         'sqlite3-binding': false
       };
     }
+
+    // Exclude platform-specific packages from managed paths
+    config.snapshot = {
+      ...config.snapshot,
+      managedPaths: [/^(.+?[\\/]node_modules[\\/])/],
+      immutablePaths: [],
+      buildDependencies: {
+        hash: true,
+        timestamp: true,
+      },
+    };
+
     return config;
   },
   async redirects() {

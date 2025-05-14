@@ -4,12 +4,7 @@ import { useAccount } from 'wagmi';
 // Environment variable for the Ponder API server URL with fallback to empty string (resolved at build time)
 const PONDER_SERVER_URL = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || '';
 
-// Add debug logging for Ponder server URL
-console.log('Ponder Server Configuration:', {
-  PONDER_SERVER_URL,
-  isConfigured: !!PONDER_SERVER_URL,
-  env: process.env.NODE_ENV
-});
+
 
 /**
  * Hook to fetch and interact with data indexed by Ponder
@@ -33,12 +28,7 @@ export function usePonderData() {
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     
     const fullUrl = `${PONDER_SERVER_URL}${normalizedEndpoint}`;
-    console.log('API URL Construction:', {
-      baseUrl: PONDER_SERVER_URL,
-      endpoint: normalizedEndpoint,
-      fullUrl,
-      isConfigured: !!PONDER_SERVER_URL
-    });
+
     
     return fullUrl;
   }, []);
