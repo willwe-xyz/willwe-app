@@ -99,7 +99,6 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
         true;
       
       if (isMountedRef.current) {
-        console.log('Updating messages:', sortedMessages); // Debug log
         setMessages(sortedMessages);
         lastMessageIdRef.current = latestMessageId;
         
@@ -109,7 +108,6 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
         }
       }
     } catch (error) {
-      console.error('Error fetching chat messages:', error);
       // Don't show error toast for 404s or when the server is not available
       if (error instanceof Error && !error.message.includes('404') && !error.message.includes('Failed to fetch')) {
         if (isMountedRef.current) {
@@ -198,7 +196,6 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     
     try {
       const result = await sendChatMessage(nodeId, authenticatedAddress, newMessage.trim(), chainId);
-      console.log('Chat message result:', result);
       
       // Handle different response formats from the Ponder server
       const messageToAdd = result.message || result;
@@ -208,7 +205,6 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
         setShouldScrollToBottom(true);
       }
     } catch (error) {
-      console.error('Error sending message:', error);
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",

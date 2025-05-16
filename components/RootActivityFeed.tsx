@@ -76,7 +76,6 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
     const rootNodeId = getRootNodeId(tokenAddress);
     
     try {
-      console.log(`Fetching activities for root node ID: ${rootNodeId}, chainId: ${chainId}`);
       setDebugInfo(prev => ({
         ...prev,
         fetchRequested: new Date().toISOString(),

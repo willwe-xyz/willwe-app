@@ -105,7 +105,6 @@ const SpawnNodeForm = ({
     }
 
     setValidatingToken(true);
-    console.log('Validating token:', { address: newTokenAddress, balance: newTokenBalance });
 
     try {
       const tokenInfo = await validateToken(newTokenAddress, chainId);

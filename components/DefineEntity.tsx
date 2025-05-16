@@ -98,7 +98,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
     }
 
     setValidatingToken(true);
-    console.log('Validating token:', { address: newTokenAddress, balance: newTokenBalance });
 
     try {
       const tokenInfo = await validateToken(newTokenAddress, chainId);
@@ -128,10 +127,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         duration: 2000
       });
 
-      console.log('Token validated and added:', tokenInfo);
-
     } catch (error: any) {
-      console.error('Token validation error:', error);
       toast({
         title: 'Error',
         description: error.message,
@@ -190,12 +186,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
     setError(null);
 
     try {
-      console.log('Starting membrane creation...', {
-        entityName,
-        membershipConditions,
-        characteristics
-      });
-
       // Prepare metadata
       const metadata: EntityMetadata = {
         name: entityName,
@@ -204,7 +194,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       };
 
       // Upload to IPFS
-      console.log('Uploading metadata to IPFS...');
       const response = await fetch('/api/upload-to-ipfs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -213,7 +202,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
 
       if (!response.ok) throw new Error('Failed to upload metadata');
       const { cid } = await response.json();
-      console.log('Metadata uploaded to IPFS:', { cid });
 
       // Get contract instance
       const provider = await getEthersProvider();
@@ -238,15 +226,8 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         ethers.parseUnits(mc.requiredBalance, 18)
       );
 
-      console.log('Creating membrane with parameters:', {
-        tokens,
-        balances,
-        cid
-      });
-
       // Send transaction
       const tx = await contract.createMembrane(tokens, balances, cid);
-      console.log('Transaction sent:', tx.hash);
 
       // Show pending toast
       const pendingToastId = toast({
@@ -260,34 +241,20 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       try {
         // Wait for confirmation differently
         const receipt = await provider.waitForTransaction(tx.hash);
-        console.log('Transaction confirmed:', receipt);
 
         // Close pending toast
         toast.close(pendingToastId);
 
         // Find MembraneCreated event
-        console.log('Transaction receipt logs:', JSON.stringify(receipt.logs, null, 2));
-        
-        // The event signature for MembraneCreated(address,uint256,string)
         const membraneCreatedSignature = ethers.id("MembraneCreated(address,uint256,string)");
         
         const membraneCreatedEvent = receipt.logs.find((log: any) => {
-          try {
-            console.log('Checking log topic:', log.topics[0]);
-            console.log('Expected topic:', membraneCreatedSignature);
-            return log.topics[0] === membraneCreatedSignature;
-          } catch (e) {
-            console.error('Error checking log topic:', e);
-            return false;
-          }
+          return log.topics[0] === membraneCreatedSignature;
         });
 
         if (!membraneCreatedEvent) {
-          console.log('All log topics:', receipt.logs.map((log: any) => log.topics[0]));
           throw new Error('Could not find membrane ID in transaction logs');
         }
-
-        console.log('Found membrane event:', membraneCreatedEvent);
         
         // Extract membraneId from the data field since parameters are not indexed
         let membraneId;
@@ -302,8 +269,6 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
             membraneCreatedEvent.data
           );
           
-          console.log('Decoded event data:', decodedData);
-          
           // The membraneId is the second parameter (index 1)
           membraneId = decodedData[1].toString();
           
@@ -311,12 +276,9 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
             throw new Error('Could not extract membrane ID from event data');
           }
         } catch (error) {
-          console.error('Error extracting membrane ID:', error);
           throw new Error('Failed to parse membrane ID from transaction logs');
         }
         
-        console.log('Membrane created with ID:', membraneId);
-
         setCreationResult({
           membraneId,
           txHash: receipt.transactionHash,
@@ -336,13 +298,11 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         }
 
       } catch (waitError) {
-        console.error('Transaction confirmation error:', waitError);
         toast.close(pendingToastId);
         throw new Error('Transaction failed during confirmation');
       }
 
     } catch (error: any) {
-      console.error('Entity creation error:', error);
       setError(error.message);
       toast({
         title: 'Failed to Create Entity',

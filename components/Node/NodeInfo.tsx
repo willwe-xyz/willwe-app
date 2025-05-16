@@ -19,6 +19,7 @@ import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
 import TreemapChart from './TreemapChart';
 import { nodeIdToAddress } from '../../utils/formatters';
+import { resolveMultipleENS } from '../../utils/ensUtils';
 import router from 'next/router';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
@@ -201,21 +202,12 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       if (!node?.membersOfNode || node.membersOfNode.length === 0) return;
 
       try {
-        // Use Ethereum mainnet for ENS resolution
-        const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
-
-        const ensNames = await Promise.all(
-          node.membersOfNode.map(async (address) => {
-            try {
-              const ensName = await mainnetProvider.lookupAddress(address);
-              return { address, ensName };
-            } catch (error) {
-              console.error(`Error resolving ENS for ${address}:`, error);
-              return { address, ensName: null };
-            }
-          })
-        );
-        setMemberData(ensNames);
+        const resolvedNames = await resolveMultipleENS(node.membersOfNode);
+        const memberData = node.membersOfNode.map((address, index) => ({
+          address,
+          ensName: resolvedNames[index]
+        }));
+        setMemberData(memberData);
       } catch (error) {
         console.error('Error resolving ENS names:', error);
       }
@@ -365,7 +357,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
               transition="all 0.2s"
               _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
             >
-              <Tooltip label="Total supply of tokens in the node" fontSize="sm">
+              <Tooltip label="Total supply of tokens in the node's budget" fontSize="sm">
                 <VStack align="start" spacing={1}>
                   <Text fontSize="sm" color={mutedColor}>Total Value</Text>
                   <Text fontSize="lg" fontWeight="semibold">
@@ -567,9 +559,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
                 <VStack align="stretch" spacing={2} p={3} h="100%">
                   <HStack justify="space-between">
                     <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
-                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
-                      Active
-                    </Badge>
                   </HStack>
                   <Box 
                     sx={{

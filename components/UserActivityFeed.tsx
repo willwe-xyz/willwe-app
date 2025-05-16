@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner, Link } from '@chakra-ui/react';
+import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner, Link, IconButton,  } from '@chakra-ui/react';
 import { ActivityFeed } from './ActivityFeed/ActivityFeed';
 import { ActivityItem } from '../types/chainData';
 import { transformActivities } from '../utils/activityTransformers';
 import { usePonderData } from '@/hooks/usePonderData';
+import { RefreshCw } from 'lucide-react';
 
 interface UserActivityFeedProps {
   userAddress: string;
@@ -170,16 +171,17 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
   const combinedError = error || ponderError;
 
   return (
-    <VStack spacing={4} align="stretch" w="100%">
+    <VStack spacing={3} align="stretch" w="100%">
       <Flex justifyContent="space-between" alignItems="center">
       <Heading size="md">Feed</Heading>
       <Button 
-        size="sm" 
+        size="xs" 
         colorScheme="blue" 
         onClick={handleRefresh} 
         isLoading={isLoading || isPonderLoading}
+        variant="outline"
       >
-        Refresh Activities
+        <RefreshCw size={16} />
       </Button>
       </Flex>
       

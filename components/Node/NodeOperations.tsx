@@ -234,14 +234,12 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         tokenAddress = ethers.getAddress(ethers.toBeHex(rootNodeId, 20));
       } else {
         // If we don't have a valid address, return default
-        console.warn('No valid token address found, using default symbol');
         return 'PSC';
       }
       
 
       // Verify we have a valid non-zero address
       if (tokenAddress === ethers.ZeroAddress) {
-        console.warn('Zero address detected, returning default symbol');
         return 'PSC';
       }
 
@@ -257,23 +255,19 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       try {
         // First try to get the symbol
         const symbol = await tokenContract.symbol();
-        console.log('Retrieved token symbol:', symbol);
         return symbol || 'PSC';
       } catch (symbolError) {
-        console.warn('Failed to get symbol, trying name:', symbolError);
         try {
           // If symbol fails, try to get the name
           const name = await tokenContract.name();
           // Use first 3-4 characters of name as symbol if name exists
           return name ? name.slice(0, 4).toUpperCase() : 'PSC';
         } catch (nameError) {
-          console.warn('Failed to get name:', nameError);
           // If both fail, return default
           return 'PSC';
         }
       }
     } catch (error) {
-      console.error('Error getting token symbol:', error);
       return 'PSC';
     }
   }, [nodeData?.rootPath, nodeId, getEthersProvider]);
@@ -316,7 +310,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const checkAllowance = useCallback(async () => {
     try {
       if (!nodeData?.rootPath?.[0] || !user?.wallet?.address || !mintAmount) {
-        console.warn('Required data not available');
         return;
       }
   
@@ -325,7 +318,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       const willWeAddress = deployments.WillWe[cleanChainId];
   
       if (!willWeAddress) {
-        console.warn('WillWe contract address not available');
         return;
       }
   
@@ -355,14 +347,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       // Strict BigInt comparison
       setNeedsApproval(currentAllowance < requiredAmount);
 
-      console.log('Allowance check:', {
-        currentAllowance: currentAllowance.toString(),
-        requiredAmount: requiredAmount.toString(),
-        needsApproval: currentAllowance < requiredAmount
-      });
-
     } catch (error) {
-      console.error('Error checking allowance:', error);
       toast({
         title: 'Error',
         description: 'Failed to check token allowance',
@@ -410,7 +395,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         }
       );
     } catch (error) {
-      console.error('Approval error:', error);
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to approve tokens',
@@ -423,21 +407,11 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const checkNodeBalance = useCallback(async () => {
     try {
       if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
-        console.warn('Token address or user address not available', {
-          rootPath: nodeData?.rootPath,
-          userAddress: user?.wallet?.address
-        });
         return;
       }
   
       const cleanChainId = chainId.replace('eip155:', '');
       const rootTokenAddress = ethers.getAddress(ethers.toBeHex(nodeData.rootPath[0], 20));
-      
-      console.log('Checking root token balance with params:', {
-        rootTokenAddress,
-        userAddress: user.wallet.address,
-        rootNodeId: nodeData.rootPath[0]
-      });
       
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
@@ -452,15 +426,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   
       const balance = await rootTokenContract.balanceOf(user.wallet.address);
       
-      console.log('Retrieved root token balance:', {
-        rawBalance: balance.toString(),
-        formattedBalance: formatBalance(balance.toString()),
-        rootTokenAddress
-      });
-      
       setUserBalance(balance.toString());
     } catch (error) {
-      console.error('Error checking root token balance:', error);
       toast({
         title: 'Error',
         description: 'Failed to check root token balance',
@@ -517,7 +484,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to mint tokens via path:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to mint tokens',
@@ -565,7 +531,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to mint tokens from parent:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to mint tokens',
@@ -612,7 +577,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to burn tokens via path:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to burn tokens',
@@ -659,7 +623,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to burn tokens to parent:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to burn tokens',
@@ -704,7 +667,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to mint membership:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to mint membership',
@@ -747,7 +709,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to redistribute:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Transaction failed',
@@ -761,7 +722,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const checkBurnBalance = useCallback(async () => {
     try {
       if (!user?.wallet?.address) {
-        console.warn('User address not available');
         return;
       }
   
@@ -769,18 +729,11 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       const contractAddress = deployments.WillWe[cleanChainId];
       
       if (!contractAddress) {
-        console.error(`No contract deployment found for chain ${cleanChainId}`);
         return;
       }
   
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-      
-      console.log('Checking burn balance with params:', {
-        contractAddress,
-        userAddress: user.wallet.address,
-        nodeId: BigInt(nodeId)
-      });
       
       const contract = new ethers.Contract(
         contractAddress,
@@ -794,14 +747,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         BigInt(nodeId)
       );
       
-      console.log('Retrieved burn balance:', {
-        rawBalance: balance.toString(),
-        formattedBalance: formatBalance(balance.toString())
-      });
-      
       setBurnBalance(balance.toString());
     } catch (error) {
-      console.error('Error checking burn balance:', error);
       toast({
         title: 'Error',
         description: 'Failed to check token balance',

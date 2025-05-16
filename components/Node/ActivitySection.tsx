@@ -56,13 +56,12 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
         <Heading size="sm">Node Activity</Heading>
         <Button
           size="sm"
-          leftIcon={<RepeatIcon />}
           onClick={fetchActivities}
           isLoading={refreshLoading}
           colorScheme="blue"
           variant="outline"
         >
-          Refresh
+          <RepeatIcon />
         </Button>
       </Flex>
       {error && (
