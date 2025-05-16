@@ -8,9 +8,10 @@ interface ActivityLogProps {
   nodeId?: string;
   userAddress?: string;
   limit?: number;
+  chainId?: string;
 }
 
-export default function ActivityLog({ nodeId, userAddress, limit = 10 }: ActivityLogProps) {
+export default function ActivityLog({ nodeId, userAddress, limit = 10, chainId }: ActivityLogProps) {
   const { address } = useAccount();
   const { getNodeActivityLogs, getUserActivityLogs, getUserFeed, isLoading, error } = usePonderData();
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
@@ -18,14 +19,15 @@ export default function ActivityLog({ nodeId, userAddress, limit = 10 }: Activit
 
   useEffect(() => {
     const fetchLogs = async () => {
+      if (!chainId) return;
       try {
         let logs = [];
         if (view === 'node' && nodeId) {
-          logs = await getNodeActivityLogs(nodeId, '1', limit);
+          logs = await getNodeActivityLogs(nodeId, chainId, limit);
         } else if (view === 'user' && (userAddress || address)) {
-          logs = await getUserActivityLogs(userAddress || address as string, '1', limit);
+          logs = await getUserActivityLogs(userAddress || address as string, chainId, limit);
         } else if (view === 'feed' && address) {
-          logs = await getUserFeed(address, '1', limit);
+          logs = await getUserFeed(address, chainId, limit);
         }
         setActivityLogs(logs);
       } catch (err) {
@@ -34,7 +36,7 @@ export default function ActivityLog({ nodeId, userAddress, limit = 10 }: Activit
     };
 
     fetchLogs();
-  }, [nodeId, userAddress, address, view, limit, getNodeActivityLogs, getUserActivityLogs, getUserFeed]);
+  }, [nodeId, userAddress, address, view, limit, chainId, getNodeActivityLogs, getUserActivityLogs, getUserFeed]);
 
   // Function to format the activity log message
   const formatActivityLogMessage = (log: any) => {

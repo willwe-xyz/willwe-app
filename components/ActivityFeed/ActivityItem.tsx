@@ -1,18 +1,29 @@
-import React from 'react';
-import { Box, Text, Flex, Badge, Icon, Tooltip, HStack } from '@chakra-ui/react';
+import React, { useState, useEffect } from 'react';
+import { Box, Text, Flex, Badge, Icon, Tooltip, HStack, VStack, Link } from '@chakra-ui/react';
 import { FiArrowUp, FiArrowDown, FiSettings, FiUsers, FiStar, FiZap, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
 import { ActivityItem as ActivityItemType } from '../../types/chainData';
+import { formatDistanceToNow } from 'date-fns';
+import { resolveENS } from '../../utils/ensUtils';
 
 interface ActivityItemProps {
   activity: ActivityItemType;
-  getActivityIcon: (type: string) => {
-    icon: React.ElementType;
-    color: string;
-    label: string;
-  };
 }
 
 export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
+  const [displayName, setDisplayName] = useState<string>('');
+
+  useEffect(() => {
+    const resolveName = async () => {
+      if (activity.userAddress) {
+        const resolvedName = await resolveENS(activity.userAddress);
+        setDisplayName(resolvedName);
+        console.log(resolvedName);
+
+      }
+    };
+    resolveName();
+  }, [activity.userAddress]);
+
   // Define icon and color based on activity type
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -46,12 +57,6 @@ export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
   };
 
   const { icon, color, label } = getActivityIcon(activity.eventType);
-  
-  // Format date
-  const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  };
 
   return (
     <Box 
@@ -61,28 +66,46 @@ export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
       boxShadow="sm"
       _hover={{ boxShadow: 'md' }}
       transition="all 0.2s"
+      position="relative"
     >
-      <Flex justify="space-between" align="center">
-        <HStack spacing={3}>
-          <Tooltip label={label}>
+      {/* Badge in top right */}
+      <Box position="absolute" top={3} right={3}>
+        <Badge colorScheme={color.split('.')[0]}>{label}</Badge>
+      </Box>
+
+      <VStack align="stretch" spacing={3}>
+        {/* Main content */}
+        <Flex justify="space-between" align="flex-start">
+          <HStack spacing={3} flex={1}>
+            <Tooltip label={label}>
+              <Box>
+                <Icon as={icon} color={color} boxSize={5} />
+              </Box>
+            </Tooltip>
             <Box>
-              <Icon as={icon} color={color} boxSize={5} />
+              <Text fontWeight="bold">{activity.description}</Text>
+              {activity.userAddress && (
+                <Link 
+                  href={`https://etherscan.io/address/${activity.userAddress}`}
+                  isExternal
+                  fontSize="sm" 
+                  color="gray.500"
+                  _hover={{ color: color }}
+                >
+                  By: {displayName}
+                </Link>
+              )}
             </Box>
-          </Tooltip>
-          <Box>
-            <Text fontWeight="bold">{activity.description}</Text>
-            <Text fontSize="sm" color="gray.500">
-              {activity.userAddress && `By: ${activity.userAddress.slice(0, 6)}...${activity.userAddress.slice(-4)}`}
-            </Text>
-          </Box>
-        </HStack>
-        <Box textAlign="right">
-          <Badge colorScheme={color.split('.')[0]}>{label}</Badge>
-          <Text fontSize="xs" color="gray.500" mt={1}>
-            {formatDate(activity.timestamp)}
+          </HStack>
+        </Flex>
+
+        {/* Timestamp in bottom right */}
+        <Flex justify="flex-end">
+          <Text fontSize="xs" color="gray.500">
+            {formatDistanceToNow(new Date(activity.timestamp || activity.when || Date.now()), { addSuffix: true })}
           </Text>
-        </Box>
-      </Flex>
+        </Flex>
+      </VStack>
     </Box>
   );
 };

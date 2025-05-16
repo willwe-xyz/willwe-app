@@ -219,6 +219,8 @@ export interface ActivityItem {
   tokenSymbol?: string; // Optional token symbol
   description?: string; // Description of the activity
   status?: 'pending' | 'success' | 'failed'; // Status of the activity
+  userAddress?: string; // User address for ENS resolution
+  timestamp?: string; // Timestamp for display
 }
 
 ///////////////////////////////////////////
