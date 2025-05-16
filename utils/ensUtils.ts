@@ -52,6 +52,60 @@ const RESOLVER_ABI = [
   }
 ];
 
+// Global cache with TTL (Time To Live)
+interface CacheEntry {
+  value: string;
+  timestamp: number;
+}
+
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const addressResolutionCache = new Map<string, CacheEntry>();
+
+// Debug function to log cache state
+const logCacheState = (address: string, action: string) => {
+  // if (process.env.NODE_ENV === 'development') {
+  //   console.log(`Cache ${action} for ${address}:`, {
+  //     cacheSize: addressResolutionCache.size,
+  //     hasEntry: addressResolutionCache.has(address.toLowerCase()),
+  //     entry: addressResolutionCache.get(address.toLowerCase())
+  //   });
+  // }
+};
+
+// Function to check if cache entry is still valid
+const isCacheValid = (entry: CacheEntry): boolean => {
+  return Date.now() - entry.timestamp < CACHE_TTL;
+};
+
+// Function to get from cache with TTL check
+const getFromCache = (address: string): string | null => {
+  const lowerAddress = address.toLowerCase();
+  const entry = addressResolutionCache.get(lowerAddress);
+  
+  if (entry && isCacheValid(entry)) {
+    logCacheState(lowerAddress, 'HIT');
+    return entry.value;
+  }
+  
+  if (entry) {
+    logCacheState(lowerAddress, 'EXPIRED');
+  } else {
+    logCacheState(lowerAddress, 'MISS');
+  }
+  
+  return null;
+};
+
+// Function to set cache with timestamp
+const setCache = (address: string, value: string) => {
+  const lowerAddress = address.toLowerCase();
+  addressResolutionCache.set(lowerAddress, {
+    value,
+    timestamp: Date.now()
+  });
+  logCacheState(lowerAddress, 'SET');
+};
+
 /**
  * Calculate the reverse resolution node for an address on Base
  */
@@ -109,18 +163,25 @@ async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined>
 
 /**
  * Resolves an Ethereum address to its Base ENS name first, then regular ENS name if available, otherwise returns a truncated address
- * @param address The Ethereum address to resolve
- * @returns A promise that resolves to the Base ENS name, regular ENS name, or truncated address
  */
 export async function resolveENS(address: string): Promise<string> {
   if (!address || !ethers.isAddress(address)) {
     return address;
   }
 
+  const lowerAddress = address.toLowerCase();
+  
+  // Check cache first
+  const cachedResolution = getFromCache(lowerAddress);
+  if (cachedResolution) {
+    return cachedResolution;
+  }
+
   try {
     // First try to resolve Base ENS
     const baseENSName = await lookupBaseENS(address as Address);
     if (baseENSName) {
+      setCache(lowerAddress, baseENSName);
       return baseENSName;
     }
 
@@ -129,6 +190,7 @@ export async function resolveENS(address: string): Promise<string> {
     const ensName = await mainnetProvider.lookupAddress(address);
     
     if (ensName) {
+      setCache(lowerAddress, ensName);
       return ensName;
     }
   } catch (error) {
@@ -136,14 +198,43 @@ export async function resolveENS(address: string): Promise<string> {
   }
 
   // Fallback to truncated address
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+  setCache(lowerAddress, truncatedAddress);
+  return truncatedAddress;
 }
 
 /**
- * Resolves multiple Ethereum addresses to their ENS names in parallel
- * @param addresses Array of Ethereum addresses to resolve
- * @returns A promise that resolves to an array of resolved names/addresses
+ * Batch resolves multiple addresses to their ENS names
+ * This is more efficient than resolving one by one
  */
-export async function resolveMultipleENS(addresses: string[]): Promise<string[]> {
-  return Promise.all(addresses.map(addr => resolveENS(addr)));
+export async function resolveMultipleENS(addresses: string[]): Promise<Record<string, string>> {
+  const uniqueAddresses = [...new Set(addresses.map(addr => addr.toLowerCase()))];
+  const results: Record<string, string> = {};
+  
+  // First check cache for all addresses
+  const addressesToResolve: string[] = [];
+  
+  for (const address of uniqueAddresses) {
+    const cached = getFromCache(address);
+    if (cached) {
+      results[address] = cached;
+    } else {
+      addressesToResolve.push(address);
+    }
+  }
+
+  // If all addresses were cached, return early
+  if (addressesToResolve.length === 0) {
+    return results;
+  }
+
+  // Resolve remaining addresses in parallel
+  const resolutionPromises = addressesToResolve.map(async (address) => {
+    const resolved = await resolveENS(address);
+    results[address] = resolved;
+    return { address, resolved };
+  });
+
+  await Promise.all(resolutionPromises);
+  return results;
 } 

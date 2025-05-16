@@ -1129,16 +1129,19 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           display="flex"
           alignItems="center"
           color={selectedTokenColor}
-          justifyContent="space-between" 
-          px={8}
-          borderColor={selectedTokenColor}
-          py={4}
+          justifyContent="center"
+          width="100%"
+          px={2}
+          py={2}
+          mb={2}
         >
           <ButtonGroup 
             size="sm" 
             spacing={3} 
             display="flex" 
             flexWrap="wrap" 
+            width="100%"
+            justifyContent="center"
             gap={2}
             sx={{
               '& button': {
