@@ -379,7 +379,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         
         // Call getAllNodesForRoot with address parameters
         const allNodesForRoot = await contract.getAllNodesForRoot(rootAddress, userAddress);
-        console.log('All nodes for root:', allNodesForRoot);
         
         // Filter nodes to only include the children nodes we need
         const childNodeIds = parentNodeData.childrenNodes.map(id => id.toString());
@@ -403,7 +402,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         childNodes = childNodes.filter(Boolean);
       }
       
-      console.log('Filtered child nodes:', childNodes);
 
       // Add validation for childNodes
       if (!childNodes || childNodes.length === 0) {

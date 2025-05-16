@@ -20,6 +20,7 @@ import { NodeState } from '../../types/chainData';
 import TreemapChart from './TreemapChart';
 import { nodeIdToAddress } from '../../utils/formatters';
 import { resolveMultipleENS } from '../../utils/ensUtils';
+import RequirementsTable from '../TokenOperations/RequirementsTable';
 import router from 'next/router';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
@@ -290,6 +291,24 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   // Helper to check if a string is a link
   const isLink = (link: string | undefined) => link && link.startsWith('http');
 
+  // Ensure membraneRequirements has tokenAddress and formattedBalance for RequirementsTable
+  const normalizedMembraneRequirements = membraneRequirements.map(req => {
+    // Try to get the amount from any possible property
+    const formattedBalance =
+      req.formattedBalance ||
+      req.amount ||
+      req.value ||
+      req.required ||
+      req.requiredAmount ||
+      '1'; // fallback to '1' if nothing is present
+
+    return {
+      tokenAddress: req.tokenAddress || '',
+      symbol: req.symbol,
+      formattedBalance: formattedBalance,
+    };
+  });
+
   return (
     <Box
       bg={bgColor}
@@ -402,204 +421,173 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             </Box>
           </Grid>
 
-          {/* Characteristics and Members side by side */}
+          {/* Characteristics, Membrane Requirements, and Members side by side */}
           <HStack align="stretch" spacing={4} w="100%" minH={0}>
             {/* Characteristics section */}
-            {membraneCharacteristics.length > 0 && (
-              <Box
-                bg={cardBg}
-                borderRadius="lg"
-                borderWidth="1px"
-                borderColor={borderColor}
-                overflowY="auto"
-                minH={0}
-                flex={1}
-                maxH="220px"
-              >
-                <VStack align="stretch" spacing={2} p={3} h="100%">
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="medium">Characteristics</Text>
-                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
-                      {membraneCharacteristics.length}
-                    </Badge>
-                  </HStack>
-                  <Box 
-                    sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '4px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        width: '6px',
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'gray.300',
-                        borderRadius: '24px',
-                      },
-                    }}
-                  >
-                    {membraneCharacteristics.map((char, index) => {
-                      const linkIsLink = isLink(char.link);
-                      return (
-                        <Box key={index}>
-                          <HStack
-                            py={1.5}
-                            px={2}
-                            borderRadius="md"
-                            _hover={{ bg: hoverBg, cursor: linkIsLink ? 'pointer' : 'pointer' }}
-                            transition="all 0.2s"
-                            onClick={() => {
-                              if (linkIsLink) {
-                                window.open(char.link, '_blank');
-                              } else {
-                                setExpandedCharIndex(expandedCharIndex === index ? null : index);
-                              }
-                            }}
-                          >
-                            <Text fontSize="sm" isTruncated flex={1}>
-                              {char.title}
-                            </Text>
-                            {linkIsLink ? (
-                              <ExternalLink size={16} color={selectedTokenColor} />
+            <Box
+              bg={cardBg}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={borderColor}
+              overflowY="auto"
+              minH={0}
+              flex={1}
+              maxH="220px"
+            >
+              <VStack align="stretch" spacing={2} p={3} h="100%">
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="medium">Characteristics</Text>
+                  <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                    {membraneCharacteristics.length}
+                  </Badge>
+                </HStack>
+                <Box 
+                  sx={{
+                    '&::-webkit-scrollbar': {
+                      width: '4px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      width: '6px',
+                      bg: 'transparent',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      bg: 'gray.300',
+                      borderRadius: '24px',
+                    },
+                  }}
+                >
+                  {membraneCharacteristics.map((char, index) => {
+                    const linkIsLink = isLink(char.link);
+                    return (
+                      <Box key={index}>
+                        <HStack
+                          py={1.5}
+                          px={2}
+                          borderRadius="md"
+                          _hover={{ bg: hoverBg, cursor: linkIsLink ? 'pointer' : 'pointer' }}
+                          transition="all 0.2s"
+                          onClick={() => {
+                            if (linkIsLink) {
+                              window.open(char.link, '_blank');
+                            } else {
+                              setExpandedCharIndex(expandedCharIndex === index ? null : index);
+                            }
+                          }}
+                        >
+                          <Text fontSize="sm" isTruncated flex={1}>
+                            {char.title}
+                          </Text>
+                          {linkIsLink ? (
+                            <ExternalLink size={16} color={selectedTokenColor} />
+                          ) : (
+                            expandedCharIndex === index ? (
+                              <ChevronUp size={16} color={selectedTokenColor} />
                             ) : (
-                              expandedCharIndex === index ? (
-                                <ChevronUp size={16} color={selectedTokenColor} />
-                              ) : (
-                                <ChevronDown size={16} color={selectedTokenColor} />
-                              )
-                            )}
-                          </HStack>
-                          {/* Expandable description drawer */}
-                          {!linkIsLink && expandedCharIndex === index && (
-                            <Box
-                              bg={hoverBg}
-                              borderRadius="md"
-                              mt={1}
-                              mb={2}
-                              px={3}
-                              py={2}
-                            >
-                              <Text fontSize="sm" color={mutedColor} whiteSpace="pre-line">
-                                {char.link || char.title}
-                              </Text>
-                            </Box>
+                              <ChevronDown size={16} color={selectedTokenColor} />
+                            )
                           )}
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                </VStack>
-              </Box>
-            )}
+                        </HStack>
+                        {/* Expandable description drawer */}
+                        {!linkIsLink && expandedCharIndex === index && (
+                          <Box
+                            bg={hoverBg}
+                            borderRadius="md"
+                            mt={1}
+                            mb={2}
+                            px={3}
+                            py={2}
+                          >
+                            <Text fontSize="sm" color={mutedColor} whiteSpace="pre-line">
+                              {char.link || char.title}
+                            </Text>
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </VStack>
+            </Box>
 
             {/* Membrane Requirements section */}
-            {membraneRequirements.length > 0 && (
-              <Box
-                bg={cardBg}
-                borderRadius="lg"
-                borderWidth="1px"
-                borderColor={borderColor}
-                overflowY="auto"
-                minH={0}
-                flex={1}
-                maxH="220px"
-              >
-                <VStack align="stretch" spacing={2} p={3} h="100%">
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="medium">Membrane Requirements</Text>
-                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
-                      {membraneRequirements.length}
-                    </Badge>
-                  </HStack>
-                  <Box 
-                    sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '4px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        width: '6px',
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'gray.300',
-                        borderRadius: '24px',
-                      },
-                    }}
-                  >
-                    {membraneRequirements.map((req, index) => (
-                      <HStack
-                        key={index}
-                        py={1.5}
-                        px={2}
-                        borderRadius="md"
-                        _hover={{ bg: hoverBg }}
-                        transition="all 0.2s"
-                      >
-                        <Badge colorScheme="purple">{req.symbol}</Badge>
-                        <Text fontSize="sm">{req.formattedBalance} tokens required</Text>
-                      </HStack>
-                    ))}
-                  </Box>
-                </VStack>
-              </Box>
-            )}
+            <Box
+              bg={cardBg}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={borderColor}
+              overflowY="auto"
+              minH={0}
+              flex={1}
+              maxH="220px"
+            >
+              <VStack align="stretch" spacing={2} p={3} h="100%">
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="medium">Membrane Requirements</Text>
+                  <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                    {normalizedMembraneRequirements.length}
+                  </Badge>
+                </HStack>
+                <RequirementsTable 
+                  requirements={normalizedMembraneRequirements}
+                  chainId={chainId}
+                />
+              </VStack>
+            </Box>
 
             {/* Members section */}
-            {node.membersOfNode && node.membersOfNode.length > 0 && (
-              <Box
-                bg={cardBg}
-                borderRadius="lg"
-                borderWidth="1px"
-                borderColor={borderColor}
-                overflowY="auto"
-                minH={0}
-                flex={1}
-                maxH="220px"
-              >
-                <VStack align="stretch" spacing={2} p={3} h="100%">
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
-                  </HStack>
-                  <Box 
-                    sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '4px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        width: '6px',
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'gray.300',
-                        borderRadius: '24px',
-                      },
-                    }}
-                  >
-                    {memberData.map(({ address, ensName }, index) => (
-                      <HStack
-                        key={index}
-                        py={1.5}
-                        px={2}
-                        borderRadius="md"
-                        _hover={{ bg: hoverBg }}
-                        transition="all 0.2s"
-                      >
-                        <Text fontSize="sm" isTruncated>
-                          {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
-                        </Text>
-                        <IconButton
-                          aria-label="Copy address"
-                          icon={<Copy size={14} />}
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => handleCopy(address)}
-                        />
-                      </HStack>
-                    ))}
-                  </Box>
-                </VStack>
-              </Box>
-            )}
+            <Box
+              bg={cardBg}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={borderColor}
+              overflowY="auto"
+              minH={0}
+              flex={1}
+              maxH="220px"
+            >
+              <VStack align="stretch" spacing={2} p={3} h="100%">
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
+                </HStack>
+                <Box 
+                  sx={{
+                    '&::-webkit-scrollbar': {
+                      width: '4px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      width: '6px',
+                      bg: 'transparent',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      bg: 'gray.300',
+                      borderRadius: '24px',
+                    },
+                  }}
+                >
+                  {memberData.map(({ address, ensName }, index) => (
+                    <HStack
+                      key={index}
+                      py={1.5}
+                      px={2}
+                      borderRadius="md"
+                      _hover={{ bg: hoverBg }}
+                      transition="all 0.2s"
+                    >
+                      <Text fontSize="sm" isTruncated>
+                        {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
+                      </Text>
+                      <IconButton
+                        aria-label="Copy address"
+                        icon={<Copy size={14} />}
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => handleCopy(address)}
+                      />
+                    </HStack>
+                  ))}
+                </Box>
+              </VStack>
+            </Box>
           </HStack>
         </VStack>
 

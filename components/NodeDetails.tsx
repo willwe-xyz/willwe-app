@@ -65,7 +65,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   const cleanChainId = chainId?.replace('eip155:', '') || '';
   const userAddress = user?.wallet?.address || ethers.ZeroAddress;
   const { data: nodeData, error, isLoading, refetch: fetchNodeData } = useNodeData(cleanChainId, userAddress, nodeId);
-  
+  console.log('Node Data: ', nodeData);
   // Initialize provider and token contract
   const provider = useMemo(() => {
     return new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
