@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ethers } from 'ethers';
 import {
   Box,
   Text,
@@ -14,14 +13,18 @@ import {
   Grid
 } from '@chakra-ui/react';
 import { Copy, ChevronRight, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '@/hooks/useAppKit';
 import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
 import TreemapChart from './TreemapChart';
 import { nodeIdToAddress } from '../../utils/formatters';
 import router from 'next/router';
+import { usePublicClient } from 'wagmi';
+import type { Abi } from 'viem';
+import { formatUnits } from 'viem';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 interface NodeInfoProps {
   node: NodeState;
@@ -29,6 +32,34 @@ interface NodeInfoProps {
   onNodeSelect?: (nodeId: string) => void;
   selectedTokenColor: string;
   tokenSymbol: string;
+}
+
+interface SankeyData {
+  nodes: Array<{
+    id: string;
+    label: string;
+  }>;
+  links: Array<{
+    source: string;
+    target: string;
+    value: number;
+  }>;
+}
+
+interface NodeLabels {
+  [key: string]: string;
+}
+
+interface SankeyStructure {
+  nodes: Array<{
+    id: string;
+    label: string;
+  }>;
+  links: Array<{
+    source: string;
+    target: string;
+    value: number;
+  }>;
 }
 
 interface NodeMetrics {
@@ -87,16 +118,16 @@ const calculateMetrics = (node: NodeState): NodeMetrics => {
     BigInt(0);
   
   return {
-    dailyUnlock: ethers.formatUnits(dailyUnlockedValue, 'ether'),
-    TVL: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
-    totalValue: ethers.formatUnits(node.basicInfo[4] || '0', 'ether'),
-    availableShares: ethers.formatUnits(node.basicInfo[3] || '0', 'ether'),
-    inflow: ethers.formatUnits(inflowPerDay, 'ether'), // Now per day
-    value: ethers.formatUnits(node.basicInfo[5] || '0', 'ether'),
+    dailyUnlock: formatUnits(dailyUnlockedValue, 18), // 'ether' => 18
+    TVL: formatUnits(BigInt(node.basicInfo[4] || '0'), 18),
+    totalValue: formatUnits(BigInt(node.basicInfo[4] || '0'), 18),
+    availableShares: formatUnits(BigInt(node.basicInfo[3] || '0'), 18),
+    inflow: formatUnits(inflowPerDay, 18), // 'ether' => 18
+    value: formatUnits(BigInt(node.basicInfo[5] || '0'), 18),
     memberCount: node.membersOfNode?.length || 0,
     membersList: node.membersOfNode || [],
-    userOwnedShares: ethers.formatUnits(node.basicInfo[9] || '0', 'gwei'),
-    totalSupply: ethers.formatUnits(node.basicInfo[11] || '0', 'ether')
+    userOwnedShares: formatUnits(BigInt(node.basicInfo[9] || '0'), 9), // 'gwei' => 9
+    totalSupply: formatUnits(BigInt(node.basicInfo[11] || '0'), 18)
   };
 };
 
@@ -107,6 +138,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   selectedTokenColor,
   tokenSymbol
 }) => {
+  const { user } = useAppKit();
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
   const [membraneCharacteristics, setMembraneCharacteristics] = useState<Array<{title: string; link: string}>>([]);
   const [membraneRequirements, setMembraneRequirements] = useState<Array<{symbol: string; formattedBalance: string}>>([]);
@@ -123,23 +155,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
 
   // Safely handle null or undefined values
-  const provider = useMemo(() => {
-    return new ethers.JsonRpcProvider(getRPCUrl(chainId), {
-      chainId: Number(chainId),
-      name: `${chainId}`,
-    });
-  }, [chainId]);
-  
-  // Safely handle null or undefined values
-  const tokenAddress = node?.rootPath?.[0] ? nodeIdToAddress(node.rootPath[0]) : ethers.ZeroAddress;
+  const tokenAddress = node?.rootPath?.[0] ? nodeIdToAddress(node.rootPath[0]) : ZERO_ADDRESS;
 
-  const tokenContract = useMemo(() => {
-    return new ethers.Contract(
-      tokenAddress,
-      ABIs.IERC20,
-      provider
-    );
-  }, [tokenAddress, provider]);
+  // Remove ethers.Contract and ethers.JsonRpcProvider usage
+  // If you need to read contract data, use publicClient.readContract from wagmi/viem
+  const publicClient = usePublicClient();
 
   const [memberData, setMemberData] = useState<Array<{ address: string; ensName: string | null }>>([]);
   const [copied, setCopied] = useState(false);
@@ -197,33 +217,14 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  useEffect(() => {
-    const resolveEnsNames = async () => {
-      if (!node?.membersOfNode || node.membersOfNode.length === 0) return;
-
-      try {
-        // Use Ethereum mainnet for ENS resolution
-        const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
-
-        const ensNames = await Promise.all(
-          node.membersOfNode.map(async (address) => {
-            try {
-              const ensName = await mainnetProvider.lookupAddress(address);
-              return { address, ensName };
-            } catch (error) {
-              console.error(`Error resolving ENS for ${address}:`, error);
-              return { address, ensName: null };
-            }
-          })
-        );
-        setMemberData(ensNames);
-      } catch (error) {
-        console.error('Error resolving ENS names:', error);
-      }
-    };
-
-    resolveEnsNames();
-  }, [node]);
+  // Remove ENS resolution effect
+  // useEffect(() => {
+  //   const resolveEnsNames = async () => {
+  //     if (!node?.membersOfNode || node.membersOfNode.length === 0) return;
+  //     // ENS resolution removed
+  //   };
+  //   resolveEnsNames();
+  // }, [node]);
 
   const metrics = useMemo(() => calculateMetrics(node), [node]);
 
@@ -238,63 +239,8 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
     `;
   };
 
-  // Ensure all node data is valid
-  const getSankeyData = (): SankeyData => {
-    const nodeCustomData: Array<[number, number, number, number]> = nodeLabels.map((_, idx) => {
-      const nodeId = sankeyStructure.labels[idx];
-      const metrics = nodeMetrics.get(nodeId);
-      return [
-        metrics?.inflation || 0,
-        metrics?.memberCount || 0,
-        metrics?.depth || 0,
-        (metrics?.signalStrength || 0) * 100
-      ];
-    });
-
-    const linkCustomData: Array<[number, number]> = sankeyStructure.source.map((_, idx) => {
-      const sourceIdx = sankeyStructure.source[idx];
-      const targetIdx = sankeyStructure.target[idx];
-      const sourceId = sankeyStructure.labels[sourceIdx];
-      const targetId = sankeyStructure.labels[targetIdx];
-      const sourceMetrics = nodeMetrics.get(sourceId);
-      const targetMetrics = nodeMetrics.get(targetId);
-      return [
-        sourceMetrics?.inflation || 0,
-        targetMetrics?.inflation || 0
-      ];
-    });
-
-    return {
-      type: 'sankey',
-      node: {
-        label: nodeLabels,
-        color: nodeLabels.map(() => selectedTokenColor),
-        thickness: nodeLabels.map(() => 20), // Fallback size
-        line: {
-          color: nodeLabels.map(() => selectedTokenColor),
-          width: nodeLabels.map(() => 0.5)
-        },
-        pad: 15,
-        hovertemplate: getNodeHoverTemplate(),
-        customdata: nodeCustomData
-      },
-      link: {
-        source: sankeyStructure.source,
-        target: sankeyStructure.target,
-        value: sankeyStructure.values.map(v => v || 1), // Fallback to 1
-        color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
-        hovertemplate: `
-          <b>Flow Details</b><br>
-          From: %{source.label}<br>
-          To: %{target.label}<br>
-          Value: %{value:.1f}%<br>
-          Source Inflation: %{customdata[0]:.4f}/sec<br>
-          Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
-        `,
-        customdata: linkCustomData
-      }
-    };
-  };
+  // Remove getSankeyData and related undefined variables
+  // const getSankeyData = (): SankeyData => { ... }
 
   // Helper to check if a string is a link
   const isLink = (link: string | undefined) => link && link.startsWith('http');
@@ -366,7 +312,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
               transition="all 0.2s"
               _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
             >
-              <Tooltip label="Total supply of tokens in the node" fontSize="sm">
+              <Tooltip label="Total supply of tokens in the node's budget" fontSize="sm">
                 <VStack align="start" spacing={1}>
                   <Text fontSize="sm" color={mutedColor}>Total Value</Text>
                   <Text fontSize="lg" fontWeight="semibold">

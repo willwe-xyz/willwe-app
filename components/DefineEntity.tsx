@@ -24,7 +24,10 @@ import {
   Tooltip,
   Divider,
 } from '@chakra-ui/react';
-import { usePrivy } from "@privy-io/react-auth";
+import { useAppKit } from '../hooks/useAppKit';
+import { useWalletClient, usePublicClient, useAccount } from 'wagmi';
+import { parseEther, encodeAbiParameters, decodeAbiParameters } from 'viem';
+import type { Abi } from 'viem';
 
 import {
   Trash2,
@@ -34,7 +37,6 @@ import {
   Check,
   AlertTriangle,
 } from 'lucide-react';
-import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
 import { validateToken } from '../utils/tokenValidation';
 import { getExplorerLink } from '../config/contracts';
@@ -82,8 +84,11 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
   const [validatingToken, setValidatingToken] = useState(false);
 
   // Hooks
-  const { authenticated, ready, getEthersProvider } = usePrivy();
+  const { user: { isAuthenticated } } = useAppKit();
   const toast = useToast();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
+  const { address } = useAccount();
 
   // Token validation and handling
   const validateAndAddToken = useCallback(async () => {
@@ -166,46 +171,22 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
 
   // Form submission
   const handleSubmit = async () => {
-    if (!authenticated || !ready) {
-      toast({
-        title: 'Error',
-        description: 'Please connect your wallet first',
-        status: 'error',
-        duration: 3000,
-      });
-      return;
-    }
-
-    if (!entityName || characteristics.length === 0) {
-      toast({
-        title: 'Error',
-        description: 'Entity name and at least one characteristic are required',
-        status: 'error',
-        duration: 3000,
-      });
-      return;
+    if (!walletClient || !address || !publicClient) {
+      throw new Error('Wallet not connected');
     }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      console.log('Starting membrane creation...', {
-        entityName,
-        membershipConditions,
-        characteristics
-      });
-
-      // Prepare metadata
+      // Upload metadata to IPFS
       const metadata: EntityMetadata = {
         name: entityName,
         characteristics,
         membershipConditions
       };
 
-      // Upload to IPFS
-      console.log('Uploading metadata to IPFS...');
-      const response = await fetch('/api/upload-to-ipfs', {
+      const response = await fetch('/api/upload-metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: metadata }),
@@ -215,9 +196,7 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       const { cid } = await response.json();
       console.log('Metadata uploaded to IPFS:', { cid });
 
-      // Get contract instance
-      const provider = await getEthersProvider();
-      const signer = await provider.getSigner();
+      // Get contract address
       const cleanChainId = chainId.replace('eip155:', '');
       const membraneAddress = deployments.Membrane[cleanChainId];
 
@@ -225,17 +204,10 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         throw new Error(`No Membrane contract found for chain ${chainId}`);
       }
 
-      
-      const contract = new ethers.Contract(
-        membraneAddress,
-        ABIs.Membrane,
-        signer as unknown as ethers.Signer
-      );
-
       // Prepare transaction parameters
       const tokens = membershipConditions.map(mc => mc.tokenAddress.toLowerCase());
       const balances = membershipConditions.map(mc => 
-        ethers.parseUnits(mc.requiredBalance, 18)
+        parseEther(mc.requiredBalance)
       );
 
       console.log('Creating membrane with parameters:', {
@@ -244,9 +216,18 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         cid
       });
 
+      // Simulate the transaction first
+      const { request } = await publicClient.simulateContract({
+        address: membraneAddress as `0x${string}`,
+        abi: ABIs.Membrane as Abi,
+        functionName: 'createMembrane',
+        args: [tokens, balances, cid],
+        account: address,
+      });
+
       // Send transaction
-      const tx = await contract.createMembrane(tokens, balances, cid);
-      console.log('Transaction sent:', tx.hash);
+      const hash = await walletClient.writeContract(request);
+      console.log('Transaction sent:', hash);
 
       // Show pending toast
       const pendingToastId = toast({
@@ -258,8 +239,8 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       });
 
       try {
-        // Wait for confirmation differently
-        const receipt = await provider.waitForTransaction(tx.hash);
+        // Wait for confirmation
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
         console.log('Transaction confirmed:', receipt);
 
         // Close pending toast
@@ -269,9 +250,12 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         console.log('Transaction receipt logs:', JSON.stringify(receipt.logs, null, 2));
         
         // The event signature for MembraneCreated(address,uint256,string)
-        const membraneCreatedSignature = ethers.id("MembraneCreated(address,uint256,string)");
+        const membraneCreatedSignature = '0x' + encodeAbiParameters(
+          [{ type: 'string' }],
+          ['MembraneCreated(address,uint256,string)']
+        ).slice(2);
         
-        const membraneCreatedEvent = receipt.logs.find((log: any) => {
+        const membraneCreatedEvent = receipt.logs.find((log) => {
           try {
             console.log('Checking log topic:', log.topics[0]);
             console.log('Expected topic:', membraneCreatedSignature);
@@ -283,22 +267,22 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
         });
 
         if (!membraneCreatedEvent) {
-          console.log('All log topics:', receipt.logs.map((log: any) => log.topics[0]));
+          console.log('All log topics:', receipt.logs.map((log) => log.topics[0]));
           throw new Error('Could not find membrane ID in transaction logs');
         }
 
         console.log('Found membrane event:', membraneCreatedEvent);
         
-        // Extract membraneId from the data field since parameters are not indexed
+        // Extract membraneId from the data field
         let membraneId;
         try {
-          // According to the ABI, the parameters are not indexed, so they're in the data field
-          // We need to decode the data field which contains all parameters
-          const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-          
-          // The data contains [address creator, uint256 membraneId, string CID]
-          const decodedData = abiCoder.decode(
-            ['address', 'uint256', 'string'], 
+          // Decode the data field which contains all parameters
+          const decodedData = decodeAbiParameters(
+            [
+              { type: 'address', name: 'creator' },
+              { type: 'uint256', name: 'membraneId' },
+              { type: 'string', name: 'cid' }
+            ],
             membraneCreatedEvent.data
           );
           
@@ -355,6 +339,14 @@ export const DefineEntity: React.FC<DefineEntityProps> = ({ chainId, onSubmit })
       setIsLoading(false);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <h1 className="text-2xl font-bold mb-4">Please connect your wallet to continue</h1>
+      </div>
+    );
+  }
 
   return (
     <Box display="flex" flexDirection="column" height="calc(100vh - 200px)">

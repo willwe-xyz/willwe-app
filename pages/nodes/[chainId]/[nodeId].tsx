@@ -5,7 +5,7 @@ import AppLayout from '../../../components/Layout/AppLayout';
 import NodeDetails from '../../../components/NodeDetails';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { useColorManagement } from '../../../hooks/useColorManagement';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '@/hooks/useAppKit';
 import { MainLayout } from '../../../components/Layout/MainLayout';
 import { ethers } from 'ethers';
 import { nodeIdToAddress } from '../../../utils/formatters';
@@ -14,7 +14,7 @@ const NodePage = () => {
   const router = useRouter();
   const { colorState, cycleColors, setColorState, getContrastColor } = useColorManagement();
   const toast = useToast();
-  const { user, ready, authenticated, logout, login } = usePrivy();
+  const { user, isInitializing } = useAppKit();
   
   const { chainId, nodeId } = router.query;
 
@@ -46,8 +46,6 @@ const NodePage = () => {
         headerProps={{
           userAddress: user?.wallet?.address,
           chainId: chainId as string,
-          logout,
-          login,
           isTransacting: false,
           contrastingColor: colorState.contrastingColor,
           reverseColor: colorState.reverseColor,
@@ -55,6 +53,7 @@ const NodePage = () => {
           onNodeSelect: (nodeId: string) => {
             router.push(`/nodes/${chainId}/${nodeId}`);
           },
+          selectedTokenColor: colorState.contrastingColor,
         }}
       >
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -71,8 +70,6 @@ const NodePage = () => {
         headerProps={{
           userAddress: user?.wallet?.address,
           chainId: chainId as string,
-          logout,
-          login,
           isTransacting: false,
           contrastingColor: colorState.contrastingColor,
           reverseColor: colorState.reverseColor,
@@ -80,6 +77,7 @@ const NodePage = () => {
           onNodeSelect: (nodeId: string) => {
             router.push(`/nodes/${chainId}/${nodeId}`);
           },
+          selectedTokenColor: colorState.contrastingColor,
         }}
       >
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -105,8 +103,6 @@ const NodePage = () => {
   const headerProps = {
     userAddress: user?.wallet?.address,
     chainId: chainId as string,
-    logout,
-    login,
     isTransacting: false,
     contrastingColor: colorState.contrastingColor,
     reverseColor: colorState.reverseColor,
@@ -114,6 +110,7 @@ const NodePage = () => {
     onNodeSelect: (nodeId: string) => {
       router.push(`/nodes/${chainId}/${nodeId}`);
     },
+    selectedTokenColor: colorState.contrastingColor,
   };
 
   return (

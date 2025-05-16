@@ -28,7 +28,7 @@ import {
   Wallet,
   Copy
 } from 'lucide-react';
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useAppKit } from '../hooks/useAppKit';
 import { NodeState } from '../types/chainData';
 import { formatBalance, addressToNodeId } from '../utils/formatters';
 import { useTransaction } from '../contexts/TransactionContext';
@@ -39,6 +39,8 @@ import { NodeActions } from './Node/NodeActions';
 import { TokenNameDisplay } from './Token/TokenNameDisplay';
 import { useWillWeContract } from '../hooks/useWillWeContract';
 import { NodeOperations } from './Node/NodeOperations';
+import { usePublicClient, useAccount } from 'wagmi';
+import type { Abi } from 'viem';
 
 interface RootNodeDetailsProps {
   chainId: string;
@@ -65,13 +67,13 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
 }) => {
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const toast = useToast();
-  const { getEthersProvider } = usePrivy();
+  const { user: { wallet } } = useAppKit();
   const { executeTransaction } = useTransaction();
   const [isProcessing, setIsProcessing] = useState(false);
-  const { wallets } = useWallets();
-  const userAddress = wallets?.[0]?.address;
   const willweContract = useWillWeContract(chainId);
   const [totalSupplyValue, setTotalSupplyValue] = useState<bigint>(BigInt(0));
+  const publicClient = usePublicClient();
+  const { address } = useAccount();
 
   useEffect(() => {
     const fetchTotalSupply = async () => {
@@ -162,6 +164,17 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   const formatValue = (value: string | bigint): string => {
     const formatted = formatBalance(value.toString());
     return Number(formatted).toFixed(4);
+  };
+
+  const handleCopyAddress = () => {
+    if (wallet?.address) {
+      navigator.clipboard.writeText(wallet.address);
+      toast({
+        title: 'Address copied',
+        status: 'success',
+        duration: 2000,
+      });
+    }
   };
 
   if (isLoading) {
@@ -291,7 +304,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
               selectedToken={selectedToken}
               onCreateNode={() => setShowSpawnModal(true)}
               isProcessing={isProcessing}
-              canCreateNode={!!selectedToken && !isProcessing && !!wallets[0]?.address}
+              canCreateNode={!!selectedToken && !isProcessing && !!wallet?.address}
               tokenName={tokenSymbol}
             />
           </Box>
@@ -302,7 +315,7 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
         nodeId={selectedToken}
         chainId={chainId}
         selectedTokenColor={selectedTokenColor}
-        userAddress={userAddress}
+        userAddress={wallet?.address}
         onSuccess={() => {
           setShowSpawnModal(false);
           if (onRefresh) onRefresh();

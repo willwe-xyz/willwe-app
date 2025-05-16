@@ -11,35 +11,33 @@ import {
   useColorModeValue,
   Divider,
   useToast,
-  Tooltip
+  Tooltip,
+  Flex,
+  Badge
 } from '@chakra-ui/react';
-import { useAccount } from 'wagmi';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../hooks/useAppKit';
 import { formatDistanceToNow } from 'date-fns';
 import { NodeState } from '../types/chainData';
-import { usePonderData } from '@/hooks/usePonderData';
+import { usePonderData } from '../hooks/usePonderData';
 import { limits } from 'chroma-js';
 import { resolveENS } from '@/utils/ensUtils';
+
+interface ChatMessage {
+  id: string;
+  content: string;
+  sender: string;
+  timestamp: number;
+}
 
 interface NodeChatProps {
   nodeId: string;
   chainId: string;
   nodeData: NodeState;
-  userAddress: string;
-}
-
-interface ChatMessage {
-  id: string;
-  nodeId: string;
-  sender: string;
-  content: string;
-  timestamp: string;
-  ensName?: string;
+  userAddress?: string;
 }
 
 const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddress }) => {
-  const { address } = useAccount();
-  const { authenticated, user } = usePrivy();
+  const { user: { isAuthenticated, wallet }, login } = useAppKit();
   const { getNodeChatMessages, sendChatMessage, isLoading } = usePonderData();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -53,8 +51,8 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
   const toast = useToast();
   const [ensNames, setEnsNames] = useState<Record<string, string>>({});
   
-  const authenticatedAddress = user?.wallet?.address || address;
-  const isMember = userAddress ? nodeData?.membersOfNode?.includes(userAddress) : false;
+  const authenticatedAddress = wallet?.address || userAddress;
+  const isMember = nodeData?.membersOfNode?.includes(authenticatedAddress || '');
   
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -179,7 +177,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!authenticatedAddress || !newMessage.trim() || !nodeId || !authenticated) {
+    if (!authenticatedAddress || !newMessage.trim() || !nodeId || !isAuthenticated) {
       return;
     }
     
@@ -226,12 +224,8 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    try {
-      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
-    } catch (e) {
-      return 'just now';
-    }
+  const formatTimestamp = (timestamp: number) => {
+    return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
   };
   
   const copyAddressToClipboard = (address: string) => {
@@ -256,6 +250,20 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
         <Spinner size="xl" color="purple.500" />
         <Text mt={4}>Loading chat messages...</Text>
       </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <h1 className="text-2xl font-bold mb-4">Please connect your wallet to continue</h1>
+        <button
+          onClick={() => login()}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Connect Wallet
+        </button>
+      </div>
     );
   }
 
@@ -340,14 +348,14 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               bg={inputBg}
-              disabled={!authenticatedAddress || isSending || !isMember || !authenticated}
+              disabled={!authenticatedAddress || isSending || !isMember || !isAuthenticated}
             />
             <Button
               colorScheme="purple"
               type="submit"
               isLoading={isSending}
               loadingText="Sending"
-              disabled={!authenticatedAddress || !newMessage.trim() || isSending || !isMember || !authenticated}
+              disabled={!authenticatedAddress || !newMessage.trim() || isSending || !isMember || !isAuthenticated}
             >
               Send
             </Button>
@@ -357,12 +365,12 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
               Please connect your wallet to send messages
             </Text>
           )}
-          {authenticatedAddress && !authenticated && (
+          {authenticatedAddress && !isAuthenticated && (
             <Text fontSize="sm" color="red.500" mt={2}>
-              Please authenticate with Privy to send messages
+              Please authenticate with AppKit to send messages
             </Text>
           )}
-          {authenticatedAddress && authenticated && !isMember && (
+          {authenticatedAddress && isAuthenticated && !isMember && (
             <Text fontSize="sm" color="red.500" mt={2}>
               Only node members can send messages in this chat
             </Text>

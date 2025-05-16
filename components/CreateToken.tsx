@@ -19,7 +19,7 @@ import {
   Code,
 } from '@chakra-ui/react';
 import { Trash2, Plus, ExternalLink, Check } from 'lucide-react';
-import { usePrivy } from "@privy-io/react-auth";
+import { useAppKit } from '../hooks/useAppKit';
 import { ERC20Bytecode, ERC20CreateABI } from '../const/envconst';
 import { ContractRunner, ethers, Provider, TransactionRequest } from 'ethers';
 import { useTransactionHandler } from '../hooks/useTransactionHandler';
@@ -52,7 +52,7 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const toast = useToast();
-  const { authenticated, ready, getEthersProvider } = usePrivy();
+  const { user: { isAuthenticated }, getEthersProvider, login } = useAppKit();
   const { executeTransaction } = useTransactionHandler(chainId);
 
   // Recipients management
@@ -79,7 +79,7 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
   // Deploy token
   const deployToken = async () => {
     try {
-      if (!authenticated || !ready) {
+      if (!isAuthenticated) {
         throw new Error('Please connect your wallet first');
       }
 
@@ -162,6 +162,20 @@ export const CreateToken: React.FC<CreateTokenProps> = ({
       setIsLoading(false);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <h1 className="text-2xl font-bold mb-4">Please connect your wallet to continue</h1>
+        <button
+          onClick={login}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Connect Wallet
+        </button>
+      </div>
+    );
+  }
 
   return (
     <Box 

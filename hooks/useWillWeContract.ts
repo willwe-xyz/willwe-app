@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
 import { deployments, ABIs } from '../config/contracts';
-import { getRPCUrl } from '../config/contracts';
-import {NodeState} from '../types/chainData';
+import { NodeState } from '../types/chainData';
+import { usePublicClient } from 'wagmi';
+import type { Abi } from 'viem';
 
-interface WillWeContract extends ethers.BaseContract {
+interface WillWeContract {
+  address: `0x${string}`;
+  abi: Abi;
   totalSupply: (nodeId: string) => Promise<bigint>;
   calculateUserTargetedPreferenceAmount: (
     childId: string,
@@ -18,29 +20,63 @@ interface WillWeContract extends ethers.BaseContract {
 
 export const useWillWeContract = (chainId: string) => {
   const [contract, setContract] = useState<WillWeContract | null>(null);
+  const publicClient = usePublicClient();
+
   useEffect(() => {
     const initContract = async () => {
-      try {
-        const rpcUrl = getRPCUrl(chainId);
-        if (!rpcUrl) throw new Error(`No RPC URL found for chain ${chainId}`);
+      if (!publicClient) return;
 
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
+      try {
         const willWeAddress = deployments.WillWe[chainId];
 
         if (!willWeAddress) {
           throw new Error(`No WillWe contract found for chain ${chainId}`);
         }
 
-        const willWeContract = new ethers.Contract(
-          willWeAddress,
-          ABIs.WillWe,
-          provider
-        ) as unknown as WillWeContract;
-
-        if (typeof willWeContract.totalSupply !== 'function') {
-          console.error('totalSupply function not found in contract ABI:', ABIs.WillWe);
-          throw new Error('Contract missing required function: totalSupply');
-        }
+        const willWeContract: WillWeContract = {
+          address: willWeAddress as `0x${string}`,
+          abi: ABIs.WillWe as Abi,
+          totalSupply: async (nodeId: string) => {
+            if (!publicClient) throw new Error('Public client not available');
+            const result = await publicClient.readContract({
+              address: willWeAddress as `0x${string}`,
+              abi: ABIs.WillWe as Abi,
+              functionName: 'totalSupply',
+              args: [nodeId]
+            });
+            return result as bigint;
+          },
+          calculateUserTargetedPreferenceAmount: async (childId: string, parentId: string, signal: number, user: string) => {
+            if (!publicClient) throw new Error('Public client not available');
+            const result = await publicClient.readContract({
+              address: willWeAddress as `0x${string}`,
+              abi: ABIs.WillWe as Abi,
+              functionName: 'calculateUserTargetedPreferenceAmount',
+              args: [childId, parentId, signal, user]
+            });
+            return result as bigint;
+          },
+          getNodeData: async (nodeId: string) => {
+            if (!publicClient) throw new Error('Public client not available');
+            const result = await publicClient.readContract({
+              address: willWeAddress as `0x${string}`,
+              abi: ABIs.WillWe as Abi,
+              functionName: 'getNodeData',
+              args: [nodeId]
+            });
+            return result as NodeState;
+          },
+          getNodes: async (nodeIds: string[]) => {
+            if (!publicClient) throw new Error('Public client not available');
+            const result = await publicClient.readContract({
+              address: willWeAddress as `0x${string}`,
+              abi: ABIs.WillWe as Abi,
+              functionName: 'getNodes',
+              args: [nodeIds]
+            });
+            return result as NodeState[];
+          }
+        };
 
         setContract(willWeContract);
       } catch (error) {
@@ -50,7 +86,7 @@ export const useWillWeContract = (chainId: string) => {
     };
 
     initContract();
-  }, [chainId]);
+  }, [chainId, publicClient]);
 
   return contract;
 }

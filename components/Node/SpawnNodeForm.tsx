@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   VStack,
   FormControl,
@@ -33,14 +33,22 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Badge,
+  ToastId,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb
 } from '@chakra-ui/react';
-import { Plus, Trash2, ExternalLink, Copy, Activity } from 'lucide-react';
+import { Plus, Trash2, ExternalLink, Copy, Activity, Info, AlertTriangle } from 'lucide-react';
 import { ethers } from 'ethers';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '@/hooks/useAppKit';
 import { deployments, ABIs, getExplorerLink } from '../../config/contracts';
 import { validateToken } from '../../utils/tokenValidation';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { useNodeData } from '../../hooks/useNodeData';
+import { nodeIdToAddress } from '@/utils/formatters';
+import { formatBalance } from '@/utils/formatters';
 
 interface Characteristic {
   title: string;
@@ -62,14 +70,14 @@ interface SpawnNodeFormProps {
   rootTokenSymbol?: string;
 }
 
-const SpawnNodeForm = ({
+const SpawnNodeForm: React.FC<SpawnNodeFormProps> = ({
   nodeId,
   chainId,
   onSuccess,
   onClose,
   selectedTokenColor = '#805AD5',
   rootTokenSymbol = 'PSC' // Default to PSC if not provided
-}: SpawnNodeFormProps) => {
+}) => {
   // Form state
   const [entityName, setEntityName] = useState('');
   const [characteristics, setCharacteristics] = useState<Characteristic[]>([]);
@@ -88,7 +96,7 @@ const SpawnNodeForm = ({
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
 
   // Hooks
-  const { getEthersProvider } = usePrivy();
+  const { getEthersProvider } = useAppKit();
   const toast = useToast();
   const { executeTransaction } = useTransaction();
 
@@ -177,48 +185,37 @@ const SpawnNodeForm = ({
       throw new Error(`No contract deployment found for chain ${cleanChainId}`);
     }
 
-    const tx = await executeTransaction(
-      chainId,
-      async () => {
-        const provider = await getEthersProvider();
-        const signer = await provider.getSigner();
-        const contract = new ethers.Contract(
-          contractAddress,
-          ABIs.WillWe,
-          signer as unknown as ethers.ContractRunner
+    await executeTransaction(async () => {
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(
+        contractAddress,
+        ABIs.WillWe,
+        signer as unknown as ethers.ContractRunner
+      );
+
+      let transaction;
+      if (useMembrane) {
+        transaction = await contract.spawnNodeWithMembrane(
+          nodeId,
+          membershipConditions.map(mc => mc.tokenAddress.toLowerCase()),
+          membershipConditions.map(mc => ethers.parseUnits(mc.requiredBalance, 18)),
+          cid,
+          inflationRate,
+          { gasLimit: BigInt(1000000) }
         );
-
-        let transaction;
-        if (useMembrane) {
-          transaction = await contract.spawnNodeWithMembrane(
-            nodeId,
-            membershipConditions.map(mc => mc.tokenAddress.toLowerCase()),
-            membershipConditions.map(mc => ethers.parseUnits(mc.requiredBalance, 18)),
-            cid,
-            inflationRate,
-            { gasLimit: BigInt(1000000) }
-          );
-        } else {
-          transaction = await contract.spawnBranch(
-            nodeId,
-            { gasLimit: BigInt(500000) }
-          );
-        }
-
-        setTransactionHash(transaction.hash);
-        return transaction;
-      },
-      {
-        successMessage: "Node created successfully",
-        errorMessage: "Failed to create node",
-        onSuccess: () => {
-          onSuccess?.();
-          onClose?.();
-        }
+      } else {
+        transaction = await contract.spawnBranch(
+          nodeId,
+          { gasLimit: BigInt(500000) }
+        );
       }
-    );
 
-    return tx;
+      setTransactionHash(transaction.hash);
+      onSuccess?.();
+      onClose?.();
+      return transaction;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

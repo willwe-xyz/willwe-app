@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ethers, Provider } from 'ethers';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../../hooks/useAppKit';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { deployments } from '../../config/deployments';
 import { ABIs, getRPCUrl } from '../../config/contracts';
@@ -43,6 +43,7 @@ interface Call {
   target: string;
   callData: string;
   value: string;
+  id?: string;
 }
 
 interface CurrentCallState extends Call {
@@ -63,7 +64,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
   userAddress,
   onSuccess 
 }) => {
-  const { user } = usePrivy();
+  const { user, getEthersProvider } = useAppKit();
   const [calls, setCalls] = useState<Call[]>([]);
   const [currentCall, setCurrentCall] = useState<CurrentCallState>({
     target: '',
@@ -78,7 +79,6 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
   const [rootTokenBalance, setRootTokenBalance] = useState<string>('0');
   const [isRedistributing, setIsRedistributing] = useState(false);
   const [endpointNodeData, setEndpointNodeData] = useState<NodeState | null>(null);
-  const { getEthersProvider } = usePrivy();
   const { executeTransaction } = useTransaction();
   const toast = useToast();
   const [rootTokenSymbol, setRootTokenSymbol] = useState<string>('');
@@ -204,34 +204,23 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
 
     setIsProcessing(true);
     try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          
-          const contract = new ethers.Contract(
-            deployments.WillWe[chainId.replace('eip155:', '')],
-            ABIs.WillWe,
-            // @ts-ignore
-            signer
-          );
-          
-          return contract.createEndpointForOwner(nodeData.basicInfo[0], userAddress);
-        },
-        {
-          successMessage: 'Endpoint created successfully',
-          onSuccess: () => {
-            onSuccess?.();
-            toast({
-              title: 'Success',
-              description: 'Your endpoint has been created',
-              status: 'success',
-              duration: 5000,
-            });
-          }
-        }
-      );
+      await executeTransaction(async () => {
+        const provider = await getEthersProvider();
+        const signer = await provider.getSigner();
+        const contract = new ethers.Contract(
+          deployments.WillWe[chainId.replace('eip155:', '')],
+          ABIs.WillWe,
+          signer
+        );
+        return contract.createEndpointForOwner(nodeData.basicInfo[0], userAddress);
+      });
+      onSuccess?.();
+      toast({
+        title: 'Success',
+        description: 'Your endpoint has been created',
+        status: 'success',
+        duration: 5000,
+      });
     } catch (error) {
       console.error('Error creating endpoint:', error);
       toast({
@@ -250,14 +239,13 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     setIsBurning(true);
 
     try {
-      const provider = getEthersProvider();
-      const signer = provider.getSigner();
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
       const cleanChainId = chainId.replace('eip155:', '');
       
       const proxyContract = new ethers.Contract(
         endpointAddress,
         ABIs.PowerProxy,
-        // @ts-ignore
         signer
       );
 
@@ -279,18 +267,16 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
         value: '0'
       }];
 
-      await executeTransaction(
-        chainId,
-        async () => {
-          return proxyContract.tryAggregate(true, calls);
-        },
-        {
-          successMessage: 'Successfully burned tokens through path',
-          onSuccess: () => {
-            setRootTokenBalance('0');
-          }
-        }
-      );
+      await executeTransaction(async () => {
+        return proxyContract.tryAggregate(true, calls);
+      });
+      setRootTokenBalance('0');
+      toast({
+        title: 'Success',
+        description: 'Successfully burned tokens through path',
+        status: 'success',
+        duration: 5000,
+      });
     } catch (error) {
       console.error('Failed to burn tokens:', error);
       toast({
@@ -322,53 +308,29 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     setCalls(calls.filter((_, i) => i !== index));
   };
 
-
   const handleRedistribute = async () => {
-    if (isRedistributing || !endpointNodeData) return;
-    setIsRedistributing(true);
-  
     try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.WillWe[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-  
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.WillWe,
-            signer as unknown as ethers.ContractRunner
-          );
-  
-          return contract.redistributePath(endpointId, { gasLimit: 500000 });
-        },
-        {
-          onSuccess: () => {
-            toast({
-              title: 'Redistribution complete',
-              description: 'Value has been redistributed from parent node to endpoint',
-              status: 'success',
-              duration: 5000,
-            });
-          }
-        }
+      const provider = await getEthersProvider();
+      if (!provider) return;
+
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(
+        deployments.Node[chainId],
+        ABIs.Node,
+        signer
       );
+
+      await executeTransaction(async () => {
+        return contract.redistribute();
+      });
     } catch (error) {
-      console.error('Failed to redistribute:', error);
+      console.error('Error redistributing:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to redistribute value',
+        description: 'Failed to redistribute',
         status: 'error',
         duration: 5000,
       });
-    } finally {
-      setIsRedistributing(false);
     }
   };
 
@@ -377,34 +339,31 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
 
     setIsProcessing(true);
     try {
-      await executeTransaction(
-        chainId,
-        async () => {
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const endpointContract = new ethers.Contract(
-            endpointAddress,
-            ABIs.PowerProxy,
-            // @ts-ignore
-            signer
-          );
+      await executeTransaction(async () => {
+        const provider = await getEthersProvider();
+        const signer = await provider.getSigner();
+        const endpointContract = new ethers.Contract(
+          endpointAddress,
+          ABIs.PowerProxy,
+          signer
+        );
 
-          const formattedCalls = calls.map(call => ({
-            target: call.target,
-            callData: call.callData,
-            value: ethers.parseEther(call.value || '0')
-          }));
+        const formattedCalls = calls.map(call => ({
+          target: call.target,
+          callData: call.callData,
+          value: ethers.parseEther(call.value || '0')
+        }));
 
-          return endpointContract.tryAggregate(true, formattedCalls);
-        },
-        {
-          successMessage: 'Calls executed successfully',
-          onSuccess: () => {
-            setExecutionResult('Execution successful');
-            setCalls([]);
-          }
-        }
-      );
+        return endpointContract.tryAggregate(true, formattedCalls);
+      });
+      setExecutionResult('Execution successful');
+      setCalls([]);
+      toast({
+        title: 'Success',
+        description: 'Calls executed successfully',
+        status: 'success',
+        duration: 5000,
+      });
     } catch (error) {
       console.error('Error executing calls:', error);
       toast({
@@ -415,6 +374,32 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleExecuteCall = async (call: Call) => {
+    try {
+      const provider = await getEthersProvider();
+      if (!provider) return;
+
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(
+        deployments.Node[chainId],
+        ABIs.Node,
+        signer
+      );
+
+      await executeTransaction(async () => {
+        return contract.executeCall(call.id || '0');
+      });
+    } catch (error) {
+      console.error('Error executing call:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to execute call',
+        status: 'error',
+        duration: 5000,
+      });
     }
   };
 

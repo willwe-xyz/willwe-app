@@ -23,7 +23,7 @@ import { MovementType, SignatureQueueState, LatentMovement, NodeState } from '..
 import { deployments, ABIs } from '../../config/deployments';
 import { ethers } from 'ethers';
 import { getExplorerLink, getRPCUrl } from '../../config/contracts';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '@/hooks/useAppKit';
 
 interface MovementRowProps {
   movement: LatentMovement;
@@ -59,7 +59,7 @@ const MovementRow: React.FC<MovementRowProps> = ({
   const [isQueueValid, setIsQueueValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [localExecuted, setLocalExecuted] = useState(false);
-  const { user } = usePrivy();
+  const { user } = useAppKit();
   const userAddress = user?.wallet?.address;
 
   const isExecuted = localExecuted || movement.signatureQueue.state === SignatureQueueState.Executed;

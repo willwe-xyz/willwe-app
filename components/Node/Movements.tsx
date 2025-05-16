@@ -33,7 +33,7 @@ import { useMovements } from '../../hooks/useMovements';
 import { LazyLoadWrapper } from '../shared/LazyLoadWrapper';
 import { ErrorBoundary } from '../shared/ErrorBoundary';
 import { getRPCUrl } from '../../config/deployments';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../../hooks/useAppKit';
 
 interface MovementsProps {
   nodeId: string;
@@ -44,7 +44,7 @@ interface MovementsProps {
 
 export const Movements: React.FC<MovementsProps> = ({ nodeId, nodeData, chainId, userAddress: propsUserAddress }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const { user } = usePrivy();
+  const { user } = useAppKit();
   const userAddress = propsUserAddress || user?.wallet?.address;
 
   const {

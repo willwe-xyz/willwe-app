@@ -25,7 +25,7 @@ import SignalValueSection from './SignalValueSection';
 import RedistributionSection from './RedistributionSection';
 import SignalDetailsModal from './SignalDetailsModal';
 import { SignalValue } from './types';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../../../../hooks/useAppKit';
 
 interface ExistingSignalsTabProps {
   nodeId: string;
@@ -45,7 +45,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedSignal, setSelectedSignal] = useState<SignalValue | null>(null);
   const [selectedSignalType, setSelectedSignalType] = useState<'membrane' | 'inflation' | 'redistribution'>('membrane');
-  const { user } = usePrivy();
+  const { user } = useAppKit();
   const userAddress = user?.wallet?.address || '';
   const toast = useToast();
   

@@ -2,7 +2,7 @@
 
 import React, { ReactNode, useCallback, useMemo, useState } from 'react';
 import { Box } from '@chakra-ui/react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../../hooks/useAppKit';
 import { useRouter } from 'next/router';
 import { useBalances } from '../../hooks/useBalances';
 import Header from './Header';
@@ -15,8 +15,8 @@ interface MainLayoutProps {
   headerProps?: {
     userAddress?: string;
     chainId: string;
-    logout: () => void;
-    login: () => void;
+    logout?: () => void;
+    login?: () => void;
     selectedNodeId?: string;
     isTransacting: boolean;
     contrastingColor: string;
@@ -35,17 +35,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   rootToken,
   onTokenSelect 
 }) => {
-  const { user } = usePrivy();
+  const { user } = useAppKit();
   const { selectedToken, selectToken } = useNode();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Only fetch balances if user is connected and chainId is available
-  const shouldFetchBalances = useMemo(() => 
-    Boolean(user?.wallet?.address && headerProps?.chainId),
-    [user?.wallet?.address, headerProps?.chainId]
-  );
-  
+  // Only fetch balances if user is connected
+  const shouldFetchBalances = Boolean(user?.wallet?.address);
+  const chainId = headerProps?.chainId || user?.wallet?.chainId || '8453'; // Default to Base if not set
+  const supportedChainIds = ['8453', '84532', '10', '420']; // Add your supported chain IDs here
+  const isValidChain = supportedChainIds.includes(chainId);
+
   // Fetch balances for top bar using combined hook
   const { 
     balances, 
@@ -53,7 +53,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     isLoading: balancesLoading 
   } = useBalances(
     shouldFetchBalances ? user?.wallet?.address : undefined,
-    shouldFetchBalances ? headerProps?.chainId : undefined
+    shouldFetchBalances ? chainId : undefined
   );
 
   // Handle token selection with navigation
@@ -80,9 +80,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         />
       )}
       
-      {/* Token Balance Bar - Only show when user is connected */}
+      {/* Token Balance Bar - Always show when user is connected */}
       {shouldFetchBalances && (
         <Box width="100%" borderBottom="1px solid" borderColor="gray.200">
+          {!isValidChain && (
+            <Box bg="yellow.100" color="yellow.800" p={2} textAlign="center">
+              Your wallet is connected to an unsupported network. Please switch to Base or a supported network.
+            </Box>
+          )}
           <BalanceList
             selectedToken={selectedToken}
             rootToken={rootToken}
@@ -93,8 +98,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             balances={balances || []}
             protocolBalances={protocolBalances || []}
             isLoading={balancesLoading} 
-            userAddress={headerProps?.userAddress || ''} 
-            chainId={headerProps?.chainId || ''}
+            userAddress={user?.wallet?.address || ''} 
+            chainId={chainId}
             searchQuery={searchQuery}
           />
         </Box>

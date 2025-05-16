@@ -3,77 +3,41 @@
 import '../styles/globals.css';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
-import { PrivyProvider } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
 import { ChakraProvider, useToast } from '@chakra-ui/react';
-import { 
-  localhost, 
-  base, 
-  optimismSepolia, 
-  optimism, 
-  baseSepolia, 
-  taikoHekla, 
-  taiko 
-} from 'viem/chains';
-import { WagmiProvider } from 'wagmi';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { config } from '../config/wagmi';
 import { TransactionProvider } from '../contexts/TransactionContext';
 import { ErrorBoundary } from '../components/shared/ErrorBoundary';
 import { customTheme } from '../config/theme';
-
-// Create a client
-const queryClient = new QueryClient();
+import { Toaster } from 'react-hot-toast';
+import { AppKit } from '@/contexts/appkit';
+import { AppKitProvider } from '@/components/AppKitProvider';
+import { Suspense } from 'react';
 
 // App wrapper to provide toast context
 function AppContent({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const toast = useToast();
 
+  if (!Component) {
+    return null;
+  }
+
   return (
     <ErrorBoundary>
-      <TransactionProvider>
-          <Component {...pageProps} />
-      </TransactionProvider>
+      <Component {...pageProps} />
     </ErrorBoundary>
   );
 }
 
-function MyApp(props: AppProps) {
-  const router = useRouter();
-  const toast = useToast();
-
-  // Configure Privy login success callback
-  const handlePrivyLoginSuccess = async () => {
-    await router.push('/dashboard');
-    toast({
-      title: "Welcome!",
-      description: "You've successfully logged in",
-      status: "success",
-      duration: 5000,
-      isClosable: true,
-    });
-  };
-
-  // Configure Privy login error handling
-  const handlePrivyLoginError = (error: Error) => {
-    toast({
-      title: "Login Failed",
-      description: error.message,
-      status: "error",
-      duration: 5000,
-      isClosable: true,
-    });
-  };
-
+export default function MyApp(props: AppProps) {
   return (
     <>
       <Head>
         {/* Preload fonts */}
-        <link rel="preload" href="/fonts/AdelleSans-Regular.woff" as="font" crossOrigin="" />
-        <link rel="preload" href="/fonts/AdelleSans-Regular.woff2" as="font" crossOrigin="" />
-        <link rel="preload" href="/fonts/AdelleSans-Semibold.woff" as="font" crossOrigin="" />
-        <link rel="preload" href="/fonts/AdelleSans-Semibold.woff2" as="font" crossOrigin="" />
+        <link rel="preload" href="/fonts/AdelleSans-Regular.woff" as="font" type="font/woff" crossOrigin="" />
+        <link rel="preload" href="/fonts/AdelleSans-Regular.woff2" as="font" type="font/woff2" crossOrigin="" />
+        <link rel="preload" href="/fonts/AdelleSans-Semibold.woff" as="font" type="font/woff" crossOrigin="" />
+        <link rel="preload" href="/fonts/AdelleSans-Semibold.woff2" as="font" type="font/woff2" crossOrigin="" />
 
         {/* Favicon and manifest configuration */}
         <link rel="icon" href="/favicons/favicon.ico" sizes="any" />
@@ -92,36 +56,18 @@ function MyApp(props: AppProps) {
         <meta property="og:site_name" content="WillWe" />
       </Head>
       
-      <QueryClientProvider client={queryClient}>
-        <PrivyProvider
-          appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''}
-          config={{
-            loginMethods: ['wallet', 'farcaster', 'email'],
-            defaultChain: base,
-            supportedChains: [
-              base,
-              baseSepolia,
-              optimismSepolia
-            ],
-            appearance: {
-              theme: 'light',
-              accentColor: customTheme.colors.brand[600],
-              showWalletLoginFirst: true,
-            },
-            embeddedWallets: {
-              noPromptOnSignature: false
-            }
-          }}
-        >
-          <WagmiProvider config={config}>
+      <Toaster position="top-right" />
+      <Suspense fallback={null}>
+        <AppKit cookies={props.pageProps.cookies || ''}>
+          <AppKitProvider>
             <ChakraProvider theme={customTheme}>
-              <AppContent {...props} />
+              <TransactionProvider>
+                <AppContent {...props} />
+              </TransactionProvider>
             </ChakraProvider>
-          </WagmiProvider>
-        </PrivyProvider>
-      </QueryClientProvider>
+          </AppKitProvider>
+        </AppKit>
+      </Suspense>
     </>
   );
 }
-
-export default MyApp;

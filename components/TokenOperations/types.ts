@@ -1,4 +1,5 @@
-import { BalanceItem } from '@covalenthq/client-sdk';
+import { InterfaceAbi } from "ethers";
+import { Chain } from "viem";
 
 export interface OperationParams {
   amount?: string;

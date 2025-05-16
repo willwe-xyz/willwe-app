@@ -1,7 +1,7 @@
 // File: /components/Layout/AppLayout.tsx
 import React, { useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../../hooks/useAppKit';
 import { useNode } from '../../contexts/NodeContext';
 import { useColorManagement } from '../../hooks/useColorManagement';
 import { MainLayout } from './MainLayout';
@@ -12,33 +12,32 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const router = useRouter();
-  const { user, logout, login } = usePrivy();
-  const {  selectToken, selectedNodeId } = useNode();
+  const { user: { isAuthenticated, wallet }, login, logout } = useAppKit();
+  const { selectToken, selectedNodeId } = useNode();
   const { colorState, cycleColors } = useColorManagement();
-
-
 
   // Handle node selection
   const handleNodeSelect = useCallback((nodeId: string) => {
-    const chainId = user?.wallet?.chainId || '';
+    const chainId = wallet?.chainId || '';
     if (chainId) {
       router.push(`/nodes/${chainId}/${nodeId}`);
     }
-  }, [router, user?.wallet?.chainId]);
+  }, [router, wallet?.chainId]);
 
   return (
     <MainLayout
       headerProps={{
-        userAddress: user?.wallet?.address,
-        chainId: user?.wallet?.chainId || '',
+        userAddress: wallet?.address || undefined,
+        chainId: wallet?.chainId || '',
         logout,
         login,
         onNodeSelect: handleNodeSelect,
-        selectedNodeId: selectedNodeId || '',
+        selectedNodeId: selectedNodeId || undefined,
         isTransacting: false,
         contrastingColor: colorState.contrastingColor,
         reverseColor: colorState.reverseColor,
         cycleColors,
+        selectedTokenColor: colorState.contrastingColor,
       }}
     >
       {children}

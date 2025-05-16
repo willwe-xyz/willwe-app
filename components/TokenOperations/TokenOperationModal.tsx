@@ -36,8 +36,10 @@ import {
   ExternalLink,
   Link as LinkIcon,
 } from 'lucide-react';
-import { ethers } from 'ethers';
-import { usePrivy } from "@privy-io/react-auth";
+import { usePublicClient, useWalletClient } from 'wagmi';
+import { parseEther, formatUnits } from 'viem';
+import type { Abi, AbiFunction } from 'viem';
+import { useAppKit } from '../../hooks/useAppKit';
 import { RequirementsTable } from './RequirementsTable';
 import { OperationConfirmation } from './OperationConfirmation';
 import { deployments, ABIs } from '../../config/contracts';
@@ -84,7 +86,8 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Hooks
-  const { getEthersProvider } = usePrivy();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
   const { executeTransaction } = useTransaction();
   const toast = useToast();
 
@@ -111,7 +114,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     }
 
     try {
-      ethers.getBigInt(value);
+      BigInt(value);
       setIsValidInput(true);
       return true;
     } catch (error) {
@@ -122,22 +125,20 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
 
   // Fetch membrane metadata and requirements
   const fetchMembraneMetadata = useCallback(async (membraneId: string) => {
+    if (!publicClient) {
+      throw new Error('Public client not available');
+    }
+
     try {
       const cleanChainId = chainId.replace('eip155:', '');
-      const provider = await getEthersProvider();
       
-      if (!provider) {
-        throw new Error('Provider not available');
-      }
+      const membrane = await publicClient.readContract({
+        address: deployments.Membrane[cleanChainId] as `0x${string}`,
+        abi: ABIs.Membrane as Abi,
+        functionName: 'getMembraneById',
+        args: [BigInt(membraneId)]
+      }) as { meta: string; tokens: `0x${string}`[]; balances: bigint[] };
 
-      const contract = new ethers.Contract(
-        deployments.Membrane[cleanChainId],
-        ABIs.Membrane,
-        //@ts-ignore
-        provider
-      );
-      //@ts-ignore
-      const membrane = await contract.getMembraneById(membraneId);
       if (!membrane) throw new Error('Membrane not found');
 
       // Fetch metadata from IPFS
@@ -151,23 +152,40 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
       setIsLoadingTokens(true);
       const requirements = await Promise.all(
         membrane.tokens.map(async (tokenAddress: string, index: number) => {
-          const tokenContract = new ethers.Contract(
-            tokenAddress,
-            ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'],
-            //@ts-ignore
-            provider
-          );
+          const symbolAbi: AbiFunction = {
+            type: 'function',
+            name: 'symbol',
+            stateMutability: 'view',
+            inputs: [],
+            outputs: [{ type: 'string' }]
+          };
+
+          const decimalsAbi: AbiFunction = {
+            type: 'function',
+            name: 'decimals',
+            stateMutability: 'view',
+            inputs: [],
+            outputs: [{ type: 'uint8' }]
+          };
 
           const [symbol, decimals] = await Promise.all([
-            tokenContract.symbol(),
-            tokenContract.decimals()
+            publicClient.readContract({
+              address: tokenAddress as `0x${string}`,
+              abi: [symbolAbi],
+              functionName: 'symbol'
+            }) as Promise<string>,
+            publicClient.readContract({
+              address: tokenAddress as `0x${string}`,
+              abi: [decimalsAbi],
+              functionName: 'decimals'
+            })
           ]);
 
           return {
             tokenAddress,
             symbol,
             requiredBalance: membrane.balances[index].toString(),
-            formattedBalance: ethers.formatUnits(membrane.balances[index], decimals)
+            formattedBalance: formatUnits(membrane.balances[index], Number(decimals))
           };
         })
       );
@@ -179,7 +197,7 @@ export const TokenOperationModal: React.FC<TokenOperationModalProps> = ({
     } finally {
       setIsLoadingTokens(false);
     }
-  }, [chainId, getEthersProvider]);
+  }, [chainId, publicClient]);
 
   // Handle membrane ID input change
   const handleMembraneIdChange = useCallback((value: string) => {

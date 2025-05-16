@@ -18,7 +18,7 @@ import {
   Heading,
   Spacer,
 } from "@chakra-ui/react";
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../hooks/useAppKit';
 import { useNodeData } from '../hooks/useNodeData';
 import { NodeOperations } from './Node/NodeOperations';
 import SignalForm from './Node/SignalForm/index';
@@ -58,7 +58,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
   nodeId,
   selectedTokenColor,
 }) => {
-  const { user } = usePrivy();
+  const { user } = useAppKit();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [tokenSymbol, setTokenSymbol] = useState<string>('$TOKEN');
   

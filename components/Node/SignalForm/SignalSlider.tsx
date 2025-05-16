@@ -13,7 +13,7 @@ import {
   ButtonGroup,
 } from '@chakra-ui/react';
 import { Plus, Minus } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../../../hooks/useAppKit';
 import { ethers } from 'ethers';
 import { useWillWeContract } from '../../../hooks/useWillWeContract';
 
@@ -105,7 +105,7 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
   nodeName,
   totalAllocation
 }) => {
-  const { user } = usePrivy();
+  const { user } = useAppKit();
   const contract = useWillWeContract(chainId);
   const [localValue, setLocalValue] = useState(externalValue);
   const [eligibilityImpact, setEligibilityImpact] = useState<string | null>(null);

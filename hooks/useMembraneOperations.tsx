@@ -1,159 +1,83 @@
 // File: ./hooks/useMembraneOperations.ts
 
 import { useCallback } from 'react';
-import { ethers } from 'ethers';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from './useAppKit';
 import { useTransaction } from '../contexts/TransactionContext';
 import { deployments, ABIs } from '../config/contracts';
+import { useWalletClient, usePublicClient } from 'wagmi';
+import type { Abi } from 'viem';
 
 export function useMembraneOperations(chainId: string) {
   const { executeTransaction } = useTransaction();
-  const { getEthersProvider } = usePrivy();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
 
   const createMembrane = useCallback(async (
     tokens: string[],
     balances: string[],
     metadataCid: string
   ) => {
+    if (!walletClient || !publicClient) throw new Error('Wallet not connected');
     try {
-      const result = await executeTransaction(
-        chainId,
-        async () => {
-          const cleanChainId = chainId.replace('eip155:', '');
-          const contractAddress = deployments.Membrane[cleanChainId];
-          
-          if (!contractAddress) {
-            throw new Error(`No contract found for chain ${chainId}`);
-          }
-
-          const provider = await getEthersProvider();
-          const signer = await provider.getSigner();
-          const contract = new ethers.Contract(
-            contractAddress,
-            ABIs.Membrane,
-            // @ts-ignore
-            signer
-          );
-
-          // Parse balances to proper format
-          const parsedBalances = balances.map(b => ethers.parseUnits(b, 18));
-          
-          // Create membrane
-          const tx = await contract.createMembrane(
-            tokens, 
-            parsedBalances, 
-            metadataCid,
-            { gasLimit: 500000 }
-          );
-
-          const receipt = await tx.wait();
-
-          // The event signature for MembraneCreated(address,uint256,string)
-          const membraneCreatedSignature = ethers.id("MembraneCreated(address,uint256,string)");
-          
-          const membraneCreatedLog = receipt.logs.find((log: any) => {
-            try {
-              return log.topics[0] === membraneCreatedSignature;
-            } catch (e) {
-              console.error('Error checking log topic:', e);
-              return false;
-            }
-          });
-          
-          if (!membraneCreatedLog) {
-            throw new Error('Failed to find MembraneCreated event in logs');
-          }
-
-          // Extract membraneId from the data field since parameters are not indexed
-          let membraneId;
-          try {
-            // According to the ABI, the parameters are not indexed, so they're in the data field
-            // We need to decode the data field which contains all parameters
-            const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-            
-            // The data contains [address creator, uint256 membraneId, string CID]
-            const decodedData = abiCoder.decode(
-              ['address', 'uint256', 'string'], 
-              membraneCreatedLog.data
-            );
-            
-            // The membraneId is the second parameter (index 1)
-            membraneId = decodedData[1].toString();
-            
-            if (!membraneId) {
-              throw new Error('Could not extract membrane ID from event data');
-            }
-          } catch (error) {
-            console.error('Error extracting membrane ID:', error);
-            throw new Error('Failed to parse membrane ID from transaction logs');
-          }
-          
-          return tx;
-        },
-        {
-          successMessage: 'Membrane created successfully',
-          errorMessage: 'Failed to create membrane'
-        }
-      );
-      
-      return result;
-
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.Membrane[cleanChainId];
+      if (!contractAddress) {
+        throw new Error(`No contract found for chain ${chainId}`);
+      }
+      // Parse balances to proper format
+      const parsedBalances = balances.map(b => BigInt(b));
+      return await executeTransaction(async () => {
+        const { request } = await publicClient.simulateContract({
+          address: contractAddress as `0x${string}`,
+          abi: ABIs.Membrane as Abi,
+          functionName: 'createMembrane',
+          args: [tokens, parsedBalances, metadataCid],
+          account: walletClient.account,
+        });
+        const hash = await walletClient.writeContract(request);
+        return {
+          hash,
+          wait: async () => await publicClient.waitForTransactionReceipt({ hash }),
+        };
+      });
     } catch (error) {
-      console.error('Create membrane error:', error);
+      console.error('Error creating membrane:', error);
       throw error;
     }
-  }, [chainId, executeTransaction, getEthersProvider]);
+  }, [chainId, executeTransaction, walletClient, publicClient]);
 
   const checkMembrane = useCallback(async (
     address: string,
     membraneId: string
   ) => {
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.Membrane[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No Membrane contract found for chain ${chainId}`);
-      }
-
-      const provider = await getEthersProvider();
-      const contract = new ethers.Contract(
-        contractAddress,
-        ABIs.Membrane,
-        // @ts-ignore
-        provider
-      );
-
-      return await contract.gCheck(address, membraneId);
-    } catch (error) {
-      console.error('Error checking membrane:', error);
-      throw error;
+    if (!publicClient) throw new Error('No public client');
+    const cleanChainId = chainId.replace('eip155:', '');
+    const contractAddress = deployments.Membrane[cleanChainId];
+    if (!contractAddress) {
+      throw new Error(`No Membrane contract found for chain ${chainId}`);
     }
-  }, [chainId, getEthersProvider]);
+    return await publicClient.readContract({
+      address: contractAddress as `0x${string}`,
+      abi: ABIs.Membrane as Abi,
+      functionName: 'gCheck',
+      args: [address, membraneId],
+    });
+  }, [chainId, publicClient]);
 
   const getMembraneById = useCallback(async (membraneId: string) => {
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const contractAddress = deployments.Membrane[cleanChainId];
-      
-      if (!contractAddress) {
-        throw new Error(`No Membrane contract found for chain ${chainId}`);
-      }
-
-      const provider = await getEthersProvider();
-      const contract = new ethers.Contract(
-        contractAddress,
-        ABIs.Membrane,
-        // @ts-ignore
-        provider
-      );
-
-      return await contract.getMembraneById(membraneId);
-    } catch (error) {
-      console.error('Error fetching membrane:', error);
-      throw error;
+    if (!publicClient) throw new Error('No public client');
+    const cleanChainId = chainId.replace('eip155:', '');
+    const contractAddress = deployments.Membrane[cleanChainId];
+    if (!contractAddress) {
+      throw new Error(`No Membrane contract found for chain ${chainId}`);
     }
-  }, [chainId, getEthersProvider]);
+    return await publicClient.readContract({
+      address: contractAddress as `0x${string}`,
+      abi: ABIs.Membrane as Abi,
+      functionName: 'getMembraneById',
+      args: [membraneId],
+    });
+  }, [chainId, publicClient]);
 
   return {
     createMembrane,

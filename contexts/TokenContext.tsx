@@ -2,9 +2,11 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { usePrivy } from '@privy-io/react-auth';
-import { ethers } from 'ethers';
+import { useAppKit } from '../hooks/useAppKit';
+import { usePublicClient } from 'wagmi';
+import { formatUnits } from 'viem';
 import { deployments, ABIs } from '../config/contracts';
+import type { Abi } from 'viem';
 
 interface TokenContextType {
   selectedToken: string | null;
@@ -28,33 +30,46 @@ interface TokenProviderProps {
   children: React.ReactNode;
 }
 
-export const TokenProvider: React.FC<TokenProviderProps> = ({ children }) => {
+export function TokenProvider({ children }: TokenProviderProps) {
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
-  const { getEthersProvider } = usePrivy();
+  const publicClient = usePublicClient();
 
   const { data: tokenData, isLoading, error } = useQuery({
     queryKey: ['token', selectedToken],
     queryFn: async () => {
-      if (!selectedToken) return null;
-
-      const provider = await getEthersProvider();
-      const contract = new ethers.Contract(selectedToken, ABIs.IERC20, provider as unknown as ethers.ContractRunner);
+      if (!selectedToken || !publicClient) return null;
 
       const [name, symbol, decimals, totalSupply] = await Promise.all([
-        contract.name(),
-        contract.symbol(),
-        contract.decimals(),
-        contract.totalSupply()
+        publicClient.readContract({
+          address: selectedToken as `0x${string}`,
+          abi: ABIs.IERC20 as Abi,
+          functionName: 'name'
+        }),
+        publicClient.readContract({
+          address: selectedToken as `0x${string}`,
+          abi: ABIs.IERC20 as Abi,
+          functionName: 'symbol'
+        }),
+        publicClient.readContract({
+          address: selectedToken as `0x${string}`,
+          abi: ABIs.IERC20 as Abi,
+          functionName: 'decimals'
+        }),
+        publicClient.readContract({
+          address: selectedToken as `0x${string}`,
+          abi: ABIs.IERC20 as Abi,
+          functionName: 'totalSupply'
+        })
       ]);
 
       return {
         name,
         symbol,
         decimals,
-        totalSupply: ethers.formatUnits(totalSupply, decimals)
+        totalSupply: formatUnits(totalSupply as bigint, decimals as number)
       };
     },
-    enabled: !!selectedToken,
+    enabled: !!selectedToken && !!publicClient,
     staleTime: 30000
   });
 
@@ -75,4 +90,4 @@ export const TokenProvider: React.FC<TokenProviderProps> = ({ children }) => {
       {children}
     </TokenContext.Provider>
   );
-};
+}

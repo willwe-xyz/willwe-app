@@ -1,7 +1,7 @@
 // File: ./pages/dashboard.tsx
 
 import { useRouter } from 'next/router';
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useAppKit } from '@/hooks/useAppKit';
 import { 
   Box, 
   Text, 
@@ -22,17 +22,17 @@ import { useRootNodes } from '../hooks/useRootNodes';
 import { useState, useEffect } from 'react';
 import { deployments } from '../config/deployments';
 import { ethers } from 'ethers';
+import TokenBalance from '../components/TokenBalance';
 
 export default function DashboardPage() {
   const router = useRouter();
   const toast = useToast();
   const [selectedToken, setSelectedToken] = useState<string>('');
+  const [rootTokenSymbol, setRootTokenSymbol] = useState<string>('PSC');
   
   // Hooks
   const { colorState, cycleColors, setColorState, getContrastColor } = useColorManagement();
-
-  const { user, ready, authenticated, logout, login } = usePrivy();
-  const { wallets } = useWallets();
+  const { user } = useAppKit();
   const userAddress = user?.wallet?.address;
 
   // Get token from URL or context
@@ -56,8 +56,8 @@ export default function DashboardPage() {
   // Default to Base chain ID
   const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '8453';
   
-  // Get chain ID from URL, wallet, or default to a supported chain
-  let chainId = router.query.chainId as string || wallets[0]?.chainId?.replace('eip155:', '');
+  // Get chain ID from URL or default to a supported chain
+  let chainId = router.query.chainId as string;
   
   // Validate the chain ID is supported
   const cleanChainId = chainId?.replace('eip155:', '') || '';
@@ -68,21 +68,9 @@ export default function DashboardPage() {
   
   // Update URL if needed to reflect the correct chain
   useEffect(() => {
-    if (ready && router.isReady) {
-      const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
-      
-      // If user is on a supported network, switch to it
-      if (walletChainId && supportedChainIds.includes(walletChainId) && walletChainId !== effectiveChainId) {
-        router.replace({
-          pathname: router.pathname,
-          query: { 
-            ...router.query,
-            chainId: walletChainId 
-          }
-        }, undefined, { shallow: true });
-      }
+    if (router.isReady) {
       // If user is on an unsupported network, switch to default
-      else if (!isValidChain) {
+      if (!isValidChain) {
         router.replace({
           pathname: router.pathname,
           query: { 
@@ -90,29 +78,27 @@ export default function DashboardPage() {
             chainId: defaultChainId 
           }
         }, undefined, { shallow: true });
-        
-        // toast({
-        //   title: "Network Changed",
-        //   description: `Switched to supported network (Chain ID: ${defaultChainId})`,
-        //   status: "info",
-        //   duration: 5000,
-        // });
       }
     }
-  }, [ready, isValidChain, router, defaultChainId, toast, wallets, supportedChainIds, effectiveChainId]);
+  }, [isValidChain, router, defaultChainId, effectiveChainId]);
 
   // Handle network switch
   const handleSwitchNetwork = async () => {
-    if (!wallets[0]) return;
-    
     try {
-      await wallets[0].switchChain(Number(defaultChainId));
-      toast({
-        title: "Network Switched",
-        description: `Successfully switched to Chain ID: ${defaultChainId}`,
-        status: "success",
-        duration: 5000,
-      });
+      if (typeof window !== 'undefined' && window.ethereum) {
+        await (window.ethereum as any).request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: `0x${Number(defaultChainId).toString(16)}` }],
+        });
+        toast({
+          title: "Network Switched",
+          description: `Successfully switched to Chain ID: ${defaultChainId}`,
+          status: "success",
+          duration: 5000,
+        });
+      } else {
+        throw new Error('No Ethereum provider found');
+      }
     } catch (error) {
       toast({
         title: "Network Switch Failed",
@@ -163,8 +149,6 @@ export default function DashboardPage() {
   const headerProps = {
     userAddress: user?.wallet?.address,
     chainId: effectiveChainId,
-    logout,
-    login,
     isTransacting: false,
     contrastingColor: colorState.contrastingColor,
     reverseColor: colorState.reverseColor,
@@ -172,6 +156,7 @@ export default function DashboardPage() {
     onNodeSelect: (nodeId: string) => {
       handleNodeSelect(nodeId);
     },
+    selectedTokenColor: colorState.contrastingColor
   };
 
   // Empty dashboard state
@@ -186,25 +171,22 @@ export default function DashboardPage() {
 
   // Display notification when using an unsupported network
   const renderChainMismatchWarning = () => {
-    const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
-    if (walletChainId && !supportedChainIds.includes(walletChainId)) {
+    if (!isValidChain) {
       return (
         <Alert status="warning" mb={4}>
           <AlertIcon />
           <Box flex="1">
             <Text>
-              Your wallet is connected to an unsupported network (Chain ID: {walletChainId}). 
+              Your wallet is connected to an unsupported network. 
               Please switch to a supported network to continue.
             </Text>
             <Button
               size="sm"
-              colorScheme="yellow"
-              variant="outline"
-              ml={4}
-              mt={2}
+              colorScheme="purple"
               onClick={handleSwitchNetwork}
+              mt={2}
             >
-              Switch to Base (Chain ID: {defaultChainId})
+              Switch Network
             </Button>
           </Box>
         </Alert>
@@ -214,59 +196,68 @@ export default function DashboardPage() {
   };
 
   // Loading state
-  if (!ready || nodesLoading) {
+  if (!user.isAuthenticated || nodesLoading) {
     return (
       <MainLayout headerProps={headerProps}>
-        <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+        <Box className="flex flex-col items-center justify-center min-h-screen">
           <Spinner size="xl" color={colorState.contrastingColor} />
+          <Text mt={4}>Loading dashboard...</Text>
         </Box>
       </MainLayout>
     );
   }
 
+  // Error state
+  if (nodesError) {
+    return (
+      <MainLayout headerProps={headerProps}>
+        <Box className="flex flex-col items-center justify-center min-h-screen">
+          <Alert status="error" mb={4}>
+            <AlertIcon />
+            <Text>Error loading nodes: {nodesError.message}</Text>
+          </Alert>
+        </Box>
+      </MainLayout>
+    );
+  }
 
+  // Main dashboard content
   return (
-    <MainLayout 
-      headerProps={headerProps} 
-      rootToken={tokenAddress}
-      onTokenSelect={(tokenAddress) => {
-        // Generate a new color based on the token address
-        const newColor = `#${tokenAddress.slice(2, 8)}`; // Use first 6 chars of token address as color
-        setColorState({
-          contrastingColor: newColor,
-          reverseColor: getContrastColor(newColor),
-          hoverColor: `${newColor}20`
-        });
-      }}
-    >
-      <Box flex={1} overflow="auto" bg="gray.50" p={4}>
+    <MainLayout headerProps={headerProps}>
+      {/* Token Balances at the top */}
+      <Box mb={6}>
+        {/* TODO: Replace with real balances from user context or API */}
+        {/* Example usage: <TokenBalance balanceItem={...} isSelected={false} contrastingColor={colorState.contrastingColor} reverseColor={colorState.reverseColor} /> */}
+      </Box>
+      <Box className="flex flex-col mx-auto w-full p-1">
         {renderChainMismatchWarning()}
         
-        {!tokenAddress ? (
-          renderEmptyDashboard()
-        ) : (
-          <Grid templateColumns={{ base: "1fr", lg: "2fr 1fr" }} gap={3}>
+        {nodes && nodes.length > 0 ? (
+          <Grid templateColumns="repeat(1, 1fr)" gap={6}>
             <GridItem>
-              <RootNodeDetails 
-                nodes={nodes || []}
-                isLoading={nodesLoading}
-                error={nodesError}
+              <RootNodeDetails
+                nodes={nodes}
+                isLoading={false}
+                error={null}
                 onRefresh={refreshNodes}
                 selectedTokenColor={colorState.contrastingColor}
                 chainId={effectiveChainId}
                 selectedToken={tokenAddress}
-                onNodeSelect={headerProps.onNodeSelect}
+                onNodeSelect={handleNodeSelect}
+                tokenSymbol={rootTokenSymbol}
               />
             </GridItem>
             <GridItem>
               <RootActivityFeed 
-                tokenAddress={tokenAddress}
                 chainId={effectiveChainId}
+                tokenAddress={tokenAddress}
                 showDebug={process.env.NODE_ENV === 'development'}
                 selectedTokenColor={colorState.contrastingColor}
               />
             </GridItem>
           </Grid>
+        ) : (
+          renderEmptyDashboard()
         )}
       </Box>
     </MainLayout>

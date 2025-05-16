@@ -9,8 +9,8 @@ import { Search } from 'lucide-react';
 interface HeaderProps {
   userAddress?: string;
   chainId: string;
-  logout: () => void;
-  login: () => void;
+  logout?: () => void;
+  login?: () => void;
   selectedNodeId?: string;
   onNodeSelect: (nodeId: string) => void;
   isTransacting?: boolean;
@@ -25,8 +25,6 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({
   userAddress,
   chainId,
-  logout,
-  login,
   selectedNodeId,
   onNodeSelect,
   isTransacting,
@@ -59,50 +57,21 @@ const Header: React.FC<HeaderProps> = ({
       </Box>
 
       {/* Center: Search Bar */}
-      <Box 
-        flex="1 1 0"
-        maxW="400px"
-        mx={8}
-        width={isActive ? "240px" : "200px"}
-        transition="width 0.3s cubic-bezier(.4,1.3,.6,1)"
-        borderBottomWidth={isActive ? "3.3px" : "3px"}
-        borderBottomStyle="solid"
-        borderBottomColor={isActive ? `${contrastingColor}` : `${contrastingColor}80`}
-        borderRadius={0}
-        bg="transparent"
-        boxShadow="none"
-      >
-        <InputGroup size="sm" alignItems="center">
-          <InputLeftElement pointerEvents="none" height="100%">
-            <Box
-              bg="transparent"
-              borderRadius="full"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              width="24px"
-              height="24px"
-              mr={2}
-            >
-              <Search size={18} color={contrastingColor} opacity={1} />
-            </Box>
+      <Box flex="1" maxW="600px" mx={4}>
+        <InputGroup>
+          <InputLeftElement pointerEvents="none">
+            <Search size={18} color={isActive ? contrastingColor : 'gray.400'} />
           </InputLeftElement>
           <Input
-            placeholder="🪙"
-            fontSize="20px"
+            placeholder="Search tokens, nodes, or addresses..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
-            bg="transparent"
-            border="none"
-            color={contrastingColor}
-            _placeholder={{ color: `${contrastingColor}A0`, opacity: 1 }}
-            borderRadius="none"
-            width="99%"
-            fontWeight={isActive ? 400 : 450}
-            boxShadow="none"
-            _focus={{ outline: "none", boxShadow: "none" }}
+            borderColor={isActive ? contrastingColor : 'gray.200'}
+            _hover={{ borderColor: isActive ? contrastingColor : 'gray.300' }}
+            _focus={{ borderColor: contrastingColor, boxShadow: `0 0 0 1px ${contrastingColor}` }}
+            transition="all 0.2s"
           />
         </InputGroup>
       </Box>
@@ -110,9 +79,7 @@ const Header: React.FC<HeaderProps> = ({
       {/* Right: Header Buttons */}
       <Box flex="0 0 auto">
         <HeaderButtons 
-          logout={logout} 
-          login={login}
-          userAddress={userAddress || ''} 
+          userAddress={userAddress} 
           chainId={chainId}
           selectedNodeId={selectedNodeId}
           onNodeSelect={onNodeSelect}

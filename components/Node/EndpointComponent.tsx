@@ -1,14 +1,14 @@
 import React from 'react';
 import { Box, Text, Link, Button, HStack, Alert, AlertIcon } from "@chakra-ui/react";
 import { RefreshCw } from "lucide-react";
-import { usePrivy } from "@privy-io/react-auth";
-import { ethers } from 'ethers';
+import { useAppKit } from '@/hooks/useAppKit';
 import { useTransaction } from '../../contexts/TransactionContext';
 import { deployments, ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
 import { nodeIdToAddress } from '../../utils/formatters';
 import { useToast } from '@chakra-ui/react';
 import { useState } from 'react';
+import { ethers } from 'ethers';
 
 interface EndpointProps {
   parentNodeId: string;
@@ -19,7 +19,7 @@ interface EndpointProps {
 
 export const EndpointComponent = ({ parentNodeId, chainId, nodeData, userAddress }: EndpointProps) => {
   const [isRedistributing, setIsRedistributing] = useState(false);
-  const { getEthersProvider } = usePrivy();
+  const { getEthersProvider } = useAppKit();
   const { executeTransaction } = useTransaction();
   const toast = useToast();
 
@@ -45,14 +45,13 @@ export const EndpointComponent = ({ parentNodeId, chainId, nodeData, userAddress
           const contract = new ethers.Contract(
             contractAddress,
             ABIs.WillWe,
-            // @ts-ignore
             signer
           );
-
-          return contract.redistributePath(nodeData.basicInfo[0], { gasLimit: 500000 });
+          
+          return contract.redistributePath(nodeData.basicInfo[0]);
         },
         {
-          successMessage: 'Value redistributed successfully to endpoint',
+          successMessage: 'Value redistributed successfully',
           onSuccess: () => {
             toast({
               title: 'Redistribution complete',
@@ -67,9 +66,9 @@ export const EndpointComponent = ({ parentNodeId, chainId, nodeData, userAddress
       console.error('Failed to redistribute:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to redistribute value',
+        description: error instanceof Error ? error.message : 'Transaction failed',
         status: 'error',
-        duration: 5000,
+        duration: 5000
       });
     } finally {
       setIsRedistributing(false);

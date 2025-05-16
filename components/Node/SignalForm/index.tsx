@@ -14,7 +14,7 @@ import {
   Tab,
   TabPanel,
 } from '@chakra-ui/react';
-import { usePrivy } from "@privy-io/react-auth";
+import { useAppKit } from '../../../hooks/useAppKit';
 import { useNodeTransactions } from '../../../hooks/useNodeTransactions';
 import { useNodeData } from '../../../hooks/useNodeData';
 import { fetchIPFSMetadata } from '../../../utils/ipfs';
@@ -27,6 +27,7 @@ import SignalSlider from './SignalSlider';
 import ExistingSignalsTab from './ExistingSignalsTab';
 import Link from 'next/link';
 import { Signal, History } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 
 interface SignalFormProps {
@@ -60,7 +61,7 @@ interface MembraneRequirement {
 }
 
 const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData, onSuccess, tokenSymbol = 'PSC' }) => {
-  const { user, ready } = usePrivy();
+  const { user } = useAppKit();
   const { signal } = useNodeTransactions(chainId);
 
   const [childrenData, setChildrenData] = useState<ChildData[]>([]);
@@ -310,24 +311,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   // Fetch children data
   const fetchChildrenData = useCallback(async () => {
     // Add more detailed validation
-    if (!ready) {
-      console.log('Privy not ready');
-      setLoadingChildren(false);
-      return;
-    }
-    
-    if (!chainId) {
-      console.log('No chainId provided');
-      setLoadingChildren(false);
-      return;
-    }
-    
-    if (!parentNodeData) {
-      console.log('No parent node data');
-      setLoadingChildren(false);
-      return;
-    }
-    
     if (!user?.wallet?.address) {
       console.log('No wallet address');
       setLoadingChildren(false);
@@ -505,7 +488,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
     } finally {
       setLoadingChildren(false);
     }
-  }, [chainId, parentNodeData, user?.wallet?.address, ready, nodeId]);
+  }, [chainId, parentNodeData, user?.wallet?.address, nodeId]);
 
   useEffect(() => {
     fetchChildrenData();
@@ -522,7 +505,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   }, [handleInflationChange, nodeId]);
 
   // Render loading state
-  if (!ready || loadingChildren) {
+  if (!user?.wallet?.address || loadingChildren) {
     return (
       <VStack spacing={4} align="stretch" width="100%">
         <Progress size="xs" isIndeterminate colorScheme="purple" />

@@ -4,7 +4,7 @@ import { ContractTransactionResponse } from 'ethers';
 import { ExternalLink } from 'lucide-react';
 import { getChainById } from '../../config/contracts';
 import { useTransaction } from '../../contexts/TransactionContext';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAppKit } from '../../hooks/useAppKit';
 
 
 interface TransactionHandlerProps {
@@ -15,6 +15,7 @@ interface TransactionHandlerProps {
 export const TransactionHandler: React.FC<TransactionHandlerProps> = ({ children, chainId }) => {
   const { isTransacting, currentHash, error } = useTransaction();
   const toast = useToast();
+  const { user } = useAppKit();
 
   // Show transaction status when needed
   React.useEffect(() => {

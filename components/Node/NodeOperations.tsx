@@ -61,14 +61,16 @@ import {
   AlertTriangle,
   Check
 } from 'lucide-react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { useTransaction } from '../../contexts/TransactionContext';
-import { useNodeData } from '../../hooks/useNodeData';
-import { deployments, getChainById } from '../../config/deployments';
-import { ABIs } from '../../config/contracts';
-import { nodeIdToAddress } from '../../utils/formatters';
-import { formatBalance } from '../../utils/formatters';
+import { useAppKit } from '@/hooks/useAppKit';
+import { useWalletClient, usePublicClient } from 'wagmi';
+import { useTransaction, TransactionLike } from '@/contexts/TransactionContext';
+import { useNodeData } from '@/hooks/useNodeData';
+import { deployments, getChainById } from '@/config/deployments';
+import { ABIs } from '@/config/contracts';
+import { nodeIdToAddress } from '@/utils/formatters';
+import { formatBalance } from '@/utils/formatters';
 import SpawnNodeForm from './SpawnNodeForm';
+import type { Abi } from 'viem';
 
 type ModalType = 'spawn' | 'membrane' | 'mint' | 'burn' | null;
 
@@ -109,6 +111,11 @@ export type NodeOperationsProps = {
   showToolbar?: boolean;
 };
 
+type WagmiTransactionResponse = {
+  hash: `0x${string}`;
+  wait: () => Promise<any>;
+};
+
 export const NodeOperations: React.FC<NodeOperationsProps> = ({
   nodeId,
   chainId,
@@ -139,8 +146,9 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const [burnBalance, setBurnBalance] = useState('0');
 
   const toast = useToast();
-  const { user, getEthersProvider } = usePrivy();
-  const { wallets } = useWallets();
+  const { user } = useAppKit();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
   const { executeTransaction } = useTransaction();
   const { data: nodeData } = useNodeData(chainId || '', userAddress || '', nodeId);
   const isMember = nodeData?.membersOfNode?.includes(user?.wallet?.address || '');
@@ -162,17 +170,14 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
   // Function to check and switch network if needed
   const checkAndSwitchNetwork = async () => {
-    if (!wallets[0]) return false;
-    
-    const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
-    
-    // If already on the correct network, return true
-    if (walletChainId === cleanChainId) return true;
-    
-    try {
-      // If on an unsupported network, switch to the node's network
-      if (!supportedChainIds.includes(walletChainId)) {
-        await wallets[0].switchChain(Number(cleanChainId));
+    if (typeof window !== 'undefined' && window.ethereum) {
+      const walletChainId = (window.ethereum as any).chainId || '';
+      if (walletChainId === cleanChainId) return true;
+      try {
+        await (window.ethereum as any).request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: `0x${Number(cleanChainId).toString(16)}` }],
+        });
         toast({
           title: "Network Switched",
           description: `Switched to ${getNetworkName(cleanChainId)}`,
@@ -180,25 +185,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           duration: 5000,
         });
         return true;
+      } catch (error) {
+        toast({
+          title: "Network Switch Failed",
+          description: error instanceof Error ? error.message : "Failed to switch network",
+          status: "error",
+          duration: 5000,
+        });
+        return false;
       }
-      
-      // If on a different supported network, prompt to switch
-      toast({
-        title: "Network Mismatch",
-        description: `Please switch to ${getNetworkName(cleanChainId)} to perform this operation`,
-        status: "warning",
-        duration: 5000,
-      });
-      return false;
-    } catch (error) {
-      toast({
-        title: "Network Switch Failed",
-        description: error instanceof Error ? error.message : "Failed to switch network",
-        status: "error",
-        duration: 5000,
-      });
-      return false;
     }
+    toast({
+      title: "No Ethereum provider found",
+      status: "error",
+      duration: 5000,
+    });
+    return false;
   };
 
   // Wrapper function for operations that require network check
@@ -222,66 +224,36 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   // Get root token symbol
   const getRootTokenSymbol = useCallback(async () => {
     try {
-      const provider = await getEthersProvider();
+      if (!walletClient || !publicClient) return 'PSC';
       let tokenAddress;
-
-      // If we have a direct token address in nodeId, use that first
       if (nodeId && nodeId.startsWith('0x')) {
         tokenAddress = ethers.getAddress(nodeId);
       } else if (nodeData?.rootPath?.[0] && nodeData.rootPath[0] !== '0') {
-        // Only use root path if it's not "0"
         const rootNodeId = nodeData.rootPath[0];
         tokenAddress = ethers.getAddress(ethers.toBeHex(rootNodeId, 20));
       } else {
-        // If we don't have a valid address, return default
-        console.warn('No valid token address found, using default symbol');
         return 'PSC';
       }
-      
-      console.log('Getting symbol for token:', {
-        tokenAddress,
-        nodeId,
-        rootPath: nodeData?.rootPath
-      });
+      if (tokenAddress === ethers.ZeroAddress) return 'PSC';
 
-      // Verify we have a valid non-zero address
-      if (tokenAddress === ethers.ZeroAddress) {
-        console.warn('Zero address detected, returning default symbol');
-        return 'PSC';
-      }
+      const [symbol, name] = await Promise.all([
+        publicClient.readContract({
+          address: tokenAddress as `0x${string}`,
+          abi: ['function symbol() view returns (string)'],
+          functionName: 'symbol',
+        }).catch(() => null),
+        publicClient.readContract({
+          address: tokenAddress as `0x${string}`,
+          abi: ['function name() view returns (string)'],
+          functionName: 'name',
+        }).catch(() => null)
+      ]);
 
-      const tokenContract = new ethers.Contract(
-        tokenAddress,
-        [
-          'function symbol() view returns (string)',
-          'function name() view returns (string)'
-        ],
-        provider as unknown as ethers.ContractRunner
-      );
-
-      try {
-        // First try to get the symbol
-        const symbol = await tokenContract.symbol();
-        console.log('Retrieved token symbol:', symbol);
-        return symbol || 'PSC';
-      } catch (symbolError) {
-        console.warn('Failed to get symbol, trying name:', symbolError);
-        try {
-          // If symbol fails, try to get the name
-          const name = await tokenContract.name();
-          // Use first 3-4 characters of name as symbol if name exists
-          return name ? name.slice(0, 4).toUpperCase() : 'PSC';
-        } catch (nameError) {
-          console.warn('Failed to get name:', nameError);
-          // If both fail, return default
-          return 'PSC';
-        }
-      }
-    } catch (error) {
-      console.error('Error getting token symbol:', error);
+      return (symbol as string) || ((name as string) ? (name as string).slice(0, 4).toUpperCase() : 'PSC');
+    } catch {
       return 'PSC';
     }
-  }, [nodeData?.rootPath, nodeId, getEthersProvider]);
+  }, [nodeData?.rootPath, nodeId, walletClient, publicClient]);
 
   useEffect(() => {
     getRootTokenSymbol().then(symbol => {
@@ -321,7 +293,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
   const checkAllowance = useCallback(async () => {
     try {
-      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address || !mintAmount) {
+      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address || !mintAmount || !publicClient) {
         console.warn('Required data not available');
         return;
       }
@@ -334,22 +306,19 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         console.warn('WillWe contract address not available');
         return;
       }
-  
-      const provider = await getEthersProvider();
-      const signer = await provider.getSigner();
-  
-      const tokenContract = new ethers.Contract(
-        rootTokenAddress,
-        [
-          'function allowance(address,address) view returns (uint256)',
-          'function decimals() view returns (uint8)'
-        ],
-        signer as unknown as ethers.ContractRunner
-      );
-  
+
       const [currentAllowance, decimals] = await Promise.all([
-        tokenContract.allowance(user.wallet.address, willWeAddress),
-        tokenContract.decimals()
+        publicClient.readContract({
+          address: rootTokenAddress as `0x${string}`,
+          abi: ['function allowance(address,address) view returns (uint256)'],
+          functionName: 'allowance',
+          args: [user.wallet.address as `0x${string}`, willWeAddress as `0x${string}`],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: rootTokenAddress as `0x${string}`,
+          abi: ['function decimals() view returns (uint8)'],
+          functionName: 'decimals',
+        }) as Promise<number>
       ]);
 
       // Convert amount to BigInt with proper decimals
@@ -376,45 +345,49 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         duration: 5000
       });
     }
-  }, [chainId, nodeData?.rootPath, user?.wallet?.address, mintAmount, getEthersProvider, toast]);
+  }, [chainId, nodeData?.rootPath, user?.wallet?.address, mintAmount, publicClient, toast]);
 
+  // Update executeTransaction to handle wagmi transaction hashes
+  const executeWagmiTransaction = async (operation: () => Promise<`0x${string}`>) => {
+    return executeTransaction(async () => {
+      const hash = await operation();
+      const response: WagmiTransactionResponse = {
+        hash,
+        wait: async () => {
+          if (!publicClient) throw new Error('No public client');
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
+          return { hash, ...receipt };
+        }
+      };
+      return response;
+    });
+  };
+
+  // Update handleApprove to use executeWagmiTransaction
   const handleApprove = useCallback(async () => {
-    if (!nodeData?.rootPath?.[0] || isProcessing || !mintAmount) {
+    if (!nodeData?.rootPath?.[0] || isProcessing || !mintAmount || !walletClient || !publicClient) {
       return;
     }
-  
+
     try {
       const cleanChainId = chainId.replace('eip155:', '');
       const willWeAddress = deployments.WillWe[cleanChainId];
-      const provider = await getEthersProvider();
-      const signer = await provider.getSigner();
       const rootTokenAddress = nodeIdToAddress(nodeData.rootPath[0]);
-  
-      const tokenContract = new ethers.Contract(
-        rootTokenAddress,
-        ['function approve(address,uint256) returns (bool)'],
-        //@ts-ignore
-        signer
-      );
-  
-      await executeTransaction(
-        chainId,
-        async () => {
-          const tx = await tokenContract.approve(
-            willWeAddress,
-            ethers.parseUnits(mintAmount, 18)
-          );
-          return tx;
-        },
-        {
-          successMessage: 'Token approval granted successfully',
-          errorMessage: 'Failed to approve token spending',
-          onSuccess: async () => {
-            await checkAllowance();
-            setNeedsApproval(false);
-          }
-        }
-      );
+
+      await executeWagmiTransaction(async () => {
+        const { request } = await publicClient.simulateContract({
+          address: rootTokenAddress as `0x${string}`,
+          abi: ['function approve(address,uint256) returns (bool)'],
+          functionName: 'approve',
+          args: [willWeAddress as `0x${string}`, ethers.parseUnits(mintAmount, 18)],
+          account: walletClient.account,
+        });
+
+        const hash = await walletClient.writeContract(request);
+        await checkAllowance();
+        setNeedsApproval(false);
+        return hash;
+      });
     } catch (error) {
       console.error('Approval error:', error);
       toast({
@@ -424,15 +397,12 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         duration: 5000
       });
     }
-  }, [chainId, nodeData?.rootPath, mintAmount, getEthersProvider, checkAllowance, isProcessing, executeTransaction, toast]);
+  }, [chainId, nodeData?.rootPath, mintAmount, walletClient, publicClient, checkAllowance, isProcessing, executeTransaction, toast]);
 
   const checkNodeBalance = useCallback(async () => {
     try {
-      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
-        console.warn('Token address or user address not available', {
-          rootPath: nodeData?.rootPath,
-          userAddress: user?.wallet?.address
-        });
+      if (!nodeData?.rootPath?.[0] || !user?.wallet?.address || !publicClient) {
+        console.warn('Required data not available');
         return;
       }
   
@@ -445,18 +415,12 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         rootNodeId: nodeData.rootPath[0]
       });
       
-      const provider = await getEthersProvider();
-      const signer = await provider.getSigner();
-      
-      // Use ERC20 interface for root token balance
-      const rootTokenContract = new ethers.Contract(
-        rootTokenAddress,
-        ['function balanceOf(address) view returns (uint256)'],
-        //@ts-ignore
-        signer
-      );
-  
-      const balance = await rootTokenContract.balanceOf(user.wallet.address);
+      const balance = await publicClient.readContract({
+        address: rootTokenAddress as `0x${string}`,
+        abi: ['function balanceOf(address) view returns (uint256)'],
+        functionName: 'balanceOf',
+        args: [user.wallet.address as `0x${string}`],
+      }) as bigint;
       
       console.log('Retrieved root token balance:', {
         rawBalance: balance.toString(),
@@ -474,7 +438,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         duration: 5000
       });
     }
-  }, [chainId, nodeData?.rootPath, user?.wallet?.address, getEthersProvider, toast]);
+  }, [chainId, nodeData?.rootPath, user?.wallet?.address, publicClient, toast]);
 
   // Call checkNodeBalance when the modal opens
   useEffect(() => {
@@ -487,7 +451,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   // Continue to Part 3 for handler functions
 
   const handleMintPath = useCallback(async () => {
-    if (!mintAmount) return;
+    if (!mintAmount || !walletClient || !publicClient) return;
     
     await withNetworkCheck(async () => {
       try {
@@ -498,30 +462,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
 
-        await executeTransaction(
-          chainId,
-          async () => {
-            const provider = await getEthersProvider();
-            const signer = await provider.getSigner();
-            const contract = new ethers.Contract(
-              contractAddress,
-              ABIs.WillWe,
-              // @ts-ignore
-              signer
-            );
-            
-            return await contract.mintPath(nodeId, ethers.parseUnits(mintAmount, 18), {
-              gasLimit: BigInt(500000)
-            });
-          },
-          {
-            successMessage: 'Tokens minted successfully via path',
-            onSuccess: () => {
-              setActiveModal(null);
-              onSuccess?.();
-            }
-          }
-        );
+        await executeTransaction(async () => {
+          const { request } = await publicClient.simulateContract({
+            address: contractAddress as `0x${string}`,
+            abi: ABIs.WillWe as Abi,
+            functionName: 'mintPath',
+            args: [nodeId, ethers.parseUnits(mintAmount, 18)],
+            account: walletClient.account,
+          });
+          const hash = await walletClient.writeContract(request);
+          setActiveModal(null);
+          onSuccess?.();
+          return {
+            hash,
+            wait: async () => await publicClient.waitForTransactionReceipt({ hash }),
+          };
+        });
       } catch (error) {
         console.error('Failed to mint tokens via path:', error);
         toast({
@@ -532,10 +488,10 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         });
       }
     });
-  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+  }, [chainId, nodeId, mintAmount, walletClient, publicClient, executeTransaction, onSuccess, isProcessing, toast]);
 
   const handleMint = useCallback(async () => {
-    if (!mintAmount) return;
+    if (!mintAmount || !walletClient || !publicClient) return;
     
     await withNetworkCheck(async () => {
       try {
@@ -546,30 +502,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
 
-        await executeTransaction(
-          chainId,
-          async () => {
-            const provider = await getEthersProvider();
-            const signer = await provider.getSigner();
-            const contract = new ethers.Contract(
-              contractAddress,
-              ABIs.WillWe,
-              // @ts-ignore
-              signer
-            );
-            
-            return await contract.mint(nodeId, ethers.parseUnits(mintAmount, 18), {
-              gasLimit: BigInt(300000)
-            });
-          },
-          {
-            successMessage: 'Tokens minted successfully from parent',
-            onSuccess: () => {
-              setActiveModal(null);
-              onSuccess?.();
-            }
-          }
-        );
+        await executeTransaction(async () => {
+          const { request } = await publicClient.simulateContract({
+            address: contractAddress as `0x${string}`,
+            abi: ABIs.WillWe as Abi,
+            functionName: 'mint',
+            args: [nodeId, ethers.parseUnits(mintAmount, 18)],
+            account: walletClient.account,
+          });
+          const hash = await walletClient.writeContract(request);
+          setActiveModal(null);
+          onSuccess?.();
+          return {
+            hash,
+            wait: async () => await publicClient.waitForTransactionReceipt({ hash }),
+          };
+        });
       } catch (error) {
         console.error('Failed to mint tokens from parent:', error);
         toast({
@@ -580,10 +528,10 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         });
       }
     });
-  }, [chainId, nodeId, mintAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+  }, [chainId, nodeId, mintAmount, walletClient, publicClient, executeTransaction, onSuccess, isProcessing, toast]);
 
   const handleBurnPath = useCallback(async () => {
-    if (!burnAmount) return;
+    if (!burnAmount || !walletClient || !publicClient) return;
     
     await withNetworkCheck(async () => {
       try {
@@ -594,29 +542,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
 
-        await executeTransaction(
-          chainId,
-          async () => {
-            const provider = await getEthersProvider();
-            const signer = await provider.getSigner();
-            const contract = new ethers.Contract(
-              contractAddress,
-              ABIs.WillWe,
-              // @ts-ignore
-              signer
-            );
-            
-            const amountToBurn = ethers.parseUnits(burnAmount, 18);
-            return contract.burnPath(nodeId, amountToBurn);
-          },
-          {
-            successMessage: 'Tokens burned successfully via path',
-            onSuccess: () => {
-              setActiveModal(null);
-              onSuccess?.();
-            } 
-          }
-        );
+        await executeTransaction(async () => {
+          const { request } = await publicClient.simulateContract({
+            address: contractAddress as `0x${string}`,
+            abi: ABIs.WillWe as Abi,
+            functionName: 'burnPath',
+            args: [nodeId, ethers.parseUnits(burnAmount, 18)],
+            account: walletClient.account,
+          });
+          const hash = await walletClient.writeContract(request);
+          setActiveModal(null);
+          onSuccess?.();
+          return {
+            hash,
+            wait: async () => await publicClient.waitForTransactionReceipt({ hash }),
+          };
+        });
       } catch (error) {
         console.error('Failed to burn tokens via path:', error);
         toast({
@@ -627,10 +568,10 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         });
       }
     });
-  }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+  }, [chainId, nodeId, burnAmount, walletClient, publicClient, executeTransaction, onSuccess, isProcessing, toast]);
 
   const handleBurn = useCallback(async () => {
-    if (!burnAmount) return;
+    if (!burnAmount || !walletClient || !publicClient) return;
     
     await withNetworkCheck(async () => {
       try {
@@ -641,29 +582,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
 
-        await executeTransaction(
-          chainId,
-          async () => {
-            const provider = await getEthersProvider();
-            const signer = await provider.getSigner();
-            const contract = new ethers.Contract(
-              contractAddress,
-              ABIs.WillWe,
-              /// @ts-ignore
-              signer
-            );
-            
-            const amountToBurn = ethers.parseUnits(burnAmount, 18);
-            return contract.burn(nodeId, amountToBurn);
-          },
-          {
-            successMessage: 'Tokens burned successfully to parent',
-            onSuccess: () => {
-              setActiveModal(null);
-              onSuccess?.();
-            } 
-          }
-        );
+        await executeTransaction(async () => {
+          const { request } = await publicClient.simulateContract({
+            address: contractAddress as `0x${string}`,
+            abi: ABIs.WillWe as Abi,
+            functionName: 'burn',
+            args: [nodeId, ethers.parseUnits(burnAmount, 18)],
+            account: walletClient.account,
+          });
+          const hash = await walletClient.writeContract(request);
+          setActiveModal(null);
+          onSuccess?.();
+          return {
+            hash,
+            wait: async () => await publicClient.waitForTransactionReceipt({ hash }),
+          };
+        });
       } catch (error) {
         console.error('Failed to burn tokens to parent:', error);
         toast({
@@ -674,13 +608,15 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         });
       }
     });
-  }, [chainId, nodeId, burnAmount, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+  }, [chainId, nodeId, burnAmount, walletClient, publicClient, executeTransaction, onSuccess, isProcessing, toast]);
 
   const handleMintMembership = useCallback(async () => {
+    if (!walletClient || !publicClient) return;
+
     await withNetworkCheck(async () => {
       try {
         // Double check the network before proceeding
-        const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
+        const walletChainId = publicClient.chain?.id?.toString();
         if (walletChainId !== cleanChainId) {
           toast({
             title: "Network Error",
@@ -691,24 +627,21 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           return;
         }
 
-        await executeTransaction(
-          chainId,
-          async () => {
-            const provider = await getEthersProvider();
-            const signer = await provider.getSigner();
-            const contract = new ethers.Contract(
-              deployments.WillWe[chainId.replace('eip155:', '')],
-              ABIs.WillWe,
-              /// @ts-ignore
-              signer
-            );
-            return contract.mintMembership(nodeId);
-          },
-          {
-            successMessage: 'Membership minted successfully',
-            onSuccess
-          }
-        );
+        await executeTransaction(async () => {
+          const { request } = await publicClient.simulateContract({
+            address: deployments.WillWe[chainId.replace('eip155:', '')] as `0x${string}`,
+            abi: ABIs.WillWe as Abi,
+            functionName: 'mintMembership',
+            args: [nodeId],
+            account: walletClient.account,
+          });
+          const hash = await walletClient.writeContract(request);
+          onSuccess?.();
+          return {
+            hash,
+            wait: async () => await publicClient.waitForTransactionReceipt({ hash }),
+          };
+        });
       } catch (error) {
         console.error('Failed to mint membership:', error);
         toast({
@@ -719,9 +652,11 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         });
       }
     });
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast, wallets, cleanChainId, getNetworkName]);
+  }, [chainId, nodeId, walletClient, publicClient, executeTransaction, onSuccess, isProcessing, toast, cleanChainId, getNetworkName]);
 
   const handleRedistribute = useCallback(async () => {
+    if (!walletClient || !publicClient) return;
+
     await withNetworkCheck(async () => {
       try {
         const cleanChainId = chainId.replace('eip155:', '');
@@ -731,27 +666,21 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           throw new Error(`No contract deployment found for chain ${cleanChainId}`);
         }
     
-        await executeTransaction(
-          chainId,
-          async () => {
-            const provider = await getEthersProvider();
-            const signer = await provider.getSigner();
-            const contract = new ethers.Contract(
-              contractAddress,
-              ABIs.WillWe,
-              // @ts-ignore
-              signer
-            );
-    
-            return contract.redistributePath(nodeId, { gasLimit: 500000 });
-          },
-          {
-            successMessage: 'Value redistributed successfully',
-            onSuccess: () => {
-              onSuccess?.();
-            }
-          }
-        );
+        await executeTransaction(async () => {
+          const { request } = await publicClient.simulateContract({
+            address: contractAddress as `0x${string}`,
+            abi: ABIs.WillWe as Abi,
+            functionName: 'redistributePath',
+            args: [nodeId],
+            account: walletClient.account,
+          });
+          const hash = await walletClient.writeContract(request);
+          onSuccess?.();
+          return {
+            hash,
+            wait: async () => await publicClient.waitForTransactionReceipt({ hash }),
+          };
+        });
       } catch (error) {
         console.error('Failed to redistribute:', error);
         toast({
@@ -762,11 +691,11 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         });
       }
     });
-  }, [chainId, nodeId, executeTransaction, getEthersProvider, onSuccess, isProcessing, toast]);
+  }, [chainId, nodeId, walletClient, publicClient, executeTransaction, onSuccess, isProcessing, toast]);
 
   const checkBurnBalance = useCallback(async () => {
     try {
-      if (!user?.wallet?.address) {
+      if (!user?.wallet?.address || !publicClient) {
         console.warn('User address not available');
         return;
       }
@@ -779,26 +708,18 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         return;
       }
   
-      const provider = await getEthersProvider();
-      const signer = await provider.getSigner();
-      
       console.log('Checking burn balance with params:', {
         contractAddress,
         userAddress: user.wallet.address,
         nodeId: BigInt(nodeId)
       });
       
-      const contract = new ethers.Contract(
-        contractAddress,
-        ['function balanceOf(address account, uint256 id) view returns (uint256)'],
-        //@ts-ignore
-        signer
-      );
-  
-      const balance = await contract.balanceOf(
-        user.wallet.address,
-        BigInt(nodeId)
-      );
+      const balance = await publicClient.readContract({
+        address: contractAddress as `0x${string}`,
+        abi: ['function balanceOf(address account, uint256 id) view returns (uint256)'],
+        functionName: 'balanceOf',
+        args: [user.wallet.address as `0x${string}`, BigInt(nodeId)],
+      }) as bigint;
       
       console.log('Retrieved burn balance:', {
         rawBalance: balance.toString(),
@@ -815,7 +736,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         duration: 5000
       });
     }
-  }, [chainId, nodeId, user?.wallet?.address, getEthersProvider, toast]);
+  }, [chainId, nodeId, user?.wallet?.address, publicClient, toast]);
 
   // Call checkBurnBalance when the burn modal opens
   useEffect(() => {

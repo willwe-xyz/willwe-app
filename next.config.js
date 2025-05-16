@@ -1,36 +1,16 @@
 /** @type {import('next').NextConfig} */
-module.exports = {
+const nextConfig = {
   reactStrictMode: true,
-  typescript: {
-    // Ignore TypeScript errors during the build process
-    ignoreBuildErrors: true,
+  images: {
+    domains: ['ipfs.io', 'gateway.ipfs.io'],
   },
-  webpack: (config, { isServer }) => {
-    // If client-side, don't polyfill Node modules
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        os: false,
-        crypto: false,
-        stream: false,
-        sqlite3: false,
-        'sqlite3-binding': false
-      };
-    }
-
-    // Exclude platform-specific packages from managed paths
-    config.snapshot = {
-      ...config.snapshot,
-      managedPaths: [/^(.+?[\\/]node_modules[\\/])/],
-      immutablePaths: [],
-      buildDependencies: {
-        hash: true,
-        timestamp: true,
-      },
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
     };
-
     return config;
   },
   async redirects() {
@@ -68,3 +48,5 @@ module.exports = {
     ];
   }
 };
+
+module.exports = nextConfig;

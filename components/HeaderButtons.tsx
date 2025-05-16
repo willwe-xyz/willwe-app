@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   HStack,
   Button,
@@ -15,6 +15,7 @@ import {
   Tab,
   TabPanel,
   Tooltip,
+  Text,
 } from '@chakra-ui/react';
 import { 
   LogOut, 
@@ -27,12 +28,12 @@ import {
 import CreateToken from './CreateToken';
 import { DefineEntity } from './DefineEntity';
 import WillTokenPanel from './WillTokenPanel';
+import { formatAddress } from '../utils/formatting';
+import { useAppKit } from '@/hooks/useAppKit';
 
 interface HeaderButtonsProps {
-  userAddress: string;
+  userAddress?: string;
   chainId: string;
-  logout: () => void;
-  login: () => void;
   selectedNodeId?: string;
   onNodeSelect: (nodeId: string) => void;
   isTransacting?: boolean;
@@ -43,14 +44,15 @@ interface HeaderButtonsProps {
 export default function HeaderButtons({
   userAddress,
   chainId,
-  logout,
-  login,
+  selectedNodeId,
+  onNodeSelect,
   isTransacting,
   buttonHoverBg = 'purple.50',
   selectedTokenColor,
 }: HeaderButtonsProps) {
   const { isOpen: isComposeOpen, onOpen: onComposeOpen, onClose: onComposeClose } = useDisclosure();
   const { isOpen: isWillOpen, onOpen: onWillOpen, onClose: onWillClose } = useDisclosure();
+  const { user } = useAppKit();
 
   const modalContentStyles = {
     maxH: 'calc(100vh - 200px)',
@@ -73,10 +75,21 @@ export default function HeaderButtons({
     color: selectedTokenColor
   };
 
+  const formattedAddress = user?.wallet?.address ? formatAddress(user.wallet.address) : '';
+  const appkitButtonRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (appkitButtonRef.current) {
+      appkitButtonRef.current.setAttribute(
+        'label',
+        user.isAuthenticated ? formattedAddress : 'Connect Wallet'
+      );
+    }
+  }, [user.isAuthenticated, formattedAddress]);
+
   return (
     <>
       <HStack spacing={4}>
-        
         {/* Will Button */}
         <Tooltip label="$WILL Token Hub">
           <Button
@@ -99,24 +112,28 @@ export default function HeaderButtons({
           </Button>
         </Tooltip>
 
-        {/* Auth Button */}
-        {userAddress ? (
-          <Button
-            leftIcon={<LogOut size={18} />}
-            onClick={logout}
-            {...buttonStyles}
-          >
-            {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
-          </Button>
-        ) : (
-          <Button
-            leftIcon={<LogIn size={18} />}
-            onClick={login}
-            {...buttonStyles}
-          >
-            Connect
-          </Button>
-        )}
+        {/* Session/Login Button (AppKit) */}
+        <appkit-button
+          ref={appkitButtonRef}
+          style={{
+            background: user.isAuthenticated
+              ? 'white'
+              : 'linear-gradient(135deg, #6366f1 0%, #a21caf 100%)',
+            color: user.isAuthenticated ? selectedTokenColor : 'white',
+            border: user.isAuthenticated ? `1.5px solid ${selectedTokenColor}` : 'none',
+            borderRadius: '9999px',
+            padding: '0.5rem 1.5rem',
+            fontWeight: 600,
+            fontSize: '1rem',
+            boxShadow: user.isAuthenticated
+              ? '0 2px 8px 0 rgba(31, 38, 135, 0.10)'
+              : '0 2px 8px 0 rgba(31, 38, 135, 0.15)',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            outline: 'none',
+            minWidth: '120px',
+          }}
+        ></appkit-button>
       </HStack>
 
       {/* Will Modal */}
@@ -148,7 +165,7 @@ export default function HeaderButtons({
           </ModalHeader>
           <WillTokenPanel 
             chainId={chainId}
-            userAddress={userAddress}
+            userAddress={user?.wallet?.address}
             onClose={onWillClose}
           />
         </ModalContent>
@@ -224,7 +241,7 @@ export default function HeaderButtons({
                 <TabPanel h="full" p={0}>
                   <CreateToken
                     chainId={chainId}
-                    userAddress={userAddress}
+                    userAddress={user?.wallet?.address}
                     onSuccess={onComposeClose}
                   />
                 </TabPanel>
