@@ -206,7 +206,15 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             borderBottomWidth="1px"
             borderColor={borderColor}
           >
-            <NodeInfo node={nodeData} chainId={chainId} selectedTokenColor={selectedTokenColor} tokenSymbol={tokenSymbol} />
+            <NodeInfo 
+              node={nodeData} 
+              chainId={chainId} 
+              selectedTokenColor={selectedTokenColor}
+              tokenSymbol={tokenSymbol}
+              nodeId={nodeId}
+              userAddress={userAddress}
+              onSuccess={refetch}
+            />
           </Box>
           
           <Box p={6}>
@@ -246,6 +254,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             chainId={chainId} 
             selectedTokenColor={selectedTokenColor}
             tokenSymbol={tokenSymbol}
+            nodeId={nodeId}
+            userAddress={userAddress}
+            onSuccess={refetch}
           />
           {/* Theme color line */}
           <Box 
@@ -256,26 +267,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
             height="2px" 
             bg={selectedTokenColor}
             opacity={0.8}
-          />
-        </Box>
-        
-        {/* Node operations toolbar */}
-        <Box 
-          borderBottomWidth="1px"
-          borderColor={borderColor}
-          bg={headerBg}
-          px={6}
-          py={3}
-        >
-          <NodeOperations
-            nodeId={nodeId}
-            chainId={chainId}
-            selectedTokenColor={selectedTokenColor}
-            userAddress={userAddress}
-            onSuccess={refetch}
-            showToolbar={true}
-            isOpen={isOpen}
-            onClose={onClose}
           />
         </Box>
         

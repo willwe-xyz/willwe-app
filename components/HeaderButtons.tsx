@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   HStack,
   Button,
@@ -27,6 +27,7 @@ import {
 import CreateToken from './CreateToken';
 import { DefineEntity } from './DefineEntity';
 import WillTokenPanel from './WillTokenPanel';
+import { resolveENS } from '../utils/ensUtils';
 
 interface HeaderButtonsProps {
   userAddress: string;
@@ -49,6 +50,21 @@ export default function HeaderButtons({
 }: HeaderButtonsProps) {
   const { isOpen: isComposeOpen, onOpen: onComposeOpen, onClose: onComposeClose } = useDisclosure();
   const { isOpen: isWillOpen, onOpen: onWillOpen, onClose: onWillClose } = useDisclosure();
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchENS = async () => {
+      if (userAddress) {
+        const name = await resolveENS(userAddress);
+        if (!ignore) setResolvedName(name);
+      } else {
+        setResolvedName(null);
+      }
+    };
+    fetchENS();
+    return () => { ignore = true; };
+  }, [userAddress]);
 
   const modalContentStyles = {
     maxH: 'calc(100vh - 200px)',
@@ -110,7 +126,7 @@ export default function HeaderButtons({
             onClick={logout}
             {...buttonStyles}
           >
-            {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
+            {resolvedName || (userAddress.slice(0, 6) + '...' + userAddress.slice(-4))}
           </Button>
         ) : (
           <Button

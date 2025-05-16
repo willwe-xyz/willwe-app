@@ -1126,14 +1126,13 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     <>
       {showToolbar && (
         <Box 
-          display="flex" 
-          justifyContent="flex-end" 
-          mb={4} 
-          px={6}
-          borderBottom="1px solid"
-          borderColor="gray.200"
+          display="flex"
+          alignItems="center"
+          color={selectedTokenColor}
+          justifyContent="space-between" 
+          px={8}
+          borderColor={selectedTokenColor}
           py={4}
-          bg="gray.50"
         >
           <ButtonGroup 
             size="sm" 
@@ -1141,10 +1140,19 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             display="flex" 
             flexWrap="wrap" 
             gap={2}
+            sx={{
+              '& button': {
+                height: '32px',
+                minWidth: '90px',
+                fontSize: '14px',
+                fontWeight: '700',
+                letterSpacing: '0.3px'
+              }
+            }}
           >
             <Tooltip label="Mint membership">
               <Button
-                leftIcon={<UserPlus size={16} color={selectedTokenColor} />}
+                leftIcon={<UserPlus size={17} color={selectedTokenColor} />}
                 onClick={handleMintMembership}
                 isDisabled={isMember}
                 colorScheme="purple"
@@ -1152,6 +1160,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
                 Join
               </Button>
@@ -1159,7 +1169,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Create new node">
               <Button
-                leftIcon={<GitBranchPlus size={16} color={selectedTokenColor} />}
+                leftIcon={<GitBranchPlus size={17} color={selectedTokenColor} />}
                 onClick={() => setActiveModal('spawn')}
                 colorScheme="purple"
                 variant="outline"
@@ -1167,6 +1177,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
                 isDisabled={!isMember}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
                 Add Node
               </Button>
@@ -1174,13 +1186,15 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Redistribute value">
               <Button
-                leftIcon={<RefreshCw size={16} color={selectedTokenColor} />}
+                leftIcon={<RefreshCw size={17} color={selectedTokenColor} />}
                 onClick={handleRedistribute}
                 colorScheme="purple"
                 variant="outline"
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
                 Redistribute
               </Button>
@@ -1188,13 +1202,15 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Mint token">
               <Button
-                leftIcon={<Plus size={16} color={selectedTokenColor} />}
+                leftIcon={<Plus size={17} color={selectedTokenColor} />}
                 onClick={() => setActiveModal('mint')}
                 colorScheme="purple"
                 variant="outline"
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
                 Deposit
               </Button>
@@ -1202,7 +1218,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Burn tokens">
               <Button
-                leftIcon={<Trash size={16} color={selectedTokenColor} />}
+                leftIcon={<Trash size={17} color={selectedTokenColor} />}
                 onClick={() => {
                   setActiveModal('burn');
                   checkNodeBalance();
@@ -1212,6 +1228,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
                 Withdraw
               </Button>

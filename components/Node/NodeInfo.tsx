@@ -22,6 +22,7 @@ import { nodeIdToAddress } from '../../utils/formatters';
 import { resolveMultipleENS } from '../../utils/ensUtils';
 import RequirementsTable from '../TokenOperations/RequirementsTable';
 import router from 'next/router';
+import { NodeOperations } from '../Node/NodeOperations';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -31,6 +32,9 @@ interface NodeInfoProps {
   onNodeSelect?: (nodeId: string) => void;
   selectedTokenColor: string;
   tokenSymbol: string;
+  nodeId: string;
+  userAddress: string;
+  onSuccess?: () => void;
 }
 
 interface NodeMetrics {
@@ -107,7 +111,10 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   chainId, 
   onNodeSelect,
   selectedTokenColor,
-  tokenSymbol
+  tokenSymbol,
+  nodeId,
+  userAddress,
+  onSuccess
 }) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
   const [membraneCharacteristics, setMembraneCharacteristics] = useState<Array<{title: string; link: string}>>([]);
@@ -219,91 +226,20 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 
   const metrics = useMemo(() => calculateMetrics(node), [node]);
 
-  const getNodeHoverTemplate = (): string => {
-    return `
-      <b>%{label}</b><br>
-      Value: %{value:.1f}%<br>
-      Inflation: %{customdata[0]:.4f}/sec<br>
-      Members: %{customdata[1]}<br>
-      Depth: %{customdata[2]}<br>
-      Signal Strength: %{customdata[3]:.0f}%<extra></extra>
-    `;
-  };
-
-  // Ensure all node data is valid
-  const getSankeyData = (): SankeyData => {
-    const nodeCustomData: Array<[number, number, number, number]> = nodeLabels.map((_, idx) => {
-      const nodeId = sankeyStructure.labels[idx];
-      const metrics = nodeMetrics.get(nodeId);
-      return [
-        metrics?.inflation || 0,
-        metrics?.memberCount || 0,
-        metrics?.depth || 0,
-        (metrics?.signalStrength || 0) * 100
-      ];
-    });
-
-    const linkCustomData: Array<[number, number]> = sankeyStructure.source.map((_, idx) => {
-      const sourceIdx = sankeyStructure.source[idx];
-      const targetIdx = sankeyStructure.target[idx];
-      const sourceId = sankeyStructure.labels[sourceIdx];
-      const targetId = sankeyStructure.labels[targetIdx];
-      const sourceMetrics = nodeMetrics.get(sourceId);
-      const targetMetrics = nodeMetrics.get(targetId);
-      return [
-        sourceMetrics?.inflation || 0,
-        targetMetrics?.inflation || 0
-      ];
-    });
-
-    return {
-      type: 'sankey',
-      node: {
-        label: nodeLabels,
-        color: nodeLabels.map(() => selectedTokenColor),
-        thickness: nodeLabels.map(() => 20), // Fallback size
-        line: {
-          color: nodeLabels.map(() => selectedTokenColor),
-          width: nodeLabels.map(() => 0.5)
-        },
-        pad: 15,
-        hovertemplate: getNodeHoverTemplate(),
-        customdata: nodeCustomData
-      },
-      link: {
-        source: sankeyStructure.source,
-        target: sankeyStructure.target,
-        value: sankeyStructure.values.map(v => v || 1), // Fallback to 1
-        color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
-        hovertemplate: `
-          <b>Flow Details</b><br>
-          From: %{source.label}<br>
-          To: %{target.label}<br>
-          Value: %{value:.1f}%<br>
-          Source Inflation: %{customdata[0]:.4f}/sec<br>
-          Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
-        `,
-        customdata: linkCustomData
-      }
-    };
-  };
-
   // Helper to check if a string is a link
   const isLink = (link: string | undefined) => link && link.startsWith('http');
 
   // Ensure membraneRequirements has tokenAddress and formattedBalance for RequirementsTable
   const normalizedMembraneRequirements = membraneRequirements.map(req => {
-    // Try to get the amount from any possible property
     const formattedBalance =
       req.formattedBalance ||
-      req.amount ||
-      req.value ||
-      req.required ||
-      req.requiredAmount ||
       '1'; // fallback to '1' if nothing is present
 
+    // Type guard for tokenAddress
+    const tokenAddress = (req as any).tokenAddress || '';
+
     return {
-      tokenAddress: req.tokenAddress || '',
+      tokenAddress,
       symbol: req.symbol,
       formattedBalance: formattedBalance,
     };
@@ -318,11 +254,43 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       display="flex"
       flexDirection="column"
     >
-      <Text
+      <HStack>
+
+          <Box
+            width="66%"
+            borderRadius="lg"
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            minH="0"
+            height="38px"
+            p={2}
+            m={2}
+            boxShadow="none"
+          >
+            <NodeOperations
+              nodeId={nodeId}
+              chainId={chainId}
+              selectedTokenColor={selectedTokenColor}
+              userAddress={userAddress}
+              onSuccess={onSuccess}
+              showToolbar={true}
+            />
+          </Box>
+        <Box
+          width="33%"
+          borderRadius="lg"
+          display="flex"
+          justifyContent="right"
+          alignItems="right"
+          float="right"
+        >
+              <Text
         fontSize="2xl"
         fontWeight="extrabold"
         color={selectedTokenColor}
         opacity={0.9}
+        float="right"
         letterSpacing="tight"
         textAlign="right"
         px={6}
@@ -330,13 +298,15 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       >
         {membraneTitle || 'Loading...'}
       </Text>
+        </Box>
+      </HStack>
       <HStack 
         spacing={4} 
         align="stretch" 
         flex={1}
         minH={0}
-        px={3}
-        pb={3}
+        px={4}
+        pb={4}
       >
         {/* Left column - Stats, Characteristics, Members */}
         <VStack
@@ -345,6 +315,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
           spacing={4}
           overflowY="auto"
           minH={0}
+          position="relative"
         >
           {/* Stats grid - Now in a single row */}
           <Grid 
