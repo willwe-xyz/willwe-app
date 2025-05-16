@@ -26,6 +26,43 @@ const alchemyConfig = {
   apiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || '',
 };
 
+const routescanConfig = {
+  apiKey: process.env.NEXT_PUBLIC_ROUTESCAN_API_KEY || '',
+};
+
+// Get excluded token strings from environment variable
+const getExcludedTokenStrings = (): string[] => {
+  const excludedStrings = process.env.NEXT_PUBLIC_TOKEN_BALANCE_EXCLUDEIF || '';
+  const defaultExcludedStrings = [
+    'claim', 'CLAIM',
+    'rdrop', 'RDROP',
+    'visit', 'VISIT',
+    'http', 'HTTP',
+    'www', 'WWW',
+    'swap', 'SWAP',
+    'rewards', 'REWARDS',
+    'promo', 'PROMO',
+    'verify', 'VERIFY',
+    'eligible', 'ELIGIBLE',
+    'drop', 'DROP',
+    '!', '!',
+    't.ly', 'T.LY',
+    'discord', 'DISCORD',
+    'twitter', 'TWITTER',
+    'join', 'JOIN',
+    'presale', 'PRESALE',
+    'giveaway', 'GIVEAWAY',
+    '✅', '💰'
+  ];
+  
+  const envExcludedStrings = excludedStrings.split(',')
+    .map(str => str.toLowerCase().trim())
+    .filter(str => str !== '')
+    .flatMap(str => [str, str.toUpperCase()]);
+    
+  return defaultExcludedStrings.concat(envExcludedStrings);
+};
+
 // Cache for storing balance results
 const balanceCache = new Map<string, {
   balances: AlchemyTokenBalance[];
@@ -34,6 +71,80 @@ const balanceCache = new Map<string, {
 
 // Cache expiration time in milliseconds (5 minutes)
 const CACHE_EXPIRATION = 5 * 60 * 1000;
+
+const getRoutescanEndpoint = (chainId: string) => {
+  const baseUrl = 'https://api.routescan.io/v2/network/mainnet/evm';
+  return `${baseUrl}/${chainId}/etherscan/api`;
+};
+
+const fetchRoutescanBalances = async (address: string, chainId: string): Promise<AlchemyTokenBalance[]> => {
+  const endpoint = getRoutescanEndpoint(chainId);
+  const url = `${endpoint}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100&apikey=${routescanConfig.apiKey}`;
+  
+  const response = await fetch(url);
+  const data = await response.json();
+  
+  if (data.status !== '1') {
+    throw new Error(data.message || 'Failed to fetch balances from Routescan');
+  }
+
+  const excludedStrings = getExcludedTokenStrings();
+  return data.result
+    .filter((token: any) => {
+      const tokenName = token.TokenName.toLowerCase();
+      const tokenSymbol = token.TokenSymbol.toLowerCase();
+      return !excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
+    })
+    .map((token: any) => ({
+      contractAddress: token.TokenAddress,
+      tokenBalance: token.TokenQuantity,
+      name: token.TokenName,
+      symbol: token.TokenSymbol,
+      decimals: parseInt(token.TokenDivisor),
+      formattedBalance: (Number(token.TokenQuantity) / Math.pow(10, parseInt(token.TokenDivisor))).toFixed(2)
+    }));
+};
+
+const fetchAlchemyBalances = async (address: string, chainId: string): Promise<AlchemyTokenBalance[]> => {
+  const alchemy = new Alchemy({
+    ...alchemyConfig,
+    network: getAlchemyNetwork(chainId)
+  });
+
+  const response = await alchemy.core.getTokenBalances(address);
+  const excludedStrings = getExcludedTokenStrings();
+  const nonZeroBalances = response.tokenBalances.filter(
+    token => token.tokenBalance !== "0"
+  );
+
+  const balances = await Promise.all(
+    nonZeroBalances.map(async (token) => {
+      const metadata = await alchemy.core.getTokenMetadata(
+        token.contractAddress
+      );
+
+      const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
+      const formattedBalance = balance.toFixed(2);
+
+      return {
+        contractAddress: token.contractAddress,
+        tokenBalance: token.tokenBalance,
+        name: metadata.name || 'Unknown Token',
+        symbol: metadata.symbol || '???',
+        decimals: metadata.decimals,
+        logo: metadata.logo,
+        formattedBalance
+      };
+    })
+  );
+
+  // Filter out tokens based on name or symbol
+  return balances.filter(token => {
+    const tokenName = token.name.toLowerCase();
+    const tokenSymbol = token.symbol.toLowerCase();
+    return !excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
+  });
+};
 
 export const useAlchemyBalances = (
   address: string | undefined,
@@ -66,49 +177,22 @@ export const useAlchemyBalances = (
     setError(null);
 
     try {
-      const alchemy = new Alchemy({
-        ...alchemyConfig,
-        network: getAlchemyNetwork(chainId)
-      });
-
-      // Get token balances
-      const response = await alchemy.core.getTokenBalances(address);
-
-      // Filter out zero balances
-      const nonZeroBalances = response.tokenBalances.filter(
-        token => token.tokenBalance !== "0"
-      );
-
-      // Fetch metadata and format balances
-      const formattedBalances = await Promise.all(
-        nonZeroBalances.map(async (token) => {
-          const metadata = await alchemy.core.getTokenMetadata(
-            token.contractAddress
-          );
-
-          // Calculate human readable balance
-          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
-          const formattedBalance = balance.toFixed(2);
-
-          return {
-            contractAddress: token.contractAddress,
-            tokenBalance: token.tokenBalance,
-            name: metadata.name || 'Unknown Token',
-            symbol: metadata.symbol || '???',
-            decimals: metadata.decimals,
-            logo: metadata.logo,
-            formattedBalance
-          };
-        })
-      );
+      // Try Routescan first
+      let balances;
+      try {
+        balances = await fetchRoutescanBalances(address, chainId);
+      } catch (routescanError) {
+        console.warn('Routescan fetch failed, falling back to Alchemy:', routescanError);
+        balances = await fetchAlchemyBalances(address, chainId);
+      }
 
       // Update cache
       balanceCache.set(cacheKey, {
-        balances: formattedBalances,
+        balances,
         timestamp: now
       });
 
-      setBalances(formattedBalances);
+      setBalances(balances);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch balances'));
       console.error('Error fetching balances:', err);
@@ -118,15 +202,13 @@ export const useAlchemyBalances = (
   };
 
   useEffect(() => {
-    // Clear any existing timeout
     if (fetchTimeoutRef.current) {
       clearTimeout(fetchTimeoutRef.current);
     }
 
-    // Set a new timeout to debounce the fetch
     fetchTimeoutRef.current = setTimeout(() => {
       fetchBalances();
-    }, 300); // 300ms debounce
+    }, 300);
 
     return () => {
       if (fetchTimeoutRef.current) {

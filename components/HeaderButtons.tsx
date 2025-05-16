@@ -36,7 +36,6 @@ interface HeaderButtonsProps {
   selectedNodeId?: string;
   onNodeSelect: (nodeId: string) => void;
   isTransacting?: boolean;
-  buttonHoverBg?: string;
   selectedTokenColor: string;
 }
 
@@ -46,7 +45,6 @@ export default function HeaderButtons({
   logout,
   login,
   isTransacting,
-  buttonHoverBg = 'purple.50',
   selectedTokenColor,
 }: HeaderButtonsProps) {
   const { isOpen: isComposeOpen, onOpen: onComposeOpen, onClose: onComposeClose } = useDisclosure();
@@ -62,15 +60,21 @@ export default function HeaderButtons({
   const buttonStyles = {
     size: "sm",
     variant: "outline",
-    colorScheme: "purple",
     _hover: { 
-      bg: buttonHoverBg,
+      bg: `${selectedTokenColor}20`,
       borderColor: selectedTokenColor,
-      color: selectedTokenColor
+      color: selectedTokenColor,
+      transform: 'translateY(-1px)',
+      shadow: 'sm'
+    },
+    _active: {
+      bg: `${selectedTokenColor}30`,
+      transform: 'translateY(0)'
     },
     isDisabled: isTransacting,
     borderColor: selectedTokenColor,
-    color: selectedTokenColor
+    color: selectedTokenColor,
+    transition: 'all 0.2s ease-in-out'
   };
 
   return (
@@ -195,9 +199,9 @@ export default function HeaderButtons({
                 <Tab
                   py={4}
                   _selected={{
-                    color: 'purple.600',
+                    color: selectedTokenColor,
                     borderBottom: '2px solid',
-                    borderColor: 'purple.600'
+                    borderColor: selectedTokenColor
                   }}
                 >
                   <HStack spacing={2}>
@@ -208,9 +212,9 @@ export default function HeaderButtons({
                 <Tab
                   py={4}
                   _selected={{
-                    color: 'purple.600',
+                    color: selectedTokenColor,
                     borderBottom: '2px solid',
-                    borderColor: 'purple.600'
+                    borderColor: selectedTokenColor
                   }}
                 >
                   <HStack spacing={2}>
