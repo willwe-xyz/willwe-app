@@ -11,11 +11,9 @@ const getIpfsData = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 
   const requestUrl = `${process.env.IPFS_GATEWAY}${hash}`;
-  console.log('Fetching data from IPFS:', requestUrl);
   try {
     // Implement your logic to fetch data from IPFS using the hash
     const response = await fetch(`${process.env.IPFS_GATEWAY}${hash}`);
-    console.log("getIpfsData, response:", response);
     if (!response.ok) {
       throw new Error('Failed to fetch data from IPFS');
     }
@@ -23,7 +21,6 @@ const getIpfsData = async (req: NextApiRequest, res: NextApiResponse) => {
     const data = await response.json();
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Error fetching data from IPFS:', error);
     return res.status(500).json({ error: 'Failed to fetch data from IPFS' });
   }
 };

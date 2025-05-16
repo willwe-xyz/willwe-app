@@ -82,8 +82,6 @@ function calculateNameHash(name: string): `0x${string}` {
  */
 async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined> {
   try {
-    console.log('Attempting Base ENS lookup for address:', address);
-    
     // First get the node for the address from ReverseRegistrar
     const node = await baseRpcClient.readContract({
       address: BASE_REVERSE_REGISTRAR,
@@ -91,8 +89,6 @@ async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined>
       functionName: 'node',
       args: [address],
     });
-    
-    console.log('Calculated node:', node);
     
     // Then get the name for that node from the Resolver
     const result = await baseRpcClient.readContract({
@@ -102,16 +98,11 @@ async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined>
       args: [node],
     });
     
-    console.log('Base ENS resolver result:', result);
-    
     if (result && typeof result === 'string' && result.endsWith('.base.eth')) {
-      console.log('Found Base ENS name:', result);
       return result as BaseENSName;
     }
-    console.log('No Base ENS name found or invalid result');
     return undefined;
   } catch (error) {
-    console.error('Failed to lookup Base ENS name:', error);
     return undefined;
   }
 }
@@ -128,29 +119,23 @@ export async function resolveENS(address: string): Promise<string> {
 
   try {
     // First try to resolve Base ENS
-    console.log('Starting ENS resolution for address:', address);
     const baseENSName = await lookupBaseENS(address as Address);
-    console.log('Base ENS resolution result:', baseENSName);
-    
     if (baseENSName) {
       return baseENSName;
     }
 
     // If no Base ENS, try regular ENS
-    console.log('Falling back to regular ENS resolution');
     const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
     const ensName = await mainnetProvider.lookupAddress(address);
-    console.log('Regular ENS resolution result:', ensName);
     
     if (ensName) {
       return ensName;
     }
   } catch (error) {
-    console.error(`Error resolving ENS for ${address}:`, error);
+    // Error handling without console.log
   }
 
   // Fallback to truncated address
-  console.log('Falling back to truncated address');
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
