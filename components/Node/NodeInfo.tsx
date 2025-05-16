@@ -143,7 +143,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 
   const [memberData, setMemberData] = useState<Array<{ address: string; ensName: string | null }>>([]);
   const [copied, setCopied] = useState(false);
-  console.log("Ndoe State: ",node);
   useEffect(() => {
     const fetchMembraneMetadata = async () => {
       if (!node?.membraneMeta) {

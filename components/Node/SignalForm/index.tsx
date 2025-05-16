@@ -440,7 +440,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
               const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
               const metadataUrl = `${IPFS_GATEWAY}${node.membraneMeta.trim()}`;
               
-              console.log('Fetching metadata from:', metadataUrl);
               
               const response = await fetch(metadataUrl);
               if (response.ok) {

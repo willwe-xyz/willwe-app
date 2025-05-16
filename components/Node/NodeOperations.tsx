@@ -238,11 +238,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         return 'PSC';
       }
       
-      console.log('Getting symbol for token:', {
-        tokenAddress,
-        nodeId,
-        rootPath: nodeData?.rootPath
-      });
 
       // Verify we have a valid non-zero address
       if (tokenAddress === ethers.ZeroAddress) {
@@ -285,7 +280,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
   useEffect(() => {
     getRootTokenSymbol().then(symbol => {
-      console.log('Setting root token symbol:', symbol);
       setRootTokenSymbol(symbol);
     });
   }, [getRootTokenSymbol]);
