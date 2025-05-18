@@ -211,13 +211,19 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 
       try {
         const resolvedNames = await resolveMultipleENS(node.membersOfNode);
-        const memberData = node.membersOfNode.map((address, index) => ({
+        const memberData = node.membersOfNode.map((address) => ({
           address,
-          ensName: resolvedNames[index]
+          ensName: resolvedNames[address.toLowerCase()] || null
         }));
         setMemberData(memberData);
       } catch (error) {
         console.error('Error resolving ENS names:', error);
+        // Fallback to raw addresses if resolution fails
+        const memberData = node.membersOfNode.map((address) => ({
+          address,
+          ensName: null
+        }));
+        setMemberData(memberData);
       }
     };
 
