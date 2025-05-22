@@ -25,7 +25,7 @@ import { NodeState } from '../../types/chainData';
 import { ethers } from 'ethers';
 import { deployments, ABIs, getRPCUrl } from '../../config/contracts';
 import { getMembraneNameFromCID } from '../../utils/ipfs';
-import { nodeIdToAddress } from '../../utils/formatters';
+import { nodeIdToAddress, isEndpoint, getEndpointDisplayName } from '../../utils/formatters';
 import Color from 'color';
 import { 
   Users,
@@ -99,27 +99,49 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const [wallets, setWallets] = useState([]);
   const [tokenName, setTokenName] = useState<string>(providedTokenName || '');
+  const [endpointNames, setEndpointNames] = useState<Map<string, string>>(new Map());
 
-  // Fetch labels from IPFS
+  // Fetch labels from IPFS and endpoint names
   useEffect(() => {
     const fetchLabels = async () => {
       setIsLoadingLabels(true);
       const labels = new Map<string, string>();
+      const endpointLabels = new Map<string, string>();
       
       try {
+        const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
+        const executionAddress = deployments.Execution[chainId.toString()];
+
         await Promise.all(nodes.map(async (node) => {
           if (!node?.basicInfo?.[0]) return;
           
           const nodeId = node.basicInfo[0].toString();
-          // Use basicInfo[3] for membrane metadata CID
+          
+          // Check if this is an endpoint
+          if (node.rootPath && node.rootPath.length > 0) {
+            const parentNodeId = node.rootPath[node.rootPath.length - 1];
+            if (isEndpoint(nodeId, parentNodeId)) {
+              const endpointName = await getEndpointDisplayName(
+                nodeId,
+                parentNodeId,
+                provider,
+                executionAddress,
+                chainId.toString()
+              );
+              if (endpointName) {
+                endpointLabels.set(nodeId, endpointName);
+                return;
+              }
+            }
+          }
+
+          // If not an endpoint or no endpoint name, try to get membrane name
           const labelCID = node.basicInfo[6].toString(); // Active membrane ID
           
           try {
             if (labelCID && labelCID !== '0') {
-              const cleanChainId = chainId.toString().replace('eip155:', '');
-              const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
               const membraneContract = new ethers.Contract(
-                deployments.Membrane[cleanChainId],
+                deployments.Membrane[chainId.toString()],
                 ABIs.Membrane,
                 provider
               );
@@ -145,6 +167,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
         }));
         
         setNodeLabels(labels);
+        setEndpointNames(endpointLabels);
       } catch (error) {
         console.error('Error fetching labels:', error);
       } finally {
@@ -171,14 +194,37 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
       try {
         const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
         const tokenAddress = nodeIdToAddress(selectedToken);
+        
+        // First check if the contract exists
+        const code = await provider.getCode(tokenAddress);
+        if (code === '0x') {
+          setTokenName(selectedToken.slice(0, 6) + '...' + selectedToken.slice(-4));
+          return;
+        }
+
+        // Try to get the name using a more robust ABI
         const tokenContract = new ethers.Contract(
           tokenAddress,
-          ['function name() view returns (string)'],
+          [
+            'function name() view returns (string)',
+            'function symbol() view returns (string)'
+          ],
           provider
         );
 
-        const name = await tokenContract.name();
-        setTokenName(name);
+        try {
+          const name = await tokenContract.name();
+          setTokenName(name);
+        } catch (nameError) {
+          // If name() fails, try symbol()
+          try {
+            const symbol = await tokenContract.symbol();
+            setTokenName(symbol);
+          } catch (symbolError) {
+            // If both fail, use the address
+            setTokenName(selectedToken.slice(0, 6) + '...' + selectedToken.slice(-4));
+          }
+        }
       } catch (error) {
         console.warn('Error fetching token name:', error);
         setTokenName(selectedToken.slice(0, 6) + '...' + selectedToken.slice(-4));
@@ -194,7 +240,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
     let totalValue = BigInt(0);
 
     // First pass: calculate total value
-    nodes.forEach(node => {
+    nodes.forEach((node: NodeState) => {
       if (!node?.basicInfo?.[4]) return;
       try {
         const value = BigInt(node.basicInfo[4]);
@@ -205,7 +251,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
     });
 
     // Second pass: calculate metrics
-    nodes.forEach(node => {
+    nodes.forEach((node: NodeState) => {
       if (!node?.basicInfo?.[0]) return;
       
       try {
@@ -232,6 +278,11 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
           (Array.isArray(node.nodeSignals?.redistributionSignals) ? node.nodeSignals.redistributionSignals.length : 0)
         ) / 10;
 
+        // Get the label, preferring endpoint name if available
+        const label = endpointNames.get(nodeId) || 
+                     nodeLabels.get(nodeId) || 
+                     `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`;
+
         metrics.set(nodeId, {
           value: valuePercent,
           absoluteValue: nodeValue,
@@ -241,7 +292,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
           depth,
           signalStrength,
           totalSupply: Number(ethers.formatUnits(totalSupply, 'ether')),
-          label: nodeLabels.get(nodeId) || `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`,
+          label,
           nodeId
         });
       } catch (error) {
@@ -250,7 +301,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
     });
 
     return metrics;
-  }, [nodes, nodeLabels]);
+  }, [nodes, nodeLabels, endpointNames]);
 
   // Calculate color intensity based on value and member count
   const getNodeColor = (nodeId: string, metrics: NodeMetrics) => {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import {
   ButtonGroup,
@@ -123,6 +123,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [membraneId, setMembraneId] = useState('');
   const [mintAmount, setMintAmount] = useState('');
+  const [localMintAmount, setLocalMintAmount] = useState('');
   const [needsApproval, setNeedsApproval] = useState(false);
   const [allowance, setAllowance] = useState('0');
   const [burnAmount, setBurnAmount] = useState('');
@@ -137,6 +138,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     inflation: 0
   });
   const [burnBalance, setBurnBalance] = useState('0');
+  const [parentNodeBalance, setParentNodeBalance] = useState('0');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
@@ -765,6 +768,116 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     }
   }, [activeModal, checkBurnBalance]);
 
+  // Update local state when modal opens
+  useEffect(() => {
+    if (activeModal === 'mint') {
+      setLocalMintAmount(mintAmount);
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }
+  }, [activeModal, mintAmount]);
+
+  // Add function to get parent node balance
+  const getParentNodeBalance = useCallback(async () => {
+    try {
+      if (!nodeData?.rootPath || nodeData.rootPath.length < 2 || !user?.wallet?.address) {
+        return;
+      }
+
+      const parentNodeId = nodeData.rootPath[nodeData.rootPath.length - 1];
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        return;
+      }
+
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      
+      const contract = new ethers.Contract(
+        contractAddress,
+        ['function balanceOf(address account, uint256 id) view returns (uint256)'],
+        //@ts-ignore
+        signer
+      );
+
+      const balance = await contract.balanceOf(
+        user.wallet.address,
+        BigInt(parentNodeId)
+      );
+      
+      setParentNodeBalance(balance.toString());
+    } catch (error) {
+      console.error('Failed to get parent node balance:', error);
+    }
+  }, [chainId, nodeData?.rootPath, user?.wallet?.address, getEthersProvider]);
+
+  // Update effect to get parent balance when modal opens
+  useEffect(() => {
+    if (activeModal === 'mint') {
+      checkNodeBalance();
+      if (useDirectParentMint) {
+        getParentNodeBalance();
+      }
+    }
+  }, [activeModal, checkNodeBalance, getParentNodeBalance, useDirectParentMint]);
+
+  // Update effect to get parent balance when direct parent mint is toggled
+  useEffect(() => {
+    if (activeModal === 'mint') {
+      if (useDirectParentMint) {
+        getParentNodeBalance();
+      }
+    }
+  }, [useDirectParentMint, activeModal, getParentNodeBalance]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    console.log('onChange triggered with:', value);
+    // Allow any numeric input
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      console.log('Setting localMintAmount to:', value);
+      setLocalMintAmount(value);
+    }
+  }, []);
+
+  const handleInputBlur = useCallback(() => {
+    console.log('onBlur triggered with localMintAmount:', localMintAmount);
+    if (localMintAmount) {
+      const value = parseFloat(localMintAmount);
+      console.log('Parsed value:', value);
+      if (!isNaN(value)) {
+        const maxValue = useDirectParentMint 
+          ? parseFloat(formatBalance(parentNodeBalance))
+          : parseFloat(formatBalance(userBalance));
+        const finalValue = Math.min(value, maxValue);
+        console.log('Final value after max check:', finalValue);
+        const formattedValue = finalValue.toString();
+        setMintAmount(formattedValue);
+        setLocalMintAmount(formattedValue);
+        if (!useDirectParentMint && finalValue > 0) {
+          checkAllowance();
+        } else {
+          setNeedsApproval(false);
+        }
+      }
+    }
+  }, [localMintAmount, userBalance, parentNodeBalance, useDirectParentMint, checkAllowance]);
+
+  const handleSliderChange = useCallback((value: number) => {
+    console.log('Slider onChange:', value);
+    const newValue = value.toString();
+    setMintAmount(newValue);
+    setLocalMintAmount(newValue);
+    if (!useDirectParentMint && value > 0) {
+      checkAllowance();
+    } else {
+      setNeedsApproval(false);
+    }
+  }, [checkAllowance, useDirectParentMint]);
+
   // Mint Modal Content
   const renderMintModalContent = () => {
     // Calculate max amount user can mint based on actual token balance
@@ -795,49 +908,18 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         <FormLabel fontWeight="medium">Amount</FormLabel>
         <VStack width="100%" spacing={4}>
           <HStack width="100%" spacing={3}>
-            <NumberInput
-              value={mintAmount}
-              onChange={(valueString) => {
-                const value = parseFloat(valueString || '0');
-                const newAmount = isNaN(value) ? '0' : value.toFixed(4);
-                setMintAmount(newAmount);
-                if (!newAmount || parseFloat(newAmount) === 0) {
-                  setNeedsApproval(false);
-                  return;
-                }
-                checkAllowance();
-              }}
-              onBlur={() => {
-                // Validate and format on blur
-                const value = parseFloat(mintAmount || '0');
-                if (isNaN(value)) {
-                  setMintAmount('0.0000');
-                } else {
-                  const formatted = value.toFixed(4);
-                  setMintAmount(formatted);
-                  checkAllowance();
-                }
-              }}
-              min={0}
-              max={parseFloat(maxBalance)}
-              step={1}
-              precision={4}
+            <Input
+              ref={inputRef}
+              value={localMintAmount}
+              onChange={handleInputChange}
+              onBlur={handleInputBlur}
+              placeholder="Enter amount"
               isDisabled={!hasTokens}
-              flex={1}
               size="lg"
-              keepWithinRange={true}
-              clampValueOnBlur={true}
-            >
-              <NumberInputField 
-                borderColor="gray.200" 
-                _hover={{ borderColor: selectedTokenColor }}
-                _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-              />
-              <NumberInputStepper>
-                <NumberIncrementStepper />
-                <NumberDecrementStepper />
-              </NumberInputStepper>
-            </NumberInput>
+              borderColor="gray.200"
+              _hover={{ borderColor: selectedTokenColor }}
+              _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+            />
             <Button
               size="lg"
               onClick={() => {
@@ -858,38 +940,28 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           <Box width="100%" px={1}>
             <Slider
               value={parseFloat(mintAmount || '0')}
-              onChange={(value) => {
-                const newAmount = value.toFixed(4);
-                setMintAmount(newAmount);
-                if (!newAmount || parseFloat(newAmount) === 0) {
-                  setNeedsApproval(false);
-                  return;
-                }
-                checkAllowance();
-              }}
-              onChangeEnd={(value) => {
-                const newAmount = value.toFixed(4);
-                setMintAmount(newAmount);
-                checkAllowance();
-              }}
+              onChange={handleSliderChange}
               min={0}
-              max={parseFloat(maxBalance)}
-              step={1}
-              isDisabled={!hasTokens}
+              max={useDirectParentMint 
+                ? parseFloat(formatBalance(parentNodeBalance))
+                : parseFloat(formatBalance(userBalance))
+              }
+              step={0.0001}
+              isDisabled={!hasTokens || (useDirectParentMint && parseFloat(formatBalance(parentNodeBalance)) === 0)}
             >
               <SliderTrack bg="gray.200">
                 <SliderFilledTrack bg={selectedTokenColor} />
               </SliderTrack>
               <SliderThumb 
                 boxSize={6} 
-                bg={needsApproval ? 'yellow.400' : selectedTokenColor}
-                _focus={{ boxShadow: `0 0 0 3px ${needsApproval ? 'yellow.200' : `${selectedTokenColor}40`}` }}
+                bg={!useDirectParentMint && needsApproval ? 'yellow.400' : selectedTokenColor}
+                _focus={{ boxShadow: `0 0 0 3px ${!useDirectParentMint && needsApproval ? 'yellow.200' : `${selectedTokenColor}40`}` }}
               >
                 <Box 
                   color="white" 
-                  as={needsApproval ? AlertTriangle : Check} 
-                  size={needsApproval ? "12px" : "10px"}
-                  style={{ strokeWidth: needsApproval ? 3 : 2 }}
+                  as={!useDirectParentMint && needsApproval ? AlertTriangle : Check} 
+                  size={!useDirectParentMint && needsApproval ? "12px" : "10px"}
+                  style={{ strokeWidth: !useDirectParentMint && needsApproval ? 3 : 2 }}
                 />
               </SliderThumb>
             </Slider>
@@ -898,15 +970,18 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           <Alert status="info" size="sm">
             <AlertIcon />
             <Text fontSize="sm">
-              Approved amount: {currentAllowance} {rootTokenSymbol}
+              {useDirectParentMint 
+                ? `Available parent balance: ${formatBalance(parentNodeBalance)} ${rootTokenSymbol}`
+                : `Approved amount: ${currentAllowance} ${rootTokenSymbol}`
+              }
             </Text>
           </Alert>
         </VStack>
 
         <Text fontSize="sm" color="gray.600" mt={3} textAlign="center">
           {useDirectParentMint 
-            ? "Mints tokens directly from parent node's reserve"
-            : "Mints tokens through the entire path from root"
+            ? "Mints tokens directly from parent node's balance (no approval needed)"
+            : "Mints tokens through the entire path from root (requires approval)"
           }
         </Text>
       </FormControl>
@@ -916,20 +991,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         {hasTokens ? (
           mintAmount && parseFloat(mintAmount) > 0 && (
             <Alert 
-              status={needsApproval ? "warning" : "success"}
+              status={!useDirectParentMint && needsApproval ? "warning" : "success"}
               borderRadius="lg"
-              bg={needsApproval ? "orange.50" : "green.50"}
+              bg={!useDirectParentMint && needsApproval ? "orange.50" : "green.50"}
             >
               <AlertIcon />
               <VStack align="start" spacing={1} width="100%">
                 <Text fontWeight="medium">
-                  {needsApproval 
+                  {!useDirectParentMint && needsApproval 
                     ? "Approval required before minting" 
                     : "Ready to mint"}
                 </Text>
                 <Text fontSize="sm" color="gray.600">
-                  Available balance: {maxBalance} {rootTokenSymbol}
-                  {needsApproval && ` (Need to approve: ${parseFloat(mintAmount).toFixed(4)})`}
+                  {useDirectParentMint 
+                    ? `Available parent balance: ${formatBalance(parentNodeBalance)} ${rootTokenSymbol}`
+                    : `Available balance: ${maxBalance} ${rootTokenSymbol}${needsApproval ? ` (Need to approve: ${parseFloat(mintAmount).toFixed(4)})` : ''}`
+                  }
                 </Text>
               </VStack>
             </Alert>
@@ -947,7 +1024,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
         {hasTokens && (
           <Button
-            onClick={needsApproval ? handleApprove : () => useDirectParentMint ? handleMint() : handleMintPath()}
+            onClick={needsApproval && !useDirectParentMint ? handleApprove : () => useDirectParentMint ? handleMint() : handleMintPath()}
             isLoading={isProcessing}
             width="100%"
             size="lg"
@@ -959,7 +1036,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             _active={{ bg: `${selectedTokenColor}80` }}
             _disabled={{ bg: `${selectedTokenColor}40`, cursor: 'not-allowed' }}
           >
-            {needsApproval ? 'Approve Tokens' : (useDirectParentMint ? 'Mint from Parent' : 'Mint')}
+            {needsApproval && !useDirectParentMint ? 'Approve Tokens' : (useDirectParentMint ? 'Mint from Parent' : 'Mint')}
           </Button>
         )}
       </Box>
@@ -1027,10 +1104,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 _hover={{ borderColor: selectedTokenColor }}
                 _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
               />
-              <NumberInputStepper>
-                <NumberIncrementStepper />
-                <NumberDecrementStepper />
-              </NumberInputStepper>
             </NumberInput>
             <Button
               size="lg"
