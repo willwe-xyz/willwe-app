@@ -53,8 +53,8 @@ export default function DashboardPage() {
   // Find supported networks from deployments
   const supportedChainIds = Object.keys(deployments.WillWe);
   
-  // Default to Base chain ID
-  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '84532';
+  // Default to Base mainnet chain ID
+  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN || '8453';
   
   // Get chain ID from URL, wallet, or default to a supported chain
   let chainId = router.query.chainId as string || wallets[0]?.chainId?.replace('eip155:', '');
