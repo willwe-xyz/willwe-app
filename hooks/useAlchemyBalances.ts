@@ -89,20 +89,39 @@ const fetchRoutescanBalances = async (address: string, chainId: string): Promise
   }
 
   const excludedStrings = getExcludedTokenStrings();
-  return data.result
-    .filter((token: any) => {
-      const tokenName = token.TokenName.toLowerCase();
-      const tokenSymbol = token.TokenSymbol.toLowerCase();
-      return !excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
-    })
-    .map((token: any) => ({
-      contractAddress: token.TokenAddress,
-      tokenBalance: token.TokenQuantity,
-      name: token.TokenName,
-      symbol: token.TokenSymbol,
-      decimals: parseInt(token.TokenDivisor),
-      formattedBalance: (Number(token.TokenQuantity) / Math.pow(10, parseInt(token.TokenDivisor))).toFixed(2)
-    }));
+  
+  const filteredTokens = data.result.filter((token: any) => {
+    const tokenName = token.TokenName.toLowerCase();
+    const tokenSymbol = token.TokenSymbol.toLowerCase();
+    const isExcluded = excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
+    return !isExcluded;
+  });
+
+  // Add WETH for Base chain
+  if (chainId === '8453') {
+    const wethAddress = '0x4200000000000000000000000000000000000006';
+    const wethBalance = await fetch(`${endpoint}?module=account&action=tokenbalance&contractaddress=${wethAddress}&address=${address}&tag=latest&apikey=${routescanConfig.apiKey}`);
+    const wethData = await wethBalance.json();
+    
+    if (wethData.status === '1' && wethData.result !== '0') {
+      filteredTokens.push({
+        TokenAddress: wethAddress,
+        TokenName: 'Wrapped Ether',
+        TokenSymbol: 'WETH',
+        TokenQuantity: wethData.result,
+        TokenDivisor: '18'
+      });
+    }
+  }
+
+  return filteredTokens.map((token: any) => ({
+    contractAddress: token.TokenAddress,
+    tokenBalance: token.TokenQuantity,
+    name: token.TokenName,
+    symbol: token.TokenSymbol,
+    decimals: parseInt(token.TokenDivisor),
+    formattedBalance: (Number(token.TokenQuantity) / Math.pow(10, parseInt(token.TokenDivisor))).toFixed(2)
+  }));
 };
 
 const fetchAlchemyBalances = async (address: string, chainId: string): Promise<AlchemyTokenBalance[]> => {
@@ -112,7 +131,9 @@ const fetchAlchemyBalances = async (address: string, chainId: string): Promise<A
   });
 
   const response = await alchemy.core.getTokenBalances(address);
+  
   const excludedStrings = getExcludedTokenStrings();
+  
   const nonZeroBalances = response.tokenBalances.filter(
     token => token.tokenBalance !== "0"
   );
@@ -139,11 +160,14 @@ const fetchAlchemyBalances = async (address: string, chainId: string): Promise<A
   );
 
   // Filter out tokens based on name or symbol
-  return balances.filter(token => {
+  const filteredBalances = balances.filter(token => {
     const tokenName = token.name.toLowerCase();
     const tokenSymbol = token.symbol.toLowerCase();
-    return !excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
+    const isExcluded = excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
+    return !isExcluded;
   });
+
+  return filteredBalances;
 };
 
 export const useAlchemyBalances = (
@@ -177,12 +201,11 @@ export const useAlchemyBalances = (
     setError(null);
 
     try {
-      // Try Routescan first
-      let balances;
+      // Try Routescan first for all chains including Base
+      let balances: AlchemyTokenBalance[];
       try {
         balances = await fetchRoutescanBalances(address, chainId);
       } catch (routescanError) {
-        console.warn('Routescan fetch failed, falling back to Alchemy:', routescanError);
         balances = await fetchAlchemyBalances(address, chainId);
       }
 
@@ -195,7 +218,6 @@ export const useAlchemyBalances = (
       setBalances(balances);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch balances'));
-      console.error('Error fetching balances:', err);
     } finally {
       setIsLoading(false);
     }

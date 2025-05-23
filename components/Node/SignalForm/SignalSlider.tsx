@@ -92,7 +92,7 @@ interface SignalSliderProps {
 const SignalSlider: React.FC<SignalSliderProps> = ({
   nodeId,
   parentId,
-  value: externalValue,
+  value: externalValue = 0,
   lastSignal,
   balance,
   eligibilityPerSecond,
@@ -107,11 +107,15 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
 }) => {
   const { user } = usePrivy();
   const contract = useWillWeContract(chainId);
-  const [localValue, setLocalValue] = useState(externalValue);
+  const [localValue, setLocalValue] = useState(externalValue || 0);
   const [eligibilityImpact, setEligibilityImpact] = useState<string | null>(null);
   const [initialThumbValue, setInitialThumbValue] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [tempTotalAllocation, setTempTotalAllocation] = useState(totalAllocation);
+  const [tempTotalAllocation, setTempTotalAllocation] = useState(totalAllocation || 0);
+
+  useEffect(() => {
+    setLocalValue(externalValue || 0);
+  }, [externalValue]);
 
   const handleIncrement = useCallback(() => {
     const newValue = Math.min(100, localValue + STEP_SIZE);

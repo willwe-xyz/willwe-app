@@ -279,9 +279,13 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
         ) / 10;
 
         // Get the label, preferring endpoint name if available
-        const label = endpointNames.get(nodeId) || 
+        let label = endpointNames.get(nodeId) || 
                      nodeLabels.get(nodeId) || 
                      `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`;
+        // Only append 0x... if not a user endpoint (door emoji)
+        if (label && !label.startsWith('🚪') && label.length === 2 && !/\w/.test(label)) {
+          label += ` 0x${nodeId.slice(0, 6)}`;
+        }
 
         metrics.set(nodeId, {
           value: valuePercent,

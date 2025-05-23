@@ -104,44 +104,41 @@ export const getEndpointDisplayName = async (
   try {
     // Get the endpoint address
     const endpointAddress = nodeIdToAddress(nodeId);
-    
-    // Get the execution contract
-    const executionContract = new ethers.Contract(
-      executionAddress,
-      ['function endpointOwner(address) view returns (uint256)'],
+
+    // Get the WillWe contract address for this chain
+    const willweAddress = deployments.WillWe[chainId];
+
+    // Call owner() on the endpoint (PowerProxy) contract
+    const powerProxy = new ethers.Contract(
+      endpointAddress,
+      ['function owner() view returns (address)'],
       provider
     );
+    const ownerAddress = await powerProxy.owner();
 
-    // Get the owner
-    const ownerId = await executionContract.endpointOwner(endpointAddress);
-    
-    // If owner is WillWe (0), return random emoji
-    if (ownerId === BigInt(0)) {
+    // If owner is WillWe contract, it's an execution endpoint
+    if (ownerAddress.toLowerCase() === willweAddress.toLowerCase()) {
+      // WillWe (execution) endpoint: random emoji
       try {
         // Get all endpoints for this parent node
         const willweContract = new ethers.Contract(
-          deployments.WillWe[chainId],
+          willweAddress,
           ABIs.WillWe,
           provider
         );
-        
         const nodeData = await willweContract.getNodeData(parentNodeId);
         const endpoints = nodeData.movementEndpoints || [];
         const index = endpoints.findIndex((ep: string) => ep.toLowerCase() === endpointAddress.toLowerCase());
-        
-        // Use the index to select a consistent emoji for this endpoint
         const emojiIndex = index % ENDPOINT_EMOJIS.length;
         return ENDPOINT_EMOJIS[emojiIndex];
       } catch (error) {
-        // If getNodeData fails, use a deterministic emoji based on the endpoint address
         const addressHash = ethers.keccak256(ethers.toUtf8Bytes(endpointAddress));
         const emojiIndex = Number(addressHash.slice(0, 8)) % ENDPOINT_EMOJIS.length;
         return ENDPOINT_EMOJIS[emojiIndex];
       }
     }
 
-    // For user-owned endpoints, try to get ENS name
-    const ownerAddress = nodeIdToAddress(ownerId.toString());
+    // User endpoint: door emoji + ENS or address
     try {
       const ensName = await provider.lookupAddress(ownerAddress);
       if (ensName) {
@@ -150,12 +147,9 @@ export const getEndpointDisplayName = async (
     } catch (error) {
       console.warn('Error looking up ENS name:', error);
     }
-
-    // If no ENS name, return abbreviated address with exit emoji
     return `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`;
   } catch (error) {
     console.error('Error getting endpoint display name:', error);
-    // Return a fallback display name based on the endpoint address
     const endpointAddress = nodeIdToAddress(nodeId);
     return `🚪 ${endpointAddress.slice(0, 6)}...${endpointAddress.slice(-4)}`;
   }
