@@ -83,26 +83,12 @@ const SignalValueSection: React.FC<SignalValueSectionProps> = ({
       .sort((a, b) => Number(b.support) - Number(a.support));
   };
 
-  // Debug log to see the structure of signal data
-  console.log('Processing signals:', {
-    nodeSignals: nodeData.nodeSignals,
-    membraneSignals: nodeData.nodeSignals?.membraneSignals,
-    inflationSignals: nodeData.nodeSignals?.inflationSignals,
-    signalers: nodeData.nodeSignals?.signalers
-  });
-
   // Process membrane and inflation signals from their respective arrays
   const membraneSignals = nodeData.nodeSignals?.membraneSignals ? 
     processSignals(nodeData.nodeSignals.membraneSignals, 'membrane') : [];
   const inflationSignals = nodeData.nodeSignals?.inflationSignals ? 
     processSignals(nodeData.nodeSignals.inflationSignals, 'inflation') : [];
 
-  // Debug log processed signals
-  console.log('Processed signals:', {
-    membrane: membraneSignals,
-    inflation: inflationSignals
-  });
-  
   const totalSupply = Number(nodeData.basicInfo[11]); // Total supply from node state
   const requiredSupport = totalSupply / 2;
 

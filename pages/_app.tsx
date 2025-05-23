@@ -82,13 +82,13 @@ function MyApp(props: AppProps) {
         <link rel="manifest" href="/favicons/manifest.json" />
 
         {/* Meta tags */}
-        <title>WillWe · Token Coordination Protocol</title>
-        <meta name="description" content="Decentralized Token Coordination Protocol" />
+        <title>WillWe · Coordinating Value</title>
+        <meta name="description" content="Value Coordination Protocol" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#ffffff" />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="WillWe" />
-        <meta property="og:description" content="Token Coordination Protocol" />
+        <meta property="og:description" content="Value Coordination Protocol" />
         <meta property="og:site_name" content="WillWe" />
       </Head>
       

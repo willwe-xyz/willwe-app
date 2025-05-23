@@ -209,8 +209,8 @@ export function usePonderData() {
     setError(null);
     
     try {
-      // Use correct chat endpoint
-      const response = await fetch(apiUrl(`/chat/messages?nodeId=${nodeId}&limit=${limit}`));
+      // Use our Next.js API endpoint instead of calling Ponder directly
+      const response = await fetch(`/api/chat/messages?nodeId=${nodeId}&limit=${limit}`);
       
       if (!response.ok) {
         throw new Error(`Error fetching chat messages: ${response.statusText}`);
@@ -219,30 +219,26 @@ export function usePonderData() {
       const data = await response.json();
       setIsLoading(false);
       
-      // Return messages from the response
-      return data.messages || [];
+      // The Ponder server returns messages in a nested structure
+      // Check both possible response formats
+      const messages = data.messages || (data.data && data.data.messages) || [];
+      
+      // Ensure messages are properly formatted
+      return messages.map((msg: any) => ({
+        id: msg.id,
+        nodeId: msg.nodeId || msg.node_id,
+        sender: msg.sender,
+        content: msg.content,
+        timestamp: msg.timestamp,
+        networkId: msg.networkId || msg.network_id
+      }));
     } catch (err) {
       console.error('Error fetching node chat messages:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
-      
-      // Try falling back to localStorage if server fails
-      try {
-        if (typeof window !== 'undefined') {
-          const storageKey = `chat_messages_${nodeId}`;
-          const existingMessagesJSON = localStorage.getItem(storageKey);
-          
-          if (existingMessagesJSON) {
-            return JSON.parse(existingMessagesJSON);
-          }
-        }
-      } catch (localError) {
-        console.warn('Error fetching messages from localStorage fallback:', localError);
-      }
-      
       return [];
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Send a chat message for a specific node

@@ -17,11 +17,13 @@ import { ActivityFeed } from '../ActivityFeed/ActivityFeed';
 interface ActivitySectionProps {
   nodeId?: string;
   selectedTokenColor?: string;
+  chainId?: string;
 }
 
 export const ActivitySection: React.FC<ActivitySectionProps> = ({
   nodeId,
   selectedTokenColor = 'blue.500',
+  chainId,
 }) => {
   const { getNodeActivityLogs, isLoading } = usePonderData();
   const [activities, setActivities] = useState<any[]>([]);
@@ -29,20 +31,18 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const fetchActivities = useCallback(async () => {
-    if (!nodeId) return;
+    if (!nodeId || !chainId) return;
     setRefreshLoading(true);
     setError(null);
     try {
-      // Use Optimism Sepolia Chain ID as the default network
-      const networkId = '11155420';
-      const data = await getNodeActivityLogs(nodeId, networkId);
+      const data = await getNodeActivityLogs(nodeId, chainId);
       setActivities(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch activities');
     } finally {
       setRefreshLoading(false);
     }
-  }, [nodeId, getNodeActivityLogs]);
+  }, [nodeId, chainId, getNodeActivityLogs]);
 
   useEffect(() => {
     fetchActivities();
@@ -56,13 +56,12 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
         <Heading size="sm">Node Activity</Heading>
         <Button
           size="sm"
-          leftIcon={<RepeatIcon />}
           onClick={fetchActivities}
           isLoading={refreshLoading}
           colorScheme="blue"
           variant="outline"
         >
-          Refresh
+          <RepeatIcon />
         </Button>
       </Flex>
       {error && (

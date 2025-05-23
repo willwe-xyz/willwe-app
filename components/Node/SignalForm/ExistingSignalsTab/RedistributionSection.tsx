@@ -66,11 +66,7 @@ const RedistributionSection: React.FC<RedistributionSectionProps> = ({
     }).filter(Boolean);
   };
 
-  // Debug log to see the structure of signal data
-  console.log('Redistribution signals raw:', nodeData.nodeSignals.redistributionSignals);
-  
   const redistributionSignals = processRedistributionSignals();
-  console.log('Processed redistribution signals:', redistributionSignals);
   
   // Calculate total redistribution value
   const totalRedistribution = redistributionSignals.reduce(

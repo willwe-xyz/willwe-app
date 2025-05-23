@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, VStack, Text, Badge, HStack, Link, useColorModeValue } from '@chakra-ui/react';
 import { formatDistanceToNow } from 'date-fns';
 import { ActivityItem } from '../../types/chainData';
 import { Users, ArrowUpRight } from 'lucide-react';
 import { formatRelativeTime } from './../../utils/timeUtils';
+import { resolveENS } from './../../utils/ensUtils';
 
 interface ActivityFeedProps {
   activities: ActivityItem[];
@@ -22,6 +23,27 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
 }) => {
   const bgHover = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.100', 'gray.600');
+  const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const resolveAddresses = async () => {
+      const newResolvedAddresses: Record<string, string> = {};
+      
+      for (const activity of activities) {
+        if (!resolvedAddresses[activity.who]) {
+          const resolved = await resolveENS(activity.who);
+          newResolvedAddresses[activity.who] = resolved;
+        }
+      }
+      
+      setResolvedAddresses(prev => ({
+        ...prev,
+        ...newResolvedAddresses
+      }));
+    };
+
+    resolveAddresses();
+  }, [activities]);
 
   if (error) {
     return (
@@ -110,7 +132,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
           <HStack spacing={4} fontSize="sm" color="gray.500">
             <HStack spacing={1}>
               <Users size={14} />
-              <Text>{`${activity.who.slice(0, 6)}...${activity.who.slice(-4)}`}</Text>
+              <Text>{resolvedAddresses[activity.who] || activity.who}</Text>
             </HStack>
 
             <Link 

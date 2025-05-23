@@ -63,43 +63,80 @@ export default function DashboardPage() {
   const cleanChainId = chainId?.replace('eip155:', '') || '';
   const isValidChain = supportedChainIds.includes(cleanChainId);
   
-  // If the current chain is not supported, default to a valid one
+  // If the current chain is not supported, default to Base (8453)
   const effectiveChainId = isValidChain ? cleanChainId : defaultChainId;
   
-  // Update URL if needed to reflect the correct chain
+  // Handle chain changes and update URL accordingly
   useEffect(() => {
-    if (ready && router.isReady) {
-      const walletChainId = wallets[0]?.chainId?.replace('eip155:', '');
+    if (!ready || !router.isReady || !wallets[0]?.provider) return;
+    
+    const wallet = wallets[0];
+    const provider = wallet.provider;
+    
+    const handleChainChanged = (chainId: string) => {
+      if (!chainId) return;
       
-      // If user is on a supported network, switch to it
-      if (walletChainId && supportedChainIds.includes(walletChainId) && walletChainId !== effectiveChainId) {
-        router.replace({
+      const cleanChainId = typeof chainId === 'string' ? chainId.replace('eip155:', '') : String(chainId);
+      
+      // Update URL to reflect the current chain
+      router.replace(
+        {
           pathname: router.pathname,
           query: { 
             ...router.query,
-            chainId: walletChainId 
+            chainId: cleanChainId 
           }
-        }, undefined, { shallow: true });
-      }
-      // If user is on an unsupported network, switch to default
-      else if (!isValidChain) {
-        router.replace({
-          pathname: router.pathname,
-          query: { 
-            ...router.query,
-            chainId: defaultChainId 
-          }
-        }, undefined, { shallow: true });
-        
+        },
+        undefined,
+        { shallow: true }
+      );
+      
+      // If chain is unsupported, prompt to switch to Base
+      if (!supportedChainIds.includes(cleanChainId)) {
+        toast.closeAll(); // Close any existing toasts
         toast({
-          title: "Network Changed",
-          description: `Switched to supported network (Chain ID: ${defaultChainId})`,
-          status: "info",
-          duration: 5000,
+          title: "Unsupported Network",
+          description: (
+            <>
+              <Text>Please switch to Base Network (Chain ID: {defaultChainId})</Text>
+              <Button 
+                size="sm" 
+                colorScheme="blue" 
+                mt={2}
+                onClick={() => handleSwitchNetwork()}
+              >
+                Switch to Base
+              </Button>
+            </>
+          ),
+          status: "warning",
+          duration: null, // Don't auto-dismiss
+          isClosable: true,
+          position: "top"
         });
+      } else {
+        // Close any existing network warning toasts when switching to a supported chain
+        toast.closeAll();
       }
+    };
+    
+    // Initial check
+    if (wallet.chainId) {
+      handleChainChanged(wallet.chainId);
     }
-  }, [ready, isValidChain, router, defaultChainId, toast, wallets, supportedChainIds, effectiveChainId]);
+    
+    // Set up event listener for chain changes if provider supports it
+    if (provider && typeof provider.on === 'function') {
+      provider.on('chainChanged', handleChainChanged);
+      
+      // Cleanup
+      return () => {
+        if (provider && typeof provider.removeListener === 'function') {
+          provider.removeListener('chainChanged', handleChainChanged);
+        }
+      };
+    }
+  }, [ready, router, wallets, supportedChainIds, defaultChainId, toast]);
 
   // Handle network switch
   const handleSwitchNetwork = async () => {

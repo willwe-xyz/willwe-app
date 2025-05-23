@@ -19,7 +19,10 @@ import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
 import TreemapChart from './TreemapChart';
 import { nodeIdToAddress } from '../../utils/formatters';
+import { resolveMultipleENS } from '../../utils/ensUtils';
+import RequirementsTable from '../TokenOperations/RequirementsTable';
 import router from 'next/router';
+import { NodeOperations } from '../Node/NodeOperations';
 
 const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
 
@@ -29,6 +32,9 @@ interface NodeInfoProps {
   onNodeSelect?: (nodeId: string) => void;
   selectedTokenColor: string;
   tokenSymbol: string;
+  nodeId: string;
+  userAddress: string;
+  onSuccess?: () => void;
 }
 
 interface NodeMetrics {
@@ -105,10 +111,14 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   chainId, 
   onNodeSelect,
   selectedTokenColor,
-  tokenSymbol
+  tokenSymbol,
+  nodeId,
+  userAddress,
+  onSuccess
 }) => {
   const [membraneTitle, setMembraneTitle] = useState<string | null>(null);
   const [membraneCharacteristics, setMembraneCharacteristics] = useState<Array<{title: string; link: string}>>([]);
+  const [membraneRequirements, setMembraneRequirements] = useState<Array<{symbol: string; formattedBalance: string}>>([]);
   const [isLoadingTitle, setIsLoadingTitle] = useState(true);
   const [isLoadingCharacteristics, setIsLoadingCharacteristics] = useState(true);
   const toast = useToast();
@@ -142,7 +152,6 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 
   const [memberData, setMemberData] = useState<Array<{ address: string; ensName: string | null }>>([]);
   const [copied, setCopied] = useState(false);
-  console.log("Ndoe State: ",node);
   useEffect(() => {
     const fetchMembraneMetadata = async () => {
       if (!node?.membraneMeta) {
@@ -158,10 +167,12 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
         const data = await response.json();
         setMembraneTitle(data.name || 'Unnamed Membrane');
         setMembraneCharacteristics(data.characteristics || []);
+        setMembraneRequirements(data.membershipConditions || []);
       } catch (error) {
         console.error('Error fetching membrane metadata:', error);
         setMembraneTitle('Unknown Membrane');
         setMembraneCharacteristics([]);
+        setMembraneRequirements([]);
       } finally {
         setIsLoadingTitle(false);
         setIsLoadingCharacteristics(false);
@@ -199,23 +210,20 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       if (!node?.membersOfNode || node.membersOfNode.length === 0) return;
 
       try {
-        // Use Ethereum mainnet for ENS resolution
-        const mainnetProvider = new ethers.JsonRpcProvider(getRPCUrl('1'));
-
-        const ensNames = await Promise.all(
-          node.membersOfNode.map(async (address) => {
-            try {
-              const ensName = await mainnetProvider.lookupAddress(address);
-              return { address, ensName };
-            } catch (error) {
-              console.error(`Error resolving ENS for ${address}:`, error);
-              return { address, ensName: null };
-            }
-          })
-        );
-        setMemberData(ensNames);
+        const resolvedNames = await resolveMultipleENS(node.membersOfNode);
+        const memberData = node.membersOfNode.map((address) => ({
+          address,
+          ensName: resolvedNames[address.toLowerCase()] || null
+        }));
+        setMemberData(memberData);
       } catch (error) {
         console.error('Error resolving ENS names:', error);
+        // Fallback to raw addresses if resolution fails
+        const memberData = node.membersOfNode.map((address) => ({
+          address,
+          ensName: null
+        }));
+        setMemberData(memberData);
       }
     };
 
@@ -224,77 +232,24 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
 
   const metrics = useMemo(() => calculateMetrics(node), [node]);
 
-  const getNodeHoverTemplate = (): string => {
-    return `
-      <b>%{label}</b><br>
-      Value: %{value:.1f}%<br>
-      Inflation: %{customdata[0]:.4f}/sec<br>
-      Members: %{customdata[1]}<br>
-      Depth: %{customdata[2]}<br>
-      Signal Strength: %{customdata[3]:.0f}%<extra></extra>
-    `;
-  };
-
-  // Ensure all node data is valid
-  const getSankeyData = (): SankeyData => {
-    const nodeCustomData: Array<[number, number, number, number]> = nodeLabels.map((_, idx) => {
-      const nodeId = sankeyStructure.labels[idx];
-      const metrics = nodeMetrics.get(nodeId);
-      return [
-        metrics?.inflation || 0,
-        metrics?.memberCount || 0,
-        metrics?.depth || 0,
-        (metrics?.signalStrength || 0) * 100
-      ];
-    });
-
-    const linkCustomData: Array<[number, number]> = sankeyStructure.source.map((_, idx) => {
-      const sourceIdx = sankeyStructure.source[idx];
-      const targetIdx = sankeyStructure.target[idx];
-      const sourceId = sankeyStructure.labels[sourceIdx];
-      const targetId = sankeyStructure.labels[targetIdx];
-      const sourceMetrics = nodeMetrics.get(sourceId);
-      const targetMetrics = nodeMetrics.get(targetId);
-      return [
-        sourceMetrics?.inflation || 0,
-        targetMetrics?.inflation || 0
-      ];
-    });
-
-    return {
-      type: 'sankey',
-      node: {
-        label: nodeLabels,
-        color: nodeLabels.map(() => selectedTokenColor),
-        thickness: nodeLabels.map(() => 20), // Fallback size
-        line: {
-          color: nodeLabels.map(() => selectedTokenColor),
-          width: nodeLabels.map(() => 0.5)
-        },
-        pad: 15,
-        hovertemplate: getNodeHoverTemplate(),
-        customdata: nodeCustomData
-      },
-      link: {
-        source: sankeyStructure.source,
-        target: sankeyStructure.target,
-        value: sankeyStructure.values.map(v => v || 1), // Fallback to 1
-        color: Array(sankeyStructure.source.length).fill(`${selectedTokenColor}40`),
-        hovertemplate: `
-          <b>Flow Details</b><br>
-          From: %{source.label}<br>
-          To: %{target.label}<br>
-          Value: %{value:.1f}%<br>
-          Source Inflation: %{customdata[0]:.4f}/sec<br>
-          Target Inflation: %{customdata[1]:.4f}/sec<extra></extra>
-        `,
-        customdata: linkCustomData
-      }
-    };
-  };
-
   // Helper to check if a string is a link
   const isLink = (link: string | undefined) => link && link.startsWith('http');
+
+  // Ensure membraneRequirements has tokenAddress and formattedBalance for RequirementsTable
+  const normalizedMembraneRequirements = membraneRequirements.map(req => {
+    const formattedBalance =
+      req.formattedBalance ||
+      '1'; // fallback to '1' if nothing is present
+
+    // Type guard for tokenAddress
+    const tokenAddress = (req as any).tokenAddress || '';
+
+    return {
+      tokenAddress,
+      symbol: req.symbol,
+      formattedBalance: formattedBalance,
+    };
+  });
 
   return (
     <Box
@@ -305,11 +260,43 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       display="flex"
       flexDirection="column"
     >
-      <Text
+      <HStack>
+
+          <Box
+            width="66%"
+            borderRadius="lg"
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            minH="0"
+            height="38px"
+            p={2}
+            m={2}
+            boxShadow="none"
+          >
+            <NodeOperations
+              nodeId={nodeId}
+              chainId={chainId}
+              selectedTokenColor={selectedTokenColor}
+              userAddress={userAddress}
+              onSuccess={onSuccess}
+              showToolbar={true}
+            />
+          </Box>
+        <Box
+          width="33%"
+          borderRadius="lg"
+          display="flex"
+          justifyContent="right"
+          alignItems="right"
+          float="right"
+        >
+              <Text
         fontSize="2xl"
         fontWeight="extrabold"
         color={selectedTokenColor}
         opacity={0.9}
+        float="right"
         letterSpacing="tight"
         textAlign="right"
         px={6}
@@ -317,13 +304,15 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       >
         {membraneTitle || 'Loading...'}
       </Text>
+        </Box>
+      </HStack>
       <HStack 
         spacing={4} 
         align="stretch" 
         flex={1}
         minH={0}
-        px={3}
-        pb={3}
+        px={4}
+        pb={4}
       >
         {/* Left column - Stats, Characteristics, Members */}
         <VStack
@@ -332,10 +321,11 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
           spacing={4}
           overflowY="auto"
           minH={0}
+          position="relative"
         >
-          {/* Stats grid */}
+          {/* Stats grid - Now in a single row */}
           <Grid 
-            templateColumns="repeat(2, 1fr)" 
+            templateColumns="repeat(4, 1fr)" 
             gap={3}
             flex="none"
           >
@@ -348,7 +338,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             >
               <Tooltip label="Daily token creation rate for this node" fontSize="sm">
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" color={mutedColor}>Daily Unlock</Text>
+                  <Text fontSize="sm" color={mutedColor}>Daily Budget</Text>
                   <Text fontSize="lg" fontWeight="semibold">
                     {formatCurrency(metrics.dailyUnlock)} {tokenSymbol}/day
                   </Text>
@@ -363,9 +353,9 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
               transition="all 0.2s"
               _hover={{ transform: 'translateY(-1px)', shadow: 'sm' }}
             >
-              <Tooltip label="Total supply of tokens in the node" fontSize="sm">
+              <Tooltip label="Total supply of tokens in the node's budget" fontSize="sm">
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" color={mutedColor}>Total Gross Value</Text>
+                  <Text fontSize="sm" color={mutedColor}>Total Value</Text>
                   <Text fontSize="lg" fontWeight="semibold">
                     {formatCurrency(metrics.totalSupply)} {tokenSymbol}
                   </Text>
@@ -399,7 +389,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             >
               <Tooltip label="Current balance available in the node's budget" fontSize="sm">
                 <VStack align="start" spacing={1}>
-                  <Text fontSize="sm" color={mutedColor}>Active Shares</Text>
+                  <Text fontSize="sm" color={mutedColor}>Available Shares</Text>
                   <Text fontSize="lg" fontWeight="semibold">
                     {formatCurrency(metrics.availableShares)} {tokenSymbol}
                   </Text>
@@ -408,155 +398,173 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
             </Box>
           </Grid>
 
-          {/* Characteristics and Members side by side */}
+          {/* Characteristics, Membrane Requirements, and Members side by side */}
           <HStack align="stretch" spacing={4} w="100%" minH={0}>
             {/* Characteristics section */}
-            {membraneCharacteristics.length > 0 && (
-              <Box
-                bg={cardBg}
-                borderRadius="lg"
-                borderWidth="1px"
-                borderColor={borderColor}
-                overflowY="auto"
-                minH={0}
-                flex={1}
-                maxH="220px"
-              >
-                <VStack align="stretch" spacing={2} p={3} h="100%">
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="medium">Characteristics</Text>
-                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
-                      {membraneCharacteristics.length}
-                    </Badge>
-                  </HStack>
-                  <Box 
-                    sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '4px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        width: '6px',
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'gray.300',
-                        borderRadius: '24px',
-                      },
-                    }}
-                  >
-                    {membraneCharacteristics.map((char, index) => {
-                      const linkIsLink = isLink(char.link);
-                      return (
-                        <Box key={index}>
-                          <HStack
-                            py={1.5}
-                            px={2}
-                            borderRadius="md"
-                            _hover={{ bg: hoverBg, cursor: linkIsLink ? 'pointer' : 'pointer' }}
-                            transition="all 0.2s"
-                            onClick={() => {
-                              if (linkIsLink) {
-                                window.open(char.link, '_blank');
-                              } else {
-                                setExpandedCharIndex(expandedCharIndex === index ? null : index);
-                              }
-                            }}
-                          >
-                            <Text fontSize="sm" isTruncated flex={1}>
-                              {char.title}
-                            </Text>
-                            {linkIsLink ? (
-                              <ExternalLink size={16} color={selectedTokenColor} />
+            <Box
+              bg={cardBg}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={borderColor}
+              overflowY="auto"
+              minH={0}
+              flex={1}
+              maxH="220px"
+            >
+              <VStack align="stretch" spacing={2} p={3} h="100%">
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="medium">Characteristics</Text>
+                  <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                    {membraneCharacteristics.length}
+                  </Badge>
+                </HStack>
+                <Box 
+                  sx={{
+                    '&::-webkit-scrollbar': {
+                      width: '4px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      width: '6px',
+                      bg: 'transparent',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      bg: 'gray.300',
+                      borderRadius: '24px',
+                    },
+                  }}
+                >
+                  {membraneCharacteristics.map((char, index) => {
+                    const linkIsLink = isLink(char.link);
+                    return (
+                      <Box key={index}>
+                        <HStack
+                          py={1.5}
+                          px={2}
+                          borderRadius="md"
+                          _hover={{ bg: hoverBg, cursor: linkIsLink ? 'pointer' : 'pointer' }}
+                          transition="all 0.2s"
+                          onClick={() => {
+                            if (linkIsLink) {
+                              window.open(char.link, '_blank');
+                            } else {
+                              setExpandedCharIndex(expandedCharIndex === index ? null : index);
+                            }
+                          }}
+                        >
+                          <Text fontSize="sm" isTruncated flex={1}>
+                            {char.title}
+                          </Text>
+                          {linkIsLink ? (
+                            <ExternalLink size={16} color={selectedTokenColor} />
+                          ) : (
+                            expandedCharIndex === index ? (
+                              <ChevronUp size={16} color={selectedTokenColor} />
                             ) : (
-                              expandedCharIndex === index ? (
-                                <ChevronUp size={16} color={selectedTokenColor} />
-                              ) : (
-                                <ChevronDown size={16} color={selectedTokenColor} />
-                              )
-                            )}
-                          </HStack>
-                          {/* Expandable description drawer */}
-                          {!linkIsLink && expandedCharIndex === index && (
-                            <Box
-                              bg={hoverBg}
-                              borderRadius="md"
-                              mt={1}
-                              mb={2}
-                              px={3}
-                              py={2}
-                            >
-                              <Text fontSize="sm" color={mutedColor} whiteSpace="pre-line">
-                                {char.link || char.title}
-                              </Text>
-                            </Box>
+                              <ChevronDown size={16} color={selectedTokenColor} />
+                            )
                           )}
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                </VStack>
-              </Box>
-            )}
+                        </HStack>
+                        {/* Expandable description drawer */}
+                        {!linkIsLink && expandedCharIndex === index && (
+                          <Box
+                            bg={hoverBg}
+                            borderRadius="md"
+                            mt={1}
+                            mb={2}
+                            px={3}
+                            py={2}
+                          >
+                            <Text fontSize="sm" color={mutedColor} whiteSpace="pre-line">
+                              {char.link || char.title}
+                            </Text>
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </VStack>
+            </Box>
+
+            {/* Membrane Requirements section */}
+            <Box
+              bg={cardBg}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={borderColor}
+              overflowY="auto"
+              minH={0}
+              flex={1}
+              maxH="220px"
+            >
+              <VStack align="stretch" spacing={2} p={3} h="100%">
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="medium">Membrane Requirements</Text>
+                  <Badge colorScheme="purple" variant="subtle" borderRadius="full">
+                    {normalizedMembraneRequirements.length}
+                  </Badge>
+                </HStack>
+                <RequirementsTable 
+                  requirements={normalizedMembraneRequirements}
+                  chainId={chainId}
+                />
+              </VStack>
+            </Box>
 
             {/* Members section */}
-            {node.membersOfNode && node.membersOfNode.length > 0 && (
-              <Box
-                bg={cardBg}
-                borderRadius="lg"
-                borderWidth="1px"
-                borderColor={borderColor}
-                overflowY="auto"
-                minH={0}
-                flex={1}
-                maxH="220px"
-              >
-                <VStack align="stretch" spacing={2} p={3} h="100%">
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
-                    <Badge colorScheme="purple" variant="subtle" borderRadius="full">
-                      Active
-                    </Badge>
-                  </HStack>
-                  <Box 
-                    sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '4px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        width: '6px',
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'gray.300',
-                        borderRadius: '24px',
-                      },
-                    }}
-                  >
-                    {memberData.map(({ address, ensName }, index) => (
-                      <HStack
-                        key={index}
-                        py={1.5}
-                        px={2}
-                        borderRadius="md"
-                        _hover={{ bg: hoverBg }}
-                        transition="all 0.2s"
-                      >
-                        <Text fontSize="sm" isTruncated>
-                          {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
-                        </Text>
-                        <IconButton
-                          aria-label="Copy address"
-                          icon={<Copy size={14} />}
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => handleCopy(address)}
-                        />
-                      </HStack>
-                    ))}
-                  </Box>
-                </VStack>
-              </Box>
-            )}
+            <Box
+              bg={cardBg}
+              borderRadius="lg"
+              borderWidth="1px"
+              borderColor={borderColor}
+              overflowY="auto"
+              minH={0}
+              flex={1}
+              maxH="220px"
+            >
+              <VStack align="stretch" spacing={2} p={3} h="100%">
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="medium">Members ({metrics.memberCount})</Text>
+                </HStack>
+                <Box 
+                  sx={{
+                    '&::-webkit-scrollbar': {
+                      width: '4px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      width: '6px',
+                      bg: 'transparent',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      bg: 'gray.300',
+                      borderRadius: '24px',
+                    },
+                  }}
+                >
+                  {memberData.map(({ address, ensName }, index) => (
+                    <HStack
+                      key={index}
+                      py={1.5}
+                      px={2}
+                      borderRadius="md"
+                      _hover={{ bg: hoverBg }}
+                      transition="all 0.2s"
+                    >
+                      <Text fontSize="sm" isTruncated>
+                        {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
+                      </Text>
+                      <IconButton
+                        aria-label="Copy address"
+                        icon={<Copy size={14} />}
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => handleCopy(address)}
+                      />
+                    </HStack>
+                  ))}
+                </Box>
+              </VStack>
+            </Box>
           </HStack>
         </VStack>
 

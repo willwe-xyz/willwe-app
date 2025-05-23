@@ -19,7 +19,6 @@ export const fetchIPFSMetadata = async (cid: string): Promise<MembraneMetadata> 
       createdAt: data.createdAt || new Date().toISOString()
     };
   } catch (error) {
-    console.error('Error fetching IPFS metadata:', error);
     return {
       name: 'Untitled',
       id: cid,
@@ -35,13 +34,11 @@ export const getMembraneNameFromCID = async (cid: string): Promise<string> => {
   try {
     const response = await fetch(`${IPFS_GATEWAY}${cid}`);
     if (response.ok) {
-      console.log(`Fetched membrane metadata for CID ${cid}:`, response);
       const metadata = await response.json();
-      console.log('Metadata name:', metadata.name);
       return metadata.name;
     }
   } catch (err) {
-    console.error(`Error fetching membrane metadata for CID ${cid}:`, err);
+    // Error handling without console.log
   }
   return '';
 };

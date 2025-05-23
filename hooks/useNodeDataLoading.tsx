@@ -33,12 +33,6 @@ export function useNodeDataLoading(chainId: string | undefined, nodeId: string |
         provider as unknown as ethers.ContractRunner
       );
 
-      console.log('Fetching node data for:', {
-        chainId: cleanChainId,
-        nodeId,
-        contractAddress
-      });
-
       // Fetch node data
       const nodeData = await contract.getNodeData(nodeId);
       

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import {
   ButtonGroup,
@@ -123,6 +123,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [membraneId, setMembraneId] = useState('');
   const [mintAmount, setMintAmount] = useState('');
+  const [localMintAmount, setLocalMintAmount] = useState('');
   const [needsApproval, setNeedsApproval] = useState(false);
   const [allowance, setAllowance] = useState('0');
   const [burnAmount, setBurnAmount] = useState('');
@@ -137,6 +138,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     inflation: 0
   });
   const [burnBalance, setBurnBalance] = useState('0');
+  const [parentNodeBalance, setParentNodeBalance] = useState('0');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const toast = useToast();
   const { user, getEthersProvider } = usePrivy();
@@ -234,19 +237,12 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         tokenAddress = ethers.getAddress(ethers.toBeHex(rootNodeId, 20));
       } else {
         // If we don't have a valid address, return default
-        console.warn('No valid token address found, using default symbol');
         return 'PSC';
       }
       
-      console.log('Getting symbol for token:', {
-        tokenAddress,
-        nodeId,
-        rootPath: nodeData?.rootPath
-      });
 
       // Verify we have a valid non-zero address
       if (tokenAddress === ethers.ZeroAddress) {
-        console.warn('Zero address detected, returning default symbol');
         return 'PSC';
       }
 
@@ -262,30 +258,25 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       try {
         // First try to get the symbol
         const symbol = await tokenContract.symbol();
-        console.log('Retrieved token symbol:', symbol);
         return symbol || 'PSC';
       } catch (symbolError) {
-        console.warn('Failed to get symbol, trying name:', symbolError);
         try {
           // If symbol fails, try to get the name
           const name = await tokenContract.name();
           // Use first 3-4 characters of name as symbol if name exists
           return name ? name.slice(0, 4).toUpperCase() : 'PSC';
         } catch (nameError) {
-          console.warn('Failed to get name:', nameError);
           // If both fail, return default
           return 'PSC';
         }
       }
     } catch (error) {
-      console.error('Error getting token symbol:', error);
       return 'PSC';
     }
   }, [nodeData?.rootPath, nodeId, getEthersProvider]);
 
   useEffect(() => {
     getRootTokenSymbol().then(symbol => {
-      console.log('Setting root token symbol:', symbol);
       setRootTokenSymbol(symbol);
     });
   }, [getRootTokenSymbol]);
@@ -322,7 +313,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const checkAllowance = useCallback(async () => {
     try {
       if (!nodeData?.rootPath?.[0] || !user?.wallet?.address || !mintAmount) {
-        console.warn('Required data not available');
         return;
       }
   
@@ -331,7 +321,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       const willWeAddress = deployments.WillWe[cleanChainId];
   
       if (!willWeAddress) {
-        console.warn('WillWe contract address not available');
         return;
       }
   
@@ -361,14 +350,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       // Strict BigInt comparison
       setNeedsApproval(currentAllowance < requiredAmount);
 
-      console.log('Allowance check:', {
-        currentAllowance: currentAllowance.toString(),
-        requiredAmount: requiredAmount.toString(),
-        needsApproval: currentAllowance < requiredAmount
-      });
-
     } catch (error) {
-      console.error('Error checking allowance:', error);
       toast({
         title: 'Error',
         description: 'Failed to check token allowance',
@@ -416,7 +398,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         }
       );
     } catch (error) {
-      console.error('Approval error:', error);
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to approve tokens',
@@ -429,21 +410,11 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const checkNodeBalance = useCallback(async () => {
     try {
       if (!nodeData?.rootPath?.[0] || !user?.wallet?.address) {
-        console.warn('Token address or user address not available', {
-          rootPath: nodeData?.rootPath,
-          userAddress: user?.wallet?.address
-        });
         return;
       }
   
       const cleanChainId = chainId.replace('eip155:', '');
       const rootTokenAddress = ethers.getAddress(ethers.toBeHex(nodeData.rootPath[0], 20));
-      
-      console.log('Checking root token balance with params:', {
-        rootTokenAddress,
-        userAddress: user.wallet.address,
-        rootNodeId: nodeData.rootPath[0]
-      });
       
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
@@ -458,15 +429,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   
       const balance = await rootTokenContract.balanceOf(user.wallet.address);
       
-      console.log('Retrieved root token balance:', {
-        rawBalance: balance.toString(),
-        formattedBalance: formatBalance(balance.toString()),
-        rootTokenAddress
-      });
-      
       setUserBalance(balance.toString());
     } catch (error) {
-      console.error('Error checking root token balance:', error);
       toast({
         title: 'Error',
         description: 'Failed to check root token balance',
@@ -523,7 +487,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to mint tokens via path:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to mint tokens',
@@ -571,7 +534,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to mint tokens from parent:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to mint tokens',
@@ -618,7 +580,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to burn tokens via path:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to burn tokens',
@@ -665,7 +626,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to burn tokens to parent:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to burn tokens',
@@ -710,7 +670,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to mint membership:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Failed to mint membership',
@@ -753,7 +712,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           }
         );
       } catch (error) {
-        console.error('Failed to redistribute:', error);
         toast({
           title: 'Error',
           description: error instanceof Error ? error.message : 'Transaction failed',
@@ -767,7 +725,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const checkBurnBalance = useCallback(async () => {
     try {
       if (!user?.wallet?.address) {
-        console.warn('User address not available');
         return;
       }
   
@@ -775,18 +732,11 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       const contractAddress = deployments.WillWe[cleanChainId];
       
       if (!contractAddress) {
-        console.error(`No contract deployment found for chain ${cleanChainId}`);
         return;
       }
   
       const provider = await getEthersProvider();
       const signer = await provider.getSigner();
-      
-      console.log('Checking burn balance with params:', {
-        contractAddress,
-        userAddress: user.wallet.address,
-        nodeId: BigInt(nodeId)
-      });
       
       const contract = new ethers.Contract(
         contractAddress,
@@ -800,14 +750,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         BigInt(nodeId)
       );
       
-      console.log('Retrieved burn balance:', {
-        rawBalance: balance.toString(),
-        formattedBalance: formatBalance(balance.toString())
-      });
-      
       setBurnBalance(balance.toString());
     } catch (error) {
-      console.error('Error checking burn balance:', error);
       toast({
         title: 'Error',
         description: 'Failed to check token balance',
@@ -823,6 +767,116 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       checkBurnBalance();
     }
   }, [activeModal, checkBurnBalance]);
+
+  // Update local state when modal opens
+  useEffect(() => {
+    if (activeModal === 'mint') {
+      setLocalMintAmount(mintAmount);
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }
+  }, [activeModal, mintAmount]);
+
+  // Add function to get parent node balance
+  const getParentNodeBalance = useCallback(async () => {
+    try {
+      if (!nodeData?.rootPath || nodeData.rootPath.length < 2 || !user?.wallet?.address) {
+        return;
+      }
+
+      const parentNodeId = nodeData.rootPath[nodeData.rootPath.length - 1];
+      const cleanChainId = chainId.replace('eip155:', '');
+      const contractAddress = deployments.WillWe[cleanChainId];
+      
+      if (!contractAddress) {
+        return;
+      }
+
+      const provider = await getEthersProvider();
+      const signer = await provider.getSigner();
+      
+      const contract = new ethers.Contract(
+        contractAddress,
+        ['function balanceOf(address account, uint256 id) view returns (uint256)'],
+        //@ts-ignore
+        signer
+      );
+
+      const balance = await contract.balanceOf(
+        user.wallet.address,
+        BigInt(parentNodeId)
+      );
+      
+      setParentNodeBalance(balance.toString());
+    } catch (error) {
+      console.error('Failed to get parent node balance:', error);
+    }
+  }, [chainId, nodeData?.rootPath, user?.wallet?.address, getEthersProvider]);
+
+  // Update effect to get parent balance when modal opens
+  useEffect(() => {
+    if (activeModal === 'mint') {
+      checkNodeBalance();
+      if (useDirectParentMint) {
+        getParentNodeBalance();
+      }
+    }
+  }, [activeModal, checkNodeBalance, getParentNodeBalance, useDirectParentMint]);
+
+  // Update effect to get parent balance when direct parent mint is toggled
+  useEffect(() => {
+    if (activeModal === 'mint') {
+      if (useDirectParentMint) {
+        getParentNodeBalance();
+      }
+    }
+  }, [useDirectParentMint, activeModal, getParentNodeBalance]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    console.log('onChange triggered with:', value);
+    // Allow any numeric input
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      console.log('Setting localMintAmount to:', value);
+      setLocalMintAmount(value);
+    }
+  }, []);
+
+  const handleInputBlur = useCallback(() => {
+    console.log('onBlur triggered with localMintAmount:', localMintAmount);
+    if (localMintAmount) {
+      const value = parseFloat(localMintAmount);
+      console.log('Parsed value:', value);
+      if (!isNaN(value)) {
+        const maxValue = useDirectParentMint 
+          ? parseFloat(formatBalance(parentNodeBalance))
+          : parseFloat(formatBalance(userBalance));
+        const finalValue = Math.min(value, maxValue);
+        console.log('Final value after max check:', finalValue);
+        const formattedValue = finalValue.toString();
+        setMintAmount(formattedValue);
+        setLocalMintAmount(formattedValue);
+        if (!useDirectParentMint && finalValue > 0) {
+          checkAllowance();
+        } else {
+          setNeedsApproval(false);
+        }
+      }
+    }
+  }, [localMintAmount, userBalance, parentNodeBalance, useDirectParentMint, checkAllowance]);
+
+  const handleSliderChange = useCallback((value: number) => {
+    console.log('Slider onChange:', value);
+    const newValue = value.toString();
+    setMintAmount(newValue);
+    setLocalMintAmount(newValue);
+    if (!useDirectParentMint && value > 0) {
+      checkAllowance();
+    } else {
+      setNeedsApproval(false);
+    }
+  }, [checkAllowance, useDirectParentMint]);
 
   // Mint Modal Content
   const renderMintModalContent = () => {
@@ -854,49 +908,18 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         <FormLabel fontWeight="medium">Amount</FormLabel>
         <VStack width="100%" spacing={4}>
           <HStack width="100%" spacing={3}>
-            <NumberInput
-              value={mintAmount}
-              onChange={(valueString) => {
-                const value = parseFloat(valueString || '0');
-                const newAmount = isNaN(value) ? '0' : value.toFixed(4);
-                setMintAmount(newAmount);
-                if (!newAmount || parseFloat(newAmount) === 0) {
-                  setNeedsApproval(false);
-                  return;
-                }
-                checkAllowance();
-              }}
-              onBlur={() => {
-                // Validate and format on blur
-                const value = parseFloat(mintAmount || '0');
-                if (isNaN(value)) {
-                  setMintAmount('0.0000');
-                } else {
-                  const formatted = value.toFixed(4);
-                  setMintAmount(formatted);
-                  checkAllowance();
-                }
-              }}
-              min={0}
-              max={parseFloat(maxBalance)}
-              step={1}
-              precision={4}
+            <Input
+              ref={inputRef}
+              value={localMintAmount}
+              onChange={handleInputChange}
+              onBlur={handleInputBlur}
+              placeholder="Enter amount"
               isDisabled={!hasTokens}
-              flex={1}
               size="lg"
-              keepWithinRange={true}
-              clampValueOnBlur={true}
-            >
-              <NumberInputField 
-                borderColor="gray.200" 
-                _hover={{ borderColor: selectedTokenColor }}
-                _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
-              />
-              <NumberInputStepper>
-                <NumberIncrementStepper />
-                <NumberDecrementStepper />
-              </NumberInputStepper>
-            </NumberInput>
+              borderColor="gray.200"
+              _hover={{ borderColor: selectedTokenColor }}
+              _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
+            />
             <Button
               size="lg"
               onClick={() => {
@@ -917,38 +940,28 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           <Box width="100%" px={1}>
             <Slider
               value={parseFloat(mintAmount || '0')}
-              onChange={(value) => {
-                const newAmount = value.toFixed(4);
-                setMintAmount(newAmount);
-                if (!newAmount || parseFloat(newAmount) === 0) {
-                  setNeedsApproval(false);
-                  return;
-                }
-                checkAllowance();
-              }}
-              onChangeEnd={(value) => {
-                const newAmount = value.toFixed(4);
-                setMintAmount(newAmount);
-                checkAllowance();
-              }}
+              onChange={handleSliderChange}
               min={0}
-              max={parseFloat(maxBalance)}
-              step={1}
-              isDisabled={!hasTokens}
+              max={useDirectParentMint 
+                ? parseFloat(formatBalance(parentNodeBalance))
+                : parseFloat(formatBalance(userBalance))
+              }
+              step={0.0001}
+              isDisabled={!hasTokens || (useDirectParentMint && parseFloat(formatBalance(parentNodeBalance)) === 0)}
             >
               <SliderTrack bg="gray.200">
                 <SliderFilledTrack bg={selectedTokenColor} />
               </SliderTrack>
               <SliderThumb 
                 boxSize={6} 
-                bg={needsApproval ? 'yellow.400' : selectedTokenColor}
-                _focus={{ boxShadow: `0 0 0 3px ${needsApproval ? 'yellow.200' : `${selectedTokenColor}40`}` }}
+                bg={!useDirectParentMint && needsApproval ? 'yellow.400' : selectedTokenColor}
+                _focus={{ boxShadow: `0 0 0 3px ${!useDirectParentMint && needsApproval ? 'yellow.200' : `${selectedTokenColor}40`}` }}
               >
                 <Box 
                   color="white" 
-                  as={needsApproval ? AlertTriangle : Check} 
-                  size={needsApproval ? "12px" : "10px"}
-                  style={{ strokeWidth: needsApproval ? 3 : 2 }}
+                  as={!useDirectParentMint && needsApproval ? AlertTriangle : Check} 
+                  size={!useDirectParentMint && needsApproval ? "12px" : "10px"}
+                  style={{ strokeWidth: !useDirectParentMint && needsApproval ? 3 : 2 }}
                 />
               </SliderThumb>
             </Slider>
@@ -957,15 +970,18 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
           <Alert status="info" size="sm">
             <AlertIcon />
             <Text fontSize="sm">
-              Approved amount: {currentAllowance} {rootTokenSymbol}
+              {useDirectParentMint 
+                ? `Available parent balance: ${formatBalance(parentNodeBalance)} ${rootTokenSymbol}`
+                : `Approved amount: ${currentAllowance} ${rootTokenSymbol}`
+              }
             </Text>
           </Alert>
         </VStack>
 
         <Text fontSize="sm" color="gray.600" mt={3} textAlign="center">
           {useDirectParentMint 
-            ? "Mints tokens directly from parent node's reserve"
-            : "Mints tokens through the entire path from root"
+            ? "Mints tokens directly from parent node's balance (no approval needed)"
+            : "Mints tokens through the entire path from root (requires approval)"
           }
         </Text>
       </FormControl>
@@ -975,20 +991,22 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         {hasTokens ? (
           mintAmount && parseFloat(mintAmount) > 0 && (
             <Alert 
-              status={needsApproval ? "warning" : "success"}
+              status={!useDirectParentMint && needsApproval ? "warning" : "success"}
               borderRadius="lg"
-              bg={needsApproval ? "orange.50" : "green.50"}
+              bg={!useDirectParentMint && needsApproval ? "orange.50" : "green.50"}
             >
               <AlertIcon />
               <VStack align="start" spacing={1} width="100%">
                 <Text fontWeight="medium">
-                  {needsApproval 
+                  {!useDirectParentMint && needsApproval 
                     ? "Approval required before minting" 
                     : "Ready to mint"}
                 </Text>
                 <Text fontSize="sm" color="gray.600">
-                  Available balance: {maxBalance} {rootTokenSymbol}
-                  {needsApproval && ` (Need to approve: ${parseFloat(mintAmount).toFixed(4)})`}
+                  {useDirectParentMint 
+                    ? `Available parent balance: ${formatBalance(parentNodeBalance)} ${rootTokenSymbol}`
+                    : `Available balance: ${maxBalance} ${rootTokenSymbol}${needsApproval ? ` (Need to approve: ${parseFloat(mintAmount).toFixed(4)})` : ''}`
+                  }
                 </Text>
               </VStack>
             </Alert>
@@ -1006,7 +1024,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
         {hasTokens && (
           <Button
-            onClick={needsApproval ? handleApprove : () => useDirectParentMint ? handleMint() : handleMintPath()}
+            onClick={needsApproval && !useDirectParentMint ? handleApprove : () => useDirectParentMint ? handleMint() : handleMintPath()}
             isLoading={isProcessing}
             width="100%"
             size="lg"
@@ -1018,7 +1036,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
             _active={{ bg: `${selectedTokenColor}80` }}
             _disabled={{ bg: `${selectedTokenColor}40`, cursor: 'not-allowed' }}
           >
-            {needsApproval ? 'Approve Tokens' : (useDirectParentMint ? 'Mint from Parent' : 'Mint')}
+            {needsApproval && !useDirectParentMint ? 'Approve Tokens' : (useDirectParentMint ? 'Mint from Parent' : 'Mint')}
           </Button>
         )}
       </Box>
@@ -1086,10 +1104,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 _hover={{ borderColor: selectedTokenColor }}
                 _focus={{ borderColor: selectedTokenColor, boxShadow: `0 0 0 1px ${selectedTokenColor}` }}
               />
-              <NumberInputStepper>
-                <NumberIncrementStepper />
-                <NumberDecrementStepper />
-              </NumberInputStepper>
             </NumberInput>
             <Button
               size="lg"
@@ -1185,25 +1199,36 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
     <>
       {showToolbar && (
         <Box 
-          display="flex" 
-          justifyContent="flex-end" 
-          mb={4} 
-          px={6}
-          borderBottom="1px solid"
-          borderColor="gray.200"
-          py={4}
-          bg="gray.50"
+          display="flex"
+          alignItems="center"
+          color={selectedTokenColor}
+          justifyContent="center"
+          width="100%"
+          px={2}
+          py={2}
+          mb={2}
         >
           <ButtonGroup 
             size="sm" 
             spacing={3} 
             display="flex" 
             flexWrap="wrap" 
+            width="100%"
+            justifyContent="center"
             gap={2}
+            sx={{
+              '& button': {
+                height: '32px',
+                minWidth: '90px',
+                fontSize: '14px',
+                fontWeight: '700',
+                letterSpacing: '0.3px'
+              }
+            }}
           >
             <Tooltip label="Mint membership">
               <Button
-                leftIcon={<UserPlus size={16} color={selectedTokenColor} />}
+                leftIcon={<UserPlus size={17} color={selectedTokenColor} />}
                 onClick={handleMintMembership}
                 isDisabled={isMember}
                 colorScheme="purple"
@@ -1211,6 +1236,8 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
                 Join
               </Button>
@@ -1218,7 +1245,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Create new node">
               <Button
-                leftIcon={<GitBranchPlus size={16} color={selectedTokenColor} />}
+                leftIcon={<GitBranchPlus size={17} color={selectedTokenColor} />}
                 onClick={() => setActiveModal('spawn')}
                 colorScheme="purple"
                 variant="outline"
@@ -1226,20 +1253,24 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
                 isDisabled={!isMember}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
-                Spawn Node
+                Add Node
               </Button>
             </Tooltip>
 
             <Tooltip label="Redistribute value">
               <Button
-                leftIcon={<RefreshCw size={16} color={selectedTokenColor} />}
+                leftIcon={<RefreshCw size={17} color={selectedTokenColor} />}
                 onClick={handleRedistribute}
                 colorScheme="purple"
                 variant="outline"
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
                 Redistribute
               </Button>
@@ -1247,21 +1278,23 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
             <Tooltip label="Mint token">
               <Button
-                leftIcon={<Plus size={16} color={selectedTokenColor} />}
+                leftIcon={<Plus size={17} color={selectedTokenColor} />}
                 onClick={() => setActiveModal('mint')}
                 colorScheme="purple"
                 variant="outline"
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
-                Mint
+                Deposit
               </Button>
             </Tooltip>
 
             <Tooltip label="Burn tokens">
               <Button
-                leftIcon={<Trash size={16} color={selectedTokenColor} />}
+                leftIcon={<Trash size={17} color={selectedTokenColor} />}
                 onClick={() => {
                   setActiveModal('burn');
                   checkNodeBalance();
@@ -1271,8 +1304,10 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
                 borderColor={selectedTokenColor}
                 color={selectedTokenColor}
                 _hover={{ bg: `${selectedTokenColor}20` }}
+                fontWeight="700"
+                letterSpacing="0.3px"
               >
-                Burn
+                Withdraw
               </Button>
             </Tooltip>
           </ButtonGroup>

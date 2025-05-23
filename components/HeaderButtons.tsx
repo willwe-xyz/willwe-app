@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   HStack,
   Button,
@@ -27,6 +27,7 @@ import {
 import CreateToken from './CreateToken';
 import { DefineEntity } from './DefineEntity';
 import WillTokenPanel from './WillTokenPanel';
+import { resolveENS } from '../utils/ensUtils';
 
 interface HeaderButtonsProps {
   userAddress: string;
@@ -36,7 +37,6 @@ interface HeaderButtonsProps {
   selectedNodeId?: string;
   onNodeSelect: (nodeId: string) => void;
   isTransacting?: boolean;
-  buttonHoverBg?: string;
   selectedTokenColor: string;
 }
 
@@ -46,11 +46,25 @@ export default function HeaderButtons({
   logout,
   login,
   isTransacting,
-  buttonHoverBg = 'purple.50',
   selectedTokenColor,
 }: HeaderButtonsProps) {
   const { isOpen: isComposeOpen, onOpen: onComposeOpen, onClose: onComposeClose } = useDisclosure();
   const { isOpen: isWillOpen, onOpen: onWillOpen, onClose: onWillClose } = useDisclosure();
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchENS = async () => {
+      if (userAddress) {
+        const name = await resolveENS(userAddress);
+        if (!ignore) setResolvedName(name);
+      } else {
+        setResolvedName(null);
+      }
+    };
+    fetchENS();
+    return () => { ignore = true; };
+  }, [userAddress]);
 
   const modalContentStyles = {
     maxH: 'calc(100vh - 200px)',
@@ -62,15 +76,21 @@ export default function HeaderButtons({
   const buttonStyles = {
     size: "sm",
     variant: "outline",
-    colorScheme: "purple",
     _hover: { 
-      bg: buttonHoverBg,
+      bg: `${selectedTokenColor}20`,
       borderColor: selectedTokenColor,
-      color: selectedTokenColor
+      color: selectedTokenColor,
+      transform: 'translateY(-1px)',
+      shadow: 'sm'
+    },
+    _active: {
+      bg: `${selectedTokenColor}30`,
+      transform: 'translateY(0)'
     },
     isDisabled: isTransacting,
     borderColor: selectedTokenColor,
-    color: selectedTokenColor
+    color: selectedTokenColor,
+    transition: 'all 0.2s ease-in-out'
   };
 
   return (
@@ -78,7 +98,7 @@ export default function HeaderButtons({
       <HStack spacing={4}>
         
         {/* Will Button */}
-        <Tooltip label="Will Token Operations">
+        <Tooltip label="$WILL Token Hub">
           <Button
             leftIcon={<DollarSign size={18} />}
             onClick={onWillOpen}
@@ -106,7 +126,7 @@ export default function HeaderButtons({
             onClick={logout}
             {...buttonStyles}
           >
-            {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
+            {resolvedName || (userAddress.slice(0, 6) + '...' + userAddress.slice(-4))}
           </Button>
         ) : (
           <Button
@@ -195,9 +215,9 @@ export default function HeaderButtons({
                 <Tab
                   py={4}
                   _selected={{
-                    color: 'purple.600',
+                    color: selectedTokenColor,
                     borderBottom: '2px solid',
-                    borderColor: 'purple.600'
+                    borderColor: selectedTokenColor
                   }}
                 >
                   <HStack spacing={2}>
@@ -208,14 +228,14 @@ export default function HeaderButtons({
                 <Tab
                   py={4}
                   _selected={{
-                    color: 'purple.600',
+                    color: selectedTokenColor,
                     borderBottom: '2px solid',
-                    borderColor: 'purple.600'
+                    borderColor: selectedTokenColor
                   }}
                 >
                   <HStack spacing={2}>
                     <Users size={16} />
-                    <span>Define Entity</span>
+                    <span>Define</span>
                   </HStack>
                 </Tab>
               </TabList>

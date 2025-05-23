@@ -18,6 +18,7 @@ interface BalanceListProps {
   balances: AlchemyTokenBalance[];
   protocolBalances: AlchemyTokenBalance[];
   isLoading: boolean;
+  searchTerm: string;
 }
 
 const BalanceList: React.FC<BalanceListProps> = ({
@@ -29,12 +30,27 @@ const BalanceList: React.FC<BalanceListProps> = ({
   hoverColor,
   balances = [],
   protocolBalances = [],
-  isLoading
+  isLoading,
+  searchTerm
 }) => {
   const scrollContainer = useRef<HTMLDivElement>(null);
   const [showLeftScroll, setShowLeftScroll] = useState(false);
   const [showRightScroll, setShowRightScroll] = useState(true);
   const [baseColor] = useToken('colors', [contrastingColor]);
+
+  // Sort balances by token name
+  const sortedBalances = [...balances].sort((a, b) => 
+    (a.name || '').localeCompare(b.name || '')
+  );
+
+  // Filter balances based on search term
+  const filteredBalances = sortedBalances.filter(balance => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      balance.name?.toLowerCase().includes(searchLower) ||
+      balance.symbol?.toLowerCase().includes(searchLower)
+    );
+  });
 
   // Handle scroll visibility
   const checkScrollButtons = useCallback(() => {
@@ -107,7 +123,7 @@ const BalanceList: React.FC<BalanceListProps> = ({
         }}
       >
         <HStack spacing={4} height="100%">
-          {balances.map((balance) => {
+          {filteredBalances.map((balance) => {
             const protocolBalance = protocolBalances.find(
               p => p.contractAddress.toLowerCase() === balance.contractAddress.toLowerCase()
             );
