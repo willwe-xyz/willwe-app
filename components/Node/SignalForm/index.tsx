@@ -27,6 +27,7 @@ import SignalSlider from './SignalSlider';
 import ExistingSignalsTab from './ExistingSignalsTab';
 import Link from 'next/link';
 import { Signal, History } from 'lucide-react';
+import { isEndpoint, getEndpointDisplayName } from '../../../utils/formatters';
 
 
 interface SignalFormProps {
@@ -44,6 +45,7 @@ type ChildData = {
   membraneName: string;
   currentSignal: number;
   eligibilityPerSecond: string;
+  membersOfNode: string[];
 };
 
 interface MembraneMetadata {
@@ -75,6 +77,178 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
   const [isValidating, setIsValidating] = useState<Record<string, boolean>>({});
   const [membraneMetadata, setMembraneMetadata] = useState<MembraneMetadata | null>(null);
   const [membraneRequirements, setMembraneRequirements] = useState<MembraneRequirement[]>([]);
+  const [endpointNames, setEndpointNames] = useState<Map<string, string>>(new Map());
+
+  // Add fetchNodeData function
+  const fetchNodeData = useCallback(async (childId: string) => {
+    if (!ready || !chainId || !user?.wallet?.address) return null;
+
+    try {
+      const cleanChainId = chainId.replace('eip155:', '');
+      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
+      
+      if (!deployments.WillWe[cleanChainId]) {
+        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      }
+      
+      const contract = new ethers.Contract(
+        deployments.WillWe[cleanChainId],
+        ABIs.WillWe,
+        provider
+      );
+
+      const node = await contract.getNodeData(childId, user.wallet.address);
+      if (!node?.basicInfo?.[0]) return null;
+
+      let membraneName = node.basicInfo[0].slice(-6);
+      let membersOfNode = node.membersOfNode || [];
+      
+      try {
+        if (node.membraneMeta && typeof node.membraneMeta === 'string' && node.membraneMeta.trim() !== '') {
+          const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
+          const metadataUrl = `${IPFS_GATEWAY}${node.membraneMeta.trim()}`;
+          
+          const response = await fetch(metadataUrl);
+          if (response.ok) {
+            const metadata = await response.json();
+            membraneName = metadata.title || metadata.name || membraneName;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching membrane metadata:', error);
+      }
+
+      // Get the signal value for this child
+      let currentSignalBasisPoints = 0;
+      try {
+        const signals = await contract.getUserNodeSignals(user.wallet.address, nodeId);
+        const childIndex = parentNodeData?.childrenNodes?.indexOf(childId);
+        if (childIndex !== undefined && childIndex >= 0 && signals.length > childIndex + 2) {
+          currentSignalBasisPoints = Number(signals[childIndex + 2]);
+        }
+      } catch (error) {
+        console.error('Error fetching signals:', error);
+      }
+
+      return {
+        nodeId: node.basicInfo[0],
+        parentId: nodeId,
+        membraneId: node.basicInfo[5],
+        membraneName,
+        currentSignal: currentSignalBasisPoints,
+        eligibilityPerSecond: '0',
+        membersOfNode,
+      };
+    } catch (error) {
+      console.error('Error fetching node data:', error);
+      return null;
+    }
+  }, [chainId, nodeId, parentNodeData?.childrenNodes, ready, user?.wallet?.address]);
+
+  // Add endpoint name resolution
+  useEffect(() => {
+    const fetchEndpointNames = async () => {
+      if (!parentNodeData?.childrenNodes) return;
+
+      const endpointLabels = new Map<string, string>();
+      try {
+        const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
+        const executionAddress = deployments.Execution[chainId.toString()];
+
+        await Promise.all(parentNodeData.childrenNodes.map(async (childId) => {
+          // Check if this is an endpoint by checking its rootPath
+          if (parentNodeData.rootPath && parentNodeData.rootPath.length > 0) {
+            const parentNodeId = parentNodeData.rootPath[parentNodeData.rootPath.length - 1];
+            if (isEndpoint(childId, parentNodeId)) {
+              const endpointName = await getEndpointDisplayName(
+                childId,
+                parentNodeId,
+                provider,
+                executionAddress,
+                chainId.toString()
+              );
+              if (endpointName) {
+                endpointLabels.set(childId, endpointName);
+              }
+            }
+          }
+        }));
+
+        setEndpointNames(endpointLabels);
+      } catch (error) {
+        console.error('Error fetching endpoint names:', error);
+      }
+    };
+
+    fetchEndpointNames();
+  }, [parentNodeData?.childrenNodes, parentNodeData?.rootPath, nodeId, chainId]);
+
+  // Update the children data mapping to include endpoint names
+  useEffect(() => {
+    const loadChildrenData = async () => {
+      if (!parentNodeData?.childrenNodes) {
+        setLoadingChildren(false);
+        return;
+      }
+
+      try {
+        const children = await Promise.all(
+          parentNodeData.childrenNodes.map(async (childId) => {
+            const childData = await fetchNodeData(childId);
+            if (!childData) return null;
+
+            let displayName = childData.membraneName || childId.slice(-6);
+            // Use isEndpoint logic as in SankeyChart
+            if (isEndpoint(childId, nodeId)) {
+              // Use getEndpointDisplayName for endpoint label
+              const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
+              const executionAddress = deployments.Execution[chainId.toString()];
+              let endpointDisplay = await getEndpointDisplayName(
+                childId,
+                nodeId,
+                provider,
+                executionAddress,
+                chainId.toString()
+              );
+              // Only append 0x... if not a user endpoint (door emoji)
+              if (endpointDisplay && !endpointDisplay.startsWith('🚪') && endpointDisplay.length === 2 && !/\w/.test(endpointDisplay)) {
+                endpointDisplay += ` 0x${childId.slice(0, 6)}`;
+              }
+              displayName = endpointDisplay;
+            }
+
+            // Initialize slider value for this child
+            setSliderValues(prev => ({
+              ...prev,
+              [childId]: childData.currentSignal || 0
+            }));
+
+            return {
+              nodeId: childId,
+              parentId: nodeId,
+              membraneId: childData.membraneId || '',
+              membraneName: displayName,
+              currentSignal: childData.currentSignal || 0,
+              eligibilityPerSecond: childData.eligibilityPerSecond || '0',
+            };
+          })
+        );
+
+        const validChildren = children.filter(Boolean) as ChildData[];
+        setChildrenData(validChildren);
+
+        // Calculate initial total allocation
+        const initialTotal = validChildren.reduce((sum, child) => sum + (child.currentSignal || 0), 0);
+        setTotalAllocation(initialTotal);
+      } catch (error) {
+        console.error('Error fetching children data:', error);
+      } finally {
+        setLoadingChildren(false);
+      }
+    };
+
+    loadChildrenData();
+  }, [parentNodeData?.childrenNodes, nodeId, endpointNames, fetchNodeData]);
 
   // Move this function before handleMembraneChange
   const validateAndFetchMembraneData = useCallback(async (membraneId: string) => {
@@ -307,207 +481,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
     inflationRates
   ]);
 
-  // Fetch children data
-  const fetchChildrenData = useCallback(async () => {
-    // Add more detailed validation
-    if (!ready) {
-      console.log('Privy not ready');
-      setLoadingChildren(false);
-      return;
-    }
-    
-    if (!chainId) {
-      console.log('No chainId provided');
-      setLoadingChildren(false);
-      return;
-    }
-    
-    if (!parentNodeData) {
-      console.log('No parent node data');
-      setLoadingChildren(false);
-      return;
-    }
-    
-    if (!user?.wallet?.address) {
-      console.log('No wallet address');
-      setLoadingChildren(false);
-      return;
-    }
-
-    try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
-      
-      // Validate contract address
-      if (!deployments.WillWe[cleanChainId]) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-      
-      const contract = new ethers.Contract(
-        deployments.WillWe[cleanChainId],
-        ABIs.WillWe,
-        provider
-      );
-
-      // Validate children nodes exist
-      if (!parentNodeData.childrenNodes || parentNodeData.childrenNodes.length === 0) {
-        setChildrenData([]);
-        setLoadingChildren(false);
-        return;
-      }
-
-      // Use getAllNodesForRoot instead of getNodes, which was removed
-      // First, get the root address from the parent node data
-      const rootId = parentNodeData.rootPath && parentNodeData.rootPath.length > 0 ? 
-        parentNodeData.rootPath[0] : nodeId;
-      
-      console.log('Getting nodes for root ID:', rootId);
-      
-      let childNodes: any[] = [];
-      
-      try {
-        // getAllNodesForRoot takes an address as the first parameter, not an ID
-        // Convert rootId to an address
-        const rootAddress = ethers.getAddress(ethers.toBeHex(rootId, 20));
-        
-        // Get the user address
-        const userAddress = user?.wallet?.address ? 
-          ethers.getAddress(user.wallet.address) : ethers.ZeroAddress;
-        
-        console.log('Root ID converted to address:', rootAddress);
-        console.log('User address:', userAddress);
-        
-        // Call getAllNodesForRoot with address parameters
-        const allNodesForRoot = await contract.getAllNodesForRoot(rootAddress, userAddress);
-        
-        // Filter nodes to only include the children nodes we need
-        const childNodeIds = parentNodeData.childrenNodes.map(id => id.toString());
-        childNodes = allNodesForRoot.filter((node: any) => 
-          node && node.basicInfo && childNodeIds.includes(node.basicInfo[0].toString())
-        );
-      } catch (error) {
-        console.error('Error using getAllNodesForRoot:', error);
-        console.log('Falling back to individual node queries');
-        
-        // Fallback: Get nodes individually
-        const nodePromises = parentNodeData.childrenNodes.map(childId => 
-          contract.getNodeData(childId, user?.wallet?.address)
-            .catch(err => {
-              console.error(`Error getting data for node ${childId}:`, err);
-              return null;
-            })
-        );
-        
-        childNodes = await Promise.all(nodePromises);
-        childNodes = childNodes.filter(Boolean);
-      }
-      
-
-      // Add validation for childNodes
-      if (!childNodes || childNodes.length === 0) {
-        throw new Error('No child nodes returned from contract');
-      }
-
-      // Get signals for the parent node
-      let parentSignals: string[] = [];
-      try {
-        const signals = await contract.getUserNodeSignals(
-          user?.wallet?.address,
-          nodeId
-        );
-        parentSignals = signals.map((signal: any) => signal.toString());
-        console.log('Parent node signals:', parentSignals);
-      } catch (error) {
-        console.error('Error fetching parent signals:', error);
-        parentSignals = [];
-      }
-
-      const childrenWithMetadata = await Promise.all(
-        childNodes.map(async (node: any, index: number) => {
-          // Validate node data
-          if (!node?.basicInfo?.[0]) {
-            console.error('Invalid node data:', node);
-            return null;
-          }
-
-          // Rest of your mapping logic...
-          let membraneName = node.basicInfo[0].slice(-6);
-          
-          try {
-            if (node.membraneMeta && typeof node.membraneMeta === 'string' && node.membraneMeta.trim() !== '') {
-              const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
-              const metadataUrl = `${IPFS_GATEWAY}${node.membraneMeta.trim()}`;
-              
-              
-              const response = await fetch(metadataUrl);
-              if (response.ok) {
-                const metadata = await response.json();
-                membraneName = metadata.title || metadata.name || membraneName;
-              } else {
-                console.error('Failed to fetch metadata:', response.status, response.statusText);
-              }
-            }
-          } catch (error) {
-            console.error('Error fetching membrane metadata:', error);
-          }
-
-          // Get the signal value for this child from the parent's signals array
-          // The first two elements are membrane and inflation, then child signals follow
-          let currentSignalBasisPoints = 0;
-          const childIndex = index + 2; // +2 to skip membrane and inflation values
-          if (parentSignals.length > childIndex) {
-            currentSignalBasisPoints = Number(parentSignals[childIndex]);
-          }
-
-          return {
-            nodeId: node.basicInfo[0],
-            parentId: nodeId,
-            membraneId: node.basicInfo[5],
-            membraneName,
-            currentSignal: currentSignalBasisPoints,
-            eligibilityPerSecond: '0'
-          };
-        })
-      );
-
-      // Filter out any null values from failed mappings
-      const validChildren = childrenWithMetadata.filter(child => child !== null);
-      
-      if (validChildren.length === 0) {
-        throw new Error('No valid children data could be processed');
-      }
-
-      // Initialize sliders with values from parent signals
-      const initialValues = childrenWithMetadata
-        .filter((child): child is ChildData => child !== null)
-        .reduce((acc, child, index) => {
-          const childIndex = index + 2; // +2 to skip membrane and inflation values
-          // Convert basis points to percentage (10000 = 100%)
-          const signalValue = parentSignals[childIndex] ? Number(parentSignals[childIndex]) / 100 : 0;
-          acc[child.nodeId] = signalValue;
-          return acc;
-        }, {} as Record<string, number>);
-      
-      setSliderValues(initialValues);
-      
-      // Calculate initial total
-      const initialTotal = Object.values(initialValues).reduce((sum, val) => sum + val, 0);
-      setTotalAllocation(initialTotal);
-
-      setChildrenData(childrenWithMetadata.filter((child): child is ChildData => child !== null));
-
-    } catch (error) {
-      console.error('Error in fetchChildrenData:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load children nodes');
-    } finally {
-      setLoadingChildren(false);
-    }
-  }, [chainId, parentNodeData, user?.wallet?.address, ready, nodeId]);
-
-  useEffect(() => {
-    fetchChildrenData();
-  }, [fetchChildrenData]);
-
   // Handle selecting a membrane from existing signals
   const handleSelectMembrane = useCallback((membraneId: string) => {
     handleMembraneChange(nodeId, membraneId);
@@ -616,17 +589,17 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                       <SignalSlider
                         nodeId={nodeId}
                         parentId={child.nodeId}
-                        value={sliderValues[child.nodeId]}
-                        lastSignal={(child.currentSignal).toString()}
-                        balance={child.eligibilityPerSecond}
-                        eligibilityPerSecond={child.eligibilityPerSecond}
+                        value={sliderValues[child.nodeId] ?? 0}
+                        lastSignal={(child.currentSignal || 0).toString()}
+                        balance={child.eligibilityPerSecond || '0'}
+                        eligibilityPerSecond={child.eligibilityPerSecond || '0'}
                         totalInflationPerSecond="0"
                         onChange={(v) => handleSliderChange(child.nodeId, v)}
                         onChangeEnd={(v) => handleSliderChange(child.nodeId, v)}
                         isDisabled={isSubmitting}
                         selectedTokenColor="purple.500"
                         chainId={chainId}
-                        totalAllocation={totalAllocation}
+                        totalAllocation={totalAllocation || 0}
                       />
                     </VStack>
                   </Box>

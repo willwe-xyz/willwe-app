@@ -835,25 +835,20 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    console.log('onChange triggered with:', value);
     // Allow any numeric input
     if (value === '' || /^\d*\.?\d*$/.test(value)) {
-      console.log('Setting localMintAmount to:', value);
       setLocalMintAmount(value);
     }
   }, []);
 
   const handleInputBlur = useCallback(() => {
-    console.log('onBlur triggered with localMintAmount:', localMintAmount);
     if (localMintAmount) {
       const value = parseFloat(localMintAmount);
-      console.log('Parsed value:', value);
       if (!isNaN(value)) {
         const maxValue = useDirectParentMint 
           ? parseFloat(formatBalance(parentNodeBalance))
           : parseFloat(formatBalance(userBalance));
         const finalValue = Math.min(value, maxValue);
-        console.log('Final value after max check:', finalValue);
         const formattedValue = finalValue.toString();
         setMintAmount(formattedValue);
         setLocalMintAmount(formattedValue);
@@ -867,7 +862,6 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   }, [localMintAmount, userBalance, parentNodeBalance, useDirectParentMint, checkAllowance]);
 
   const handleSliderChange = useCallback((value: number) => {
-    console.log('Slider onChange:', value);
     const newValue = value.toString();
     setMintAmount(newValue);
     setLocalMintAmount(newValue);
