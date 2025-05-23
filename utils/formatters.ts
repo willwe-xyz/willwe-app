@@ -93,7 +93,6 @@ export const getEndpointDisplayName = async (
   nodeId: string,
   parentNodeId: string,
   provider: ethers.Provider,
-  executionAddress: string,
   chainId: string
 ): Promise<string> => {
   // If not an endpoint, return empty string
@@ -105,8 +104,8 @@ export const getEndpointDisplayName = async (
     // Get the endpoint address
     const endpointAddress = nodeIdToAddress(nodeId);
 
-    // Get the WillWe contract address for this chain
-    const willweAddress = deployments.WillWe[chainId];
+    // Get the Execution contract address for this chain
+    const executionAddress = deployments.Execution[chainId];
 
     // Call owner() on the endpoint (PowerProxy) contract
     const powerProxy = new ethers.Contract(
@@ -116,17 +115,17 @@ export const getEndpointDisplayName = async (
     );
     const ownerAddress = await powerProxy.owner();
 
-    // If owner is WillWe contract, it's an execution endpoint
-    if (ownerAddress.toLowerCase() === willweAddress.toLowerCase()) {
-      // WillWe (execution) endpoint: random emoji
+    // If owner is Execution contract, it's an execution endpoint
+    if (ownerAddress.toLowerCase() === executionAddress.toLowerCase()) {
+      // Execution endpoint: random emoji
       try {
         // Get all endpoints for this parent node
-        const willweContract = new ethers.Contract(
-          willweAddress,
-          ABIs.WillWe,
+        const executionContract = new ethers.Contract(
+          executionAddress,
+          ABIs.Execution,
           provider
         );
-        const nodeData = await willweContract.getNodeData(parentNodeId);
+        const nodeData = await executionContract.getNodeData(parentNodeId);
         const endpoints = nodeData.movementEndpoints || [];
         const index = endpoints.findIndex((ep: string) => ep.toLowerCase() === endpointAddress.toLowerCase());
         const emojiIndex = index % ENDPOINT_EMOJIS.length;

@@ -125,7 +125,6 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
                 nodeId,
                 parentNodeId,
                 provider,
-                executionAddress,
                 chainId.toString()
               );
               if (endpointName) {

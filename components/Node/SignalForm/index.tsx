@@ -164,7 +164,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 childId,
                 parentNodeId,
                 provider,
-                executionAddress,
                 chainId.toString()
               );
               if (endpointName) {
@@ -207,7 +206,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 childId,
                 nodeId,
                 provider,
-                executionAddress,
                 chainId.toString()
               );
               // Only append 0x... if not a user endpoint (door emoji)
