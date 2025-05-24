@@ -12,11 +12,9 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const router = useRouter();
-  const { user, logout, login } = usePrivy();
-  const {  selectToken, selectedNodeId } = useNode();
+  const { user, logout, login, authenticated } = usePrivy();
+  const { selectToken, selectedNodeId } = useNode();
   const { colorState, cycleColors } = useColorManagement();
-
-
 
   // Handle node selection
   const handleNodeSelect = useCallback((nodeId: string) => {
@@ -26,12 +24,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     }
   }, [router, user?.wallet?.chainId]);
 
+  // Handle logout with authentication check
+  const handleLogout = useCallback(async () => {
+    if (authenticated) {
+      await logout();
+      router.push('/');
+    }
+  }, [authenticated, logout, router]);
+
   return (
     <MainLayout
       headerProps={{
         userAddress: user?.wallet?.address,
         chainId: user?.wallet?.chainId || '',
-        logout,
+        logout: handleLogout,
         login,
         onNodeSelect: handleNodeSelect,
         selectedNodeId: selectedNodeId || '',
@@ -39,6 +45,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         contrastingColor: colorState.contrastingColor,
         reverseColor: colorState.reverseColor,
         cycleColors,
+        selectedTokenColor: colorState.contrastingColor
       }}
     >
       {children}
