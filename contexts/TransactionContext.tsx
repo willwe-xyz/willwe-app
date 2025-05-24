@@ -42,8 +42,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       options?: TransactionOptions
     ) => {
       if (!authenticated) {
-        await login();
-        return;
+        throw new Error('User not authenticated');
       }
 
       if (!ready || !user?.wallet) {
