@@ -1,34 +1,21 @@
+import { NextApiRequest, NextApiResponse } from 'next';
 import { ethers } from 'ethers';
-import { getRPCUrl } from '../config/contracts';
 import { createPublicClient, http, keccak256, type Address } from 'viem';
 import { base } from 'viem/chains';
 
-/**
- * Type definition for Base ENS names (always ending with .base.eth)
- */
-export type BaseENSName = `${string}.base.eth`;
-
-/**
- * Base L2 Reverse Registrar contract address
- */
+// Base L2 Reverse Registrar contract address
 const BASE_REVERSE_REGISTRAR = '0x79ea96012eea67a83431f1701b3dff7e37f9e282';
 
-/**
- * Base L2 Resolver contract address
- */
+// Base L2 Resolver contract address
 const BASE_RESOLVER = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD';
 
-/**
- * RPC client for Base network
- */
+// RPC client for Base network
 const baseRpcClient = createPublicClient({
   chain: base,
-  transport: http(process.env.NEXT_PUBLIC_RPC_URL_BASE || 'https://mainnet.base.org'),
+  transport: http(process.env.RPC_URL_BASE || 'https://mainnet.base.org'),
 });
 
-/**
- * ABI for the reverse registrar's node function
- */
+// ABI for the reverse registrar's node function
 const REVERSE_REGISTRAR_ABI = [
   {
     inputs: [{ type: 'address', name: 'addr' }],
@@ -39,9 +26,7 @@ const REVERSE_REGISTRAR_ABI = [
   }
 ];
 
-/**
- * ABI for the resolver's name function
- */
+// ABI for the resolver's name function
 const RESOLVER_ABI = [
   {
     inputs: [{ type: 'bytes32', name: 'node' }],
@@ -61,17 +46,6 @@ interface CacheEntry {
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const addressResolutionCache = new Map<string, CacheEntry>();
 
-// Debug function to log cache state
-const logCacheState = (address: string, action: string) => {
-  // if (process.env.NODE_ENV === 'development') {
-  //   console.log(`Cache ${action} for ${address}:`, {
-  //     cacheSize: addressResolutionCache.size,
-  //     hasEntry: addressResolutionCache.has(address.toLowerCase()),
-  //     entry: addressResolutionCache.get(address.toLowerCase())
-  //   });
-  // }
-};
-
 // Function to check if cache entry is still valid
 const isCacheValid = (entry: CacheEntry): boolean => {
   return Date.now() - entry.timestamp < CACHE_TTL;
@@ -83,14 +57,7 @@ const getFromCache = (address: string): string | null => {
   const entry = addressResolutionCache.get(lowerAddress);
   
   if (entry && isCacheValid(entry)) {
-    logCacheState(lowerAddress, 'HIT');
     return entry.value;
-  }
-  
-  if (entry) {
-    logCacheState(lowerAddress, 'EXPIRED');
-  } else {
-    logCacheState(lowerAddress, 'MISS');
   }
   
   return null;
@@ -103,7 +70,6 @@ const setCache = (address: string, value: string) => {
     value,
     timestamp: Date.now()
   });
-  logCacheState(lowerAddress, 'SET');
 };
 
 /**
@@ -134,7 +100,7 @@ function calculateNameHash(name: string): `0x${string}` {
 /**
  * Lookup the Base ENS name for an Ethereum address
  */
-async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined> {
+async function lookupBaseENS(address: Address): Promise<string | undefined> {
   try {
     // First get the node for the address from ReverseRegistrar
     const node = await baseRpcClient.readContract({
@@ -153,7 +119,7 @@ async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined>
     });
     
     if (result && typeof result === 'string' && result.endsWith('.base.eth')) {
-      return result as BaseENSName;
+      return result;
     }
     return undefined;
   } catch (error) {
@@ -164,7 +130,7 @@ async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined>
 /**
  * Resolves an Ethereum address to its Base ENS name first, then regular ENS name if available, otherwise returns a truncated address
  */
-export async function resolveENS(address: string): Promise<string> {
+async function resolveENS(address: string): Promise<string> {
   if (!address || !ethers.isAddress(address)) {
     return address;
   }
@@ -178,53 +144,47 @@ export async function resolveENS(address: string): Promise<string> {
   }
 
   try {
-    const response = await fetch(`/api/ens/resolve?address=${address}`);
-    if (!response.ok) {
-      throw new Error('Failed to resolve ENS name');
+    // First try to resolve Base ENS
+    const baseENSName = await lookupBaseENS(address as Address);
+    if (baseENSName) {
+      setCache(lowerAddress, baseENSName);
+      return baseENSName;
     }
-    const data = await response.json();
-    setCache(lowerAddress, data.name);
-    return data.name;
+
+    // If no Base ENS, try regular ENS
+    const mainnetProvider = new ethers.JsonRpcProvider(process.env.RPC_URL_MAINNET);
+    const ensName = await mainnetProvider.lookupAddress(address);
+    
+    if (ensName) {
+      setCache(lowerAddress, ensName);
+      return ensName;
+    }
   } catch (error) {
-    // Fallback to truncated address
-    const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-    setCache(lowerAddress, truncatedAddress);
-    return truncatedAddress;
+    // Error handling without console.log
   }
+
+  // Fallback to truncated address
+  const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+  setCache(lowerAddress, truncatedAddress);
+  return truncatedAddress;
 }
 
-/**
- * Batch resolves multiple addresses to their ENS names
- * This is more efficient than resolving one by one
- */
-export async function resolveMultipleENS(addresses: string[]): Promise<Record<string, string>> {
-  const uniqueAddresses = Array.from(new Set(addresses.map(addr => addr.toLowerCase())));
-  const results: Record<string, string> = {};
-  
-  // First check cache for all addresses
-  const addressesToResolve: string[] = [];
-  
-  for (const address of uniqueAddresses) {
-    const cached = getFromCache(address);
-    if (cached) {
-      results[address] = cached;
-    } else {
-      addressesToResolve.push(address);
-    }
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // If all addresses were cached, return early
-  if (addressesToResolve.length === 0) {
-    return results;
+  const { address } = req.query;
+
+  if (!address || typeof address !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid address parameter' });
   }
 
-  // Resolve remaining addresses in parallel
-  const resolutionPromises = addressesToResolve.map(async (address) => {
-    const resolved = await resolveENS(address);
-    results[address] = resolved;
-    return { address, resolved };
-  });
-
-  await Promise.all(resolutionPromises);
-  return results;
+  try {
+    const resolvedName = await resolveENS(address);
+    res.status(200).json({ name: resolvedName });
+  } catch (error) {
+    console.error('Error resolving ENS:', error);
+    res.status(500).json({ error: 'Failed to resolve ENS name' });
+  }
 } 

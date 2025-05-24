@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Alchemy } from 'alchemy-sdk';
 import { AlchemyTokenBalance } from './useAlchemyBalances';
-import { getAlchemyNetwork } from '../config/deployments';
 import { deployments } from '../config/deployments';
 
 export function useWillBalances(chainId: string) {
@@ -14,34 +12,12 @@ export function useWillBalances(chainId: string) {
     setError(null);
 
     try {
-      const alchemy = new Alchemy({
-        apiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || '',
-        network: getAlchemyNetwork(chainId)
-      });
-
-      const response = await alchemy.core.getTokenBalances(deployments.WillWe[chainId]);
-      const nonZeroBalances = response.tokenBalances.filter(
-        token => token.tokenBalance !== "0"
-      );
-
-      const formattedBalances = await Promise.all(
-        nonZeroBalances.map(async (token) => {
-          const metadata = await alchemy.core.getTokenMetadata(token.contractAddress);
-          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
-          
-          return {
-            contractAddress: token.contractAddress,
-            tokenBalance: token.tokenBalance,
-            name: metadata.name || 'Unknown Token',
-            symbol: metadata.symbol || '???',
-            decimals: metadata.decimals,
-            logo: metadata.logo,
-            formattedBalance: balance.toFixed(2)
-          };
-        })
-      );
-
-      setWillBalanceItems(formattedBalances);
+      const response = await fetch(`/api/alchemy/balances?address=${deployments.WillWe[chainId]}&chainId=${chainId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch balances');
+      }
+      const data = await response.json();
+      setWillBalanceItems(data.balances);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('An error occurred while fetching balances'));
     } finally {
