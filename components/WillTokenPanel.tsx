@@ -258,16 +258,27 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
     }
   };
 
-  if (!isWalletConnected) {
+  if (!authenticated) {
     return (
       <Box p={6}>
         <Alert status="warning" mb={4}>
           <AlertIcon />
-          Please connect your wallet to interact with the Will token
+          Please log in to interact with the Will token
         </Alert>
         <Button onClick={login} colorScheme="blue">
-          Connect Wallet
+          Log In
         </Button>
+      </Box>
+    );
+  }
+
+  if (authenticated && !isWalletConnected) {
+    return (
+      <Box p={6}>
+        <Alert status="warning" mb={4}>
+          <AlertIcon />
+          Please connect your wallet in MetaMask to interact with the Will token
+        </Alert>
       </Box>
     );
   }
