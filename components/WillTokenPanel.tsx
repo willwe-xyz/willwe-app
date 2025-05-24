@@ -46,11 +46,27 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
   // Use Privy wallet connection
   const walletConnected = !!user?.wallet?.address;
 
-  // Get token balances using Alchemy
+  // Get token balances using Alchemy for user
   const { balances: tokenBalances, isLoading: isLoadingBalances } = useAlchemyBalances(
     userAddress,
     chainId
   );
+
+  // Get token balances using Alchemy for Will contract
+  const { balances: willTokenBalances, isLoading: isLoadingWillTokenBalances } = useAlchemyBalances(
+    deployments.Will[chainId],
+    chainId
+  );
+
+  // Deduplicate Will contract token balances by contract address
+  const uniqueWillTokenBalances = willTokenBalances
+    ? Object.values(
+        willTokenBalances.reduce((acc, token) => {
+          acc[token.contractAddress] = token;
+          return acc;
+        }, {} as Record<string, typeof willTokenBalances[0]>)
+      )
+    : [];
 
   // Get Will contract instance using Privy provider
   const getWillContract = async () => {
@@ -327,7 +343,7 @@ const WillTokenPanel: React.FC<WillTokenPanelProps> = ({ chainId, userAddress, o
                 onChange={(e) => setSelectedTokens(Array.from(e.target.selectedOptions, option => option.value))}
                 multiple
               >
-                {tokenBalances?.map((token) => (
+                {uniqueWillTokenBalances.map((token) => (
                   <option key={token.contractAddress} value={token.contractAddress}>
                     {token.name} ({token.symbol})
                   </option>
