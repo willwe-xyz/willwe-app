@@ -96,8 +96,17 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           return;
         }
 
-        const symbol = await tokenContract.symbol();
-        setTokenSymbol(symbol);
+        // Use our internal API endpoint to get token metadata
+        const response = await fetch(`/api/tokens/metadata?address=${tokenAddress}&chainId=${cleanChainId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch token metadata');
+        }
+        const data = await response.json();
+        if (data.metadata?.symbol) {
+          setTokenSymbol(data.metadata.symbol);
+        } else {
+          setTokenSymbol('$TOKEN');
+        }
       } catch (error) {
         console.error('Error fetching token symbol:', error);
         setTokenSymbol('$TOKEN');
@@ -105,7 +114,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     };
 
     fetchTokenSymbol();
-  }, [nodeData, cleanChainId, provider, tokenContract, tokenAddress]);
+  }, [nodeData, cleanChainId, provider, tokenAddress]);
   
   // Theme colors
   const bgColor = useColorModeValue('white', 'gray.800');

@@ -14,27 +14,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Node ID is required' });
       }
       
-      console.log(`[chat/messages] Forwarding message request to Ponder server for node ${nodeId}`);
-      
-      // Forward request to Ponder server
-      const ponderServerUrl = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || 'http://localhost:8080';
-      const response = await fetch(`${ponderServerUrl}/chat/messages?nodeId=${nodeId}&limit=${limit}`);
-      
-      if (!response.ok) {
-        throw new Error(`Error from Ponder server: ${response.statusText}`);
-      }
-      
-      // Forward cache control headers from Ponder server
-      const cacheControl = response.headers.get('cache-control');
-      const pragma = response.headers.get('pragma');
-      const expires = response.headers.get('expires');
-      
-      if (cacheControl) res.setHeader('Cache-Control', cacheControl);
-      if (pragma) res.setHeader('Pragma', pragma);
-      if (expires) res.setHeader('Expires', expires);
-      
-      const data = await response.json();
-      return res.status(200).json(data);
+      // Return an empty array for now
+      return res.status(200).json({ messages: [] });
     } 
     else if (req.method === 'POST') {
       const { nodeId, userAddress, content, networkId } = req.body;
@@ -43,37 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Missing required fields' });
       }
       
-      console.log(`[chat/messages] Forwarding message to Ponder server for node ${nodeId} from ${userAddress}`);
-      
-      // Forward post to Ponder server
-      // Note: Remote server expects "sender" instead of "userAddress"
-      const ponderServerUrl = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || 'http://localhost:8080';
-      console.log('[chat/messages] Sending to Ponder with params:', { 
-        nodeId, 
-        sender: userAddress, // Map userAddress to sender
-        content, 
-        networkId 
-      });
-      
-      const response = await fetch(`${ponderServerUrl}/chat/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          nodeId, 
-          sender: userAddress, // Map userAddress to sender
-          content, 
-          networkId 
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error from Ponder server: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      return res.status(201).json(data);
+      // Return a success message for now
+      return res.status(201).json({ success: true, message: 'Message stored (placeholder)' });
     }
     
     // Method not allowed

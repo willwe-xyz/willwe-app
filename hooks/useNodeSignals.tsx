@@ -128,8 +128,13 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
 
     try {
       const cleanChainId = chainId.replace('eip155:', '');
-      const ponderServerUrl = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || 'http://localhost:8080';
-      const response = await fetch(`${ponderServerUrl}/getNodeConfigSignals?nodeId=${nodeId}&chainId=${cleanChainId}`);
+      // const ponderServerUrl = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || 'http://localhost:8080';
+      const apiUrl = (endpoint: string) => {
+        // Always use internal API endpoints
+        if (endpoint.startsWith('/')) return endpoint;
+        return `/${endpoint}`;
+      };
+      const response = await fetch(apiUrl(`/getNodeConfigSignals?nodeId=${nodeId}&chainId=${cleanChainId}`));
       
       if (!response.ok) {
         throw new Error(`Error fetching node signals: ${response.statusText}`);

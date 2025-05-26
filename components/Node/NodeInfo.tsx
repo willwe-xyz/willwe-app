@@ -106,6 +106,34 @@ const calculateMetrics = (node: NodeState): NodeMetrics => {
   };
 };
 
+const fetchNodeMetadata = async (membraneMeta: string, chainId: string) => {
+  try {
+    if (!membraneMeta || membraneMeta.trim() === '') return null;
+
+    // Check if it's an IPFS hash (starts with Qm)
+    if (membraneMeta.trim().startsWith('Qm')) {
+      // Use our new IPFS metadata endpoint
+      const response = await fetch(`/api/ipfs/metadata?cid=${membraneMeta.trim()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch IPFS metadata');
+      }
+      const data = await response.json();
+      return data.metadata;
+    } else {
+      // Use token metadata endpoint for addresses
+      const response = await fetch(`/api/tokens/metadata?address=${membraneMeta.trim()}&chainId=${chainId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch token metadata');
+      }
+      const data = await response.json();
+      return data.metadata;
+    }
+  } catch (error) {
+    console.error('Error fetching node metadata:', error);
+    return null;
+  }
+};
+
 const NodeInfo: React.FC<NodeInfoProps> = ({ 
   node, 
   chainId, 
@@ -163,11 +191,16 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       try {
         setIsLoadingTitle(true);
         setIsLoadingCharacteristics(true);
-        const response = await fetch(`${IPFS_GATEWAY}${node.membraneMeta}`);
-        const data = await response.json();
-        setMembraneTitle(data.name || 'Unnamed Membrane');
-        setMembraneCharacteristics(data.characteristics || []);
-        setMembraneRequirements(data.membershipConditions || []);
+        const metadata = await fetchNodeMetadata(node.membraneMeta, chainId);
+        if (metadata) {
+          setMembraneTitle(metadata.name || 'Unnamed Membrane');
+          setMembraneCharacteristics(metadata.characteristics || []);
+          setMembraneRequirements(metadata.membershipConditions || []);
+        } else {
+          setMembraneTitle('Unknown Membrane');
+          setMembraneCharacteristics([]);
+          setMembraneRequirements([]);
+        }
       } catch (error) {
         console.error('Error fetching membrane metadata:', error);
         setMembraneTitle('Unknown Membrane');
@@ -180,7 +213,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
     };
 
     fetchMembraneMetadata();
-  }, [node]);
+  }, [node, chainId]);
 
   const formatCurrency = (value: string) => {
     const num = parseFloat(value);

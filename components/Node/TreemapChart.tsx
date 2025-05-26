@@ -42,45 +42,58 @@ interface MembraneData {
 }
 
 // Batch token metadata requests
-const batchTokenMetadataRequests = async (tokenAddresses: string[]): Promise<Record<string, TokenMetadata | null>> => {
+const batchTokenMetadataRequests = async (tokenAddresses: string[], chainId: string): Promise<Record<string, TokenMetadata | null>> => {
   const results: Record<string, TokenMetadata | null> = {};
-  const addressesToFetch: string[] = [];
   
-  // Check cache first
-  const cachedData = localStorage.getItem(CACHE_KEY);
-  let cache: Record<string, TokenMetadata> = {};
+  try {
+    // Process addresses in batches of 10 to avoid overwhelming the API
+    for (let i = 0; i < tokenAddresses.length; i += 10) {
+      const batch = tokenAddresses.slice(i, i + 10);
+      const promises = batch.map(async (address) => {
+        try {
+          const response = await fetch(`/api/tokens/metadata?address=${address}&chainId=${chainId}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch token metadata');
+          }
+          const data = await response.json();
+          if (data.metadata) {
+            results[address] = {
+              decimals: data.metadata.decimals || 18,
+              logo: data.metadata.logo || null,
+              name: data.metadata.name || 'Unknown Token',
+              symbol: data.metadata.symbol || '???',
+              timestamp: Date.now()
+            };
+          } else {
+            results[address] = null;
+          }
+        } catch (error) {
+          console.error(`Error fetching metadata for ${address}:`, error);
+          results[address] = null;
+        }
+      });
+      
+      await Promise.all(promises);
+    }
+  } catch (error) {
+    console.error('Error in batch token metadata requests:', error);
+  }
   
-  if (cachedData) {
-    try {
-      cache = JSON.parse(cachedData);
-    } catch (error) {
-      console.warn('Error parsing cached token metadata:', error);
-      localStorage.removeItem(CACHE_KEY);
-    }
-  }
-
-  // Filter out cached addresses
-  tokenAddresses.forEach(address => {
-    const cachedEntry = cache[address];
-    if (cachedEntry && Date.now() - cachedEntry.timestamp < CACHE_TTL) {
-      results[address] = cachedEntry;
-    } else {
-      addressesToFetch.push(address);
-    }
-  });
-
-  if (addressesToFetch.length === 0) {
-    return results;
-  }
-
-
-
   return results;
 };
 
-const getTokenMetadata = async (tokenAddress: string): Promise<TokenMetadata | null> => {
-  const results = await batchTokenMetadataRequests([tokenAddress]);
-  return results[tokenAddress];
+const getTokenMetadata = async (tokenAddress: string, chainId: string): Promise<TokenMetadata | null> => {
+  try {
+    const response = await fetch(`/api/tokens/metadata?address=${tokenAddress}&chainId=${chainId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch token metadata');
+    }
+    const data = await response.json();
+    return data.metadata;
+  } catch (error) {
+    console.error('Error fetching token metadata:', error);
+    return null;
+  }
 };
 
 const fetchMembraneData = async (chainId: string, nodeIds: string[]): Promise<MembraneData | null> => {
@@ -205,7 +218,7 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
     }
 
     // Batch fetch all token metadata
-    const tokenMetadataResults = await batchTokenMetadataRequests(tokenAddresses);
+    const tokenMetadataResults = await batchTokenMetadataRequests(tokenAddresses, chainId);
     const tokenMetadata = tokenAddresses[0] ? tokenMetadataResults[tokenAddresses[0]] : null;
 
     const maxRawValue = Math.max(...rawValues, MIN_DISPLAY_VALUE);

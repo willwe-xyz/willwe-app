@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 
 // Environment variable for the Ponder API server URL with fallback to empty string (resolved at build time)
-const PONDER_SERVER_URL = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || '';
+// const PONDER_SERVER_URL = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || '';
 
 /**
  * Hook to fetch and interact with data indexed by Ponder
@@ -16,17 +16,11 @@ export function usePonderData() {
   /**
    * Helper function to build full API URLs
    */
-  const apiUrl = useCallback((endpoint: string) => {
-    // If endpoint already starts with http, assume it's a complete URL
-    if (endpoint.startsWith('http')) {
-      return endpoint;
-    }
-    
-    // Ensure endpoint starts with a slash
-    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    
-    return `${PONDER_SERVER_URL}${normalizedEndpoint}`;
-  }, []);
+  const apiUrl = (endpoint: string) => {
+    // Always use internal API endpoints
+    if (endpoint.startsWith('/')) return endpoint;
+    return `/${endpoint}`;
+  };
 
   /**
    * Fetch membranes for a specific node
@@ -54,7 +48,7 @@ export function usePonderData() {
       setIsLoading(false);
       return [];
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Fetch all membranes
@@ -77,7 +71,7 @@ export function usePonderData() {
       setIsLoading(false);
       return [];
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Fetch movements for a specific node
@@ -106,7 +100,7 @@ export function usePonderData() {
       setIsLoading(false);
       return [];
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Fetch signatures for a specific movement
@@ -142,7 +136,7 @@ export function usePonderData() {
       setIsLoading(false);
       return [];
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Fetch activity logs for a specific node
@@ -154,7 +148,7 @@ export function usePonderData() {
     setError(null);
     
     try {
-      const response = await fetch(apiUrl(`/events?nodeId=${nodeId}&limit=${limit}&networkId=${networkId}`));
+      const response = await fetch(apiUrl(`/api/events?nodeId=${nodeId}&limit=${limit}&networkId=${networkId}`));
       if (!response.ok) {
         throw new Error(`Error fetching activity logs: ${response.statusText}`);
       }
@@ -167,7 +161,7 @@ export function usePonderData() {
       setIsLoading(false);
       return [];
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Fetch activity logs for a specific user
@@ -197,7 +191,7 @@ export function usePonderData() {
       setIsLoading(false);
       return [];
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Fetch chat messages for a specific node
@@ -310,7 +304,7 @@ export function usePonderData() {
       
       throw err;
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Validate chat message content
@@ -344,7 +338,7 @@ export function usePonderData() {
         content
       };
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Submit a signature for a node or movement
@@ -381,7 +375,7 @@ export function usePonderData() {
       setIsLoading(false);
       return null;
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Get user feed based on nodes they are members of
@@ -393,8 +387,8 @@ export function usePonderData() {
     setError(null);
     
     try {
-      // Use the new userFeed endpoint
-      const url = apiUrl(`/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`);
+      // Use the new userFeed endpoint with /api/ prefix
+      const url = apiUrl(`/api/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -427,7 +421,7 @@ export function usePonderData() {
       setIsLoading(false);
       return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     }
-  }, [apiUrl]);
+  }, []);
 
   /**
    * Get events for a root node and all its derived nodes
@@ -439,7 +433,8 @@ export function usePonderData() {
     setError(null);
     
     try {
-      const url = apiUrl(`/getrootnode-events?nodeId=${rootNodeId}&limit=${limit}&offset=${offset}&networkId=${networkId}`);
+      // Use the new getrootnode-events endpoint with /api/ prefix
+      const url = apiUrl(`/api/getrootnode-events?nodeId=${rootNodeId}&limit=${limit}&offset=${offset}&networkId=${networkId}`);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -472,7 +467,7 @@ export function usePonderData() {
       setIsLoading(false);
       return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     }
-  }, [apiUrl]);
+  }, []);
 
   // Return the hook functions
   return {

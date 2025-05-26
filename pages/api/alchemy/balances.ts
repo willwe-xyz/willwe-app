@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { Alchemy, Network } from 'alchemy-sdk';
+import { Network, Alchemy } from 'alchemy-sdk';
+import { deployments } from '../../../config/deployments';
 
 // Helper function to get Alchemy network from chainId
 function getAlchemyNetwork(chainId: string): Network {
@@ -36,38 +37,17 @@ function getAlchemyNetwork(chainId: string): Network {
   }
 }
 
-// Get excluded token strings from environment variable
-const getExcludedTokenStrings = (): string[] => {
-  const excludedStrings = process.env.TOKEN_BALANCE_EXCLUDEIF || '';
-  const defaultExcludedStrings = [
-    'claim', 'CLAIM',
-    'rdrop', 'RDROP',
-    'visit', 'VISIT',
-    'http', 'HTTP',
-    'www', 'WWW',
-    'swap', 'SWAP',
-    'rewards', 'REWARDS',
-    'promo', 'PROMO',
-    'verify', 'VERIFY',
-    'eligible', 'ELIGIBLE',
-    'drop', 'DROP',
-    '!', '!',
-    't.ly', 'T.LY',
-    'discord', 'DISCORD',
-    'twitter', 'TWITTER',
-    'join', 'JOIN',
-    'presale', 'PRESALE',
-    'giveaway', 'GIVEAWAY',
-    '✅', '💰'
+// Helper function to get excluded token strings
+function getExcludedTokenStrings(): string[] {
+  return [
+    'test',
+    'mock',
+    'fake',
+    'dummy',
+    'sample',
+    'example'
   ];
-  
-  const envExcludedStrings = excludedStrings.split(',')
-    .map(str => str.toLowerCase().trim())
-    .filter(str => str !== '')
-    .flatMap(str => [str, str.toUpperCase()]);
-    
-  return defaultExcludedStrings.concat(envExcludedStrings);
-};
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -80,50 +60,108 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Missing required parameters' });
   }
 
+  // Check for Alchemy API key
+  const alchemyApiKey = process.env.ALCHEMY_API_KEY;
+  if (!alchemyApiKey) {
+    console.error('ALCHEMY_API_KEY is not set in environment variables');
+    return res.status(500).json({ error: 'Alchemy API key is not configured' });
+  }
+
   try {
+    const network = getAlchemyNetwork(chainId as string);
+    console.log(`Using Alchemy network: ${network} for chainId: ${chainId}`);
+
     const alchemy = new Alchemy({
-      apiKey: process.env.ALCHEMY_API_KEY || '',
-      network: getAlchemyNetwork(chainId as string)
+      apiKey: alchemyApiKey,
+      network
     });
 
+    console.log(`Fetching token balances for address: ${address}`);
     const response = await alchemy.core.getTokenBalances(address as string);
-    const nonZeroBalances = response.tokenBalances.filter(
-      token => token.tokenBalance !== "0"
-    );
+    console.log("got response", response);
+    // Get WETH and WILL token addresses for the current chain
+    const wethAddress = deployments.WETH?.[chainId as string];
+    const willAddress = deployments.Will?.[chainId as string];
+    
+    if (!wethAddress || !willAddress) {
+      console.warn(`Missing token addresses for chainId ${chainId}:`, { wethAddress, willAddress });
+    }
+    
+    // Ensure WETH and WILL are included in the balances
+    const allBalances = [...response.tokenBalances];
+    
+    // Add WETH if not present and address is available
+    if (wethAddress && !allBalances.find(t => t.contractAddress.toLowerCase() === wethAddress.toLowerCase())) {
+      allBalances.push({
+        contractAddress: wethAddress,
+        tokenBalance: "0",
+        error: null
+      });
+    }
+    
+    // Add WILL if not present and address is available
+    if (willAddress && !allBalances.find(t => t.contractAddress.toLowerCase() === willAddress.toLowerCase())) {
+      allBalances.push({
+        contractAddress: willAddress,
+        tokenBalance: "0",
+        error: null
+      });
+    }
 
+    console.log(`Processing ${allBalances.length} token balances`);
     const balances = await Promise.all(
-      nonZeroBalances.map(async (token) => {
-        const metadata = await alchemy.core.getTokenMetadata(
-          token.contractAddress
-        );
+      allBalances.map(async (token) => {
+        try {
+          const metadata = await alchemy.core.getTokenMetadata(
+            token.contractAddress
+          );
 
-        const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
-        const formattedBalance = balance.toFixed(2);
+          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
+          const formattedBalance = balance.toFixed(2);
 
-        return {
-          contractAddress: token.contractAddress,
-          tokenBalance: token.tokenBalance,
-          name: metadata.name || 'Unknown Token',
-          symbol: metadata.symbol || '???',
-          decimals: metadata.decimals,
-          logo: metadata.logo,
-          formattedBalance
-        };
+          return {
+            contractAddress: token.contractAddress,
+            tokenBalance: token.tokenBalance,
+            name: metadata.name || 'Unknown Token',
+            symbol: metadata.symbol || '???',
+            decimals: metadata.decimals,
+            logo: metadata.logo,
+            formattedBalance
+          };
+        } catch (error) {
+          console.error(`Error processing token ${token.contractAddress}:`, error);
+          return {
+            contractAddress: token.contractAddress,
+            tokenBalance: token.tokenBalance,
+            name: 'Unknown Token',
+            symbol: '???',
+            decimals: 18,
+            logo: null,
+            formattedBalance: '0.00'
+          };
+        }
       })
     );
 
-    // Filter out tokens based on name or symbol
+    // Filter out tokens based on name or symbol, but keep WETH and WILL
     const excludedStrings = getExcludedTokenStrings();
     const filteredBalances = balances.filter(token => {
       const tokenName = token.name.toLowerCase();
       const tokenSymbol = token.symbol.toLowerCase();
       const isExcluded = excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
-      return !isExcluded;
+      const isWethOrWill = token.contractAddress.toLowerCase() === wethAddress?.toLowerCase() || 
+                          token.contractAddress.toLowerCase() === willAddress?.toLowerCase();
+      return !isExcluded || isWethOrWill;
     });
 
+    console.log(`Returning ${filteredBalances.length} filtered balances`);
     res.status(200).json({ balances: filteredBalances });
   } catch (error) {
     console.error('Error fetching balances:', error);
-    res.status(500).json({ error: 'Failed to fetch balances' });
+    // Return a more detailed error message
+    res.status(500).json({ 
+      error: 'Failed to fetch balances',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 } 

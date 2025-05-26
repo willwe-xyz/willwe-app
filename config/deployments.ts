@@ -41,6 +41,10 @@ export const deployments: Deployments = {
         "167009" : "0x82Cb12995f4861D317a6C7C72917BE3C243222a6", /// Base Sepolia
         "8453" : "0xcbA568d1B4A109dD27cDFd0e6912371757228D5E" /// Base Mainnet
     },
+    "WETH": {
+        "84532": "0x4200000000000000000000000000000000000006", /// Base Sepolia
+        "8453": "0x4200000000000000000000000000000000000006" /// Base Mainnet
+    },
     "Membrane": {
         "84532": "0x7C2120cf9ba204cc3C7A3546C3f1F683e2b3484D",
         "11155420": "0x2fD4AF362a6cf34236B9b12056c23946d1BE10d5",

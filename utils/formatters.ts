@@ -139,12 +139,17 @@ export const getEndpointDisplayName = async (
 
     // User endpoint: door emoji + ENS or address
     try {
-      const ensName = await provider.lookupAddress(ownerAddress);
-      if (ensName) {
-        return `🚪 ${ensName}`;
+      // Use our internal API endpoint to get token metadata
+      const response = await fetch(`/api/tokens/metadata?address=${ownerAddress}&chainId=${chainId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch token metadata');
+      }
+      const data = await response.json();
+      if (data.metadata?.name) {
+        return `🚪 ${data.metadata.name}`;
       }
     } catch (error) {
-      console.warn('Error looking up ENS name:', error);
+      console.warn('Error looking up token metadata:', error);
     }
     return `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`;
   } catch (error) {

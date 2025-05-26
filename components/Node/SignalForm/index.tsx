@@ -105,13 +105,25 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
       
       try {
         if (node.membraneMeta && typeof node.membraneMeta === 'string' && node.membraneMeta.trim() !== '') {
-          const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
-          const metadataUrl = `${IPFS_GATEWAY}${node.membraneMeta.trim()}`;
-          
-          const response = await fetch(metadataUrl);
-          if (response.ok) {
-            const metadata = await response.json();
-            membraneName = metadata.title || metadata.name || membraneName;
+          // Check if it's an IPFS hash (starts with Qm)
+          if (node.membraneMeta.trim().startsWith('Qm')) {
+            // Use our new IPFS metadata endpoint
+            const response = await fetch(`/api/ipfs/metadata?cid=${node.membraneMeta.trim()}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.metadata?.name) {
+                membraneName = data.metadata.name;
+              }
+            }
+          } else {
+            // Use token metadata endpoint for addresses
+            const response = await fetch(`/api/tokens/metadata?address=${node.membraneMeta.trim()}&chainId=${cleanChainId}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.metadata?.name) {
+                membraneName = data.metadata.name;
+              }
+            }
           }
         }
       } catch (error) {
@@ -192,7 +204,7 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
       try {
         const children = await Promise.all(
-          parentNodeData.childrenNodes.map(async (childId) => {
+          parentNodeData.childrenNodes.map(async (childId: string) => {
             const childData = await fetchNodeData(childId);
             if (!childData) return null;
 
@@ -215,10 +227,13 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
               displayName = endpointDisplay;
             }
 
+            // Convert basis points to percentage for slider value
+            const sliderValue = childData.currentSignal ? childData.currentSignal / 100 : 0;
+
             // Initialize slider value for this child
             setSliderValues(prev => ({
               ...prev,
-              [childId]: childData.currentSignal || 0
+              [childId]: sliderValue
             }));
 
             return {
@@ -235,8 +250,11 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         const validChildren = children.filter(Boolean) as ChildData[];
         setChildrenData(validChildren);
 
-        // Calculate initial total allocation
-        const initialTotal = validChildren.reduce((sum, child) => sum + (child.currentSignal || 0), 0);
+        // Calculate initial total allocation from the actual signal values
+        const initialTotal = validChildren.reduce((sum: number, child: ChildData) => {
+          const childValue = sliderValues[child.nodeId] || 0;
+          return sum + (childValue * 100); // Convert back to percentage for total
+        }, 0);
         setTotalAllocation(initialTotal);
       } catch (error) {
         console.error('Error fetching children data:', error);
