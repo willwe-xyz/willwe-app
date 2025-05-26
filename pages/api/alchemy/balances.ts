@@ -78,7 +78,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log(`Fetching token balances for address: ${address}`);
     const response = await alchemy.core.getTokenBalances(address as string);
-    console.log("got response", response);
     // Get WETH and WILL token addresses for the current chain
     const wethAddress = deployments.WETH?.[chainId as string];
     const willAddress = deployments.Will?.[chainId as string];
