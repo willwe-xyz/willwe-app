@@ -387,17 +387,20 @@ export function usePonderData() {
     setError(null);
     
     try {
-      // Use the new userFeed endpoint with /api/ prefix
-      const url = apiUrl(`/api/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`);
+      // Use the internal API endpoint
+      const url = `/api/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`;
+      console.log('Fetching user feed from:', url);
 
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Error fetching user feed: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(`Error fetching user feed: ${errorData.error || response.statusText}`);
       }
       
       const data = await response.json();
+      console.log('User feed response:', data);
       
-      // Validate the data format based on new endpoint structure
+      // Validate the data format
       if (!data.events) {
         console.warn('Unexpected response format from userFeed endpoint:', data);
         data.events = [];
@@ -469,6 +472,51 @@ export function usePonderData() {
     }
   }, []);
 
+  /**
+   * Get events for the entire network
+   */
+  const getNetworkEvents = useCallback(async (networkId: string, limit = 50, offset = 0) => {
+    if (!networkId) return { events: [], meta: { total: 0, limit, offset } };
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Use the new network-events endpoint with /api/ prefix
+      const url = apiUrl(`/api/network-events?limit=${limit}&offset=${offset}&networkId=${networkId}`);
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Error fetching network events: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Validate the data format
+      if (!data.events) {
+        console.warn('Unexpected response format from getNetworkEvents endpoint:', data);
+        data.events = [];
+      }
+      
+      // Ensure data.meta exists
+      if (!data.meta) {
+        data.meta = {
+          total: data.events.length,
+          limit,
+          offset
+        };
+      }
+      
+      setIsLoading(false);
+      return data;
+    } catch (err) {
+      console.error('Error fetching network events:', err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      setIsLoading(false);
+      return { events: [], meta: { total: 0, limit, offset } };
+    }
+  }, []);
+
   // Return the hook functions
   return {
     isLoading,
@@ -484,6 +532,7 @@ export function usePonderData() {
     validateChatMessage,
     storeMovementSignature,
     getUserFeed,
-    getRootNodeEvents
+    getRootNodeEvents,
+    getNetworkEvents
   };
 }

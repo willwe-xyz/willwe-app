@@ -1,16 +1,14 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const {
-    query: { nodeId, limit = 50, offset = 0, networkId },
-  } = req;
-
-  if (!nodeId) {
-    return res.status(400).json({ error: 'Missing nodeId' });
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!networkId) {
-    return res.status(400).json({ error: 'Missing networkId' });
+  const { nodeId, networkId, limit = '50', offset = '0' } = req.query;
+
+  if (!nodeId || !networkId || Array.isArray(nodeId)) {
+    return res.status(400).json({ error: 'Missing or invalid required parameters' });
   }
 
   try {
@@ -22,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Fetch events from Ponder server
     const response = await fetch(
-      `${PONDER_SERVER_URL}/getrootnode-events?nodeId=${nodeId}&limit=${limit}&offset=${offset}&networkId=${networkId}`
+      `${PONDER_SERVER_URL}/node/${nodeId}?limit=${limit}&offset=${offset}&networkId=${networkId}`
     );
 
     if (!response.ok) {
@@ -35,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const events = [...(data.events || []), ...(data.signals || [])].map(event => ({
       id: event.id || `${event.transactionHash}-${event.logIndex}`,
       nodeId: event.nodeId,
-      who: event.userAddress || event.who,
+      who: event.userAddress,
       eventType: event.eventType || event.type || 'NodeEvent',
       eventName: event.eventName || event.type || 'Node Event',
       description: event.description || `Activity in node ${event.nodeId?.slice(0, 6)}...${event.nodeId?.slice(-4)}`,
@@ -53,19 +51,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return timeB - timeA;
     });
 
-    console.log('when:', events[0].when, 'dateObj:', new Date(events[0].when), 'now:', new Date());
-
     res.status(200).json({
       events,
       meta: {
         total: events.length,
         limit: Number(limit),
-        offset: Number(offset),
-        nodeCount: data.nodeCount || 0
+        offset: Number(offset)
       }
     });
   } catch (error) {
-    console.error('Error in getrootnode-events handler:', error);
+    console.error('Error in node events handler:', error);
     res.status(500).json({ 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'

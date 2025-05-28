@@ -35,14 +35,19 @@ export const ActivitySection: React.FC<ActivitySectionProps> = ({
     setRefreshLoading(true);
     setError(null);
     try {
-      const data = await getNodeActivityLogs(nodeId, chainId);
-      setActivities(data);
+      // Use internal API endpoint that will proxy to Ponder
+      const response = await fetch(`/api/node/events?nodeId=${nodeId}&networkId=${chainId}`);
+      if (!response.ok) {
+        throw new Error(`Error fetching node events: ${response.statusText}`);
+      }
+      const data = await response.json();
+      setActivities(data.events || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch activities');
     } finally {
       setRefreshLoading(false);
     }
-  }, [nodeId, chainId, getNodeActivityLogs]);
+  }, [nodeId, chainId]);
 
   useEffect(() => {
     fetchActivities();

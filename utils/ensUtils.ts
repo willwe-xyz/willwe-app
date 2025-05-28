@@ -178,14 +178,28 @@ export async function resolveENS(address: string): Promise<string> {
   }
 
   try {
-    const response = await fetch(`/api/ens/resolve?address=${address}`);
-    if (!response.ok) {
-      throw new Error('Failed to resolve ENS name');
+    // First try Base ENS resolution
+    const baseENSName = await lookupBaseENS(address as Address);
+    if (baseENSName) {
+      setCache(lowerAddress, baseENSName);
+      return baseENSName;
     }
-    const data = await response.json();
-    setCache(lowerAddress, data.name);
-    return data.name;
+
+    // If Base ENS fails, try regular ENS resolution
+    const provider = new ethers.JsonRpcProvider('https://eth.llamarpc.com');
+    const ensName = await provider.lookupAddress(address);
+    
+    if (ensName) {
+      setCache(lowerAddress, ensName);
+      return ensName;
+    }
+
+    // If both ENS resolutions fail, return truncated address
+    const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+    setCache(lowerAddress, truncatedAddress);
+    return truncatedAddress;
   } catch (error) {
+    console.error('Error resolving ENS name:', error);
     // Fallback to truncated address
     const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
     setCache(lowerAddress, truncatedAddress);
