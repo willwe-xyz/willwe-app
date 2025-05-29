@@ -31,19 +31,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const data = await response.json();
 
     // Transform the data to match our expected format
-    const events = [...(data.events || []), ...(data.signals || [])].map(event => ({
-      id: event.id || `${event.transactionHash}-${event.logIndex}`,
-      nodeId: event.nodeId,
-      who: event.userAddress || address,
-      eventType: event.eventType || event.type || 'NodeEvent',
-      eventName: event.eventName || event.type || 'Node Event',
-      description: event.description || `Activity in node ${event.nodeId?.slice(0, 6)}...${event.nodeId?.slice(-4)}`,
-      when: event.timestamp || event.blockTimestamp || new Date().toISOString(),
-      networkId: networkId,
-      transactionHash: event.transactionHash,
-      blockNumber: event.blockNumber,
-      args: event.args || {}
-    }));
+    const events = [...(data.events || []), ...(data.signals || [])].map(event => {
+      let when = event.timestamp || event.blockTimestamp || event.when || null;
+      return {
+        id: event.id || `${event.transactionHash}-${event.logIndex}`,
+        nodeId: event.nodeId,
+        who: event.userAddress || address,
+        eventType: event.eventType || event.type || 'NodeEvent',
+        eventName: event.eventName || event.type || 'Node Event',
+        description: event.description || `Activity in node ${event.nodeId?.slice(0, 6)}...${event.nodeId?.slice(-4)}`,
+        when,
+        networkId: networkId,
+        transactionHash: event.transactionHash,
+        blockNumber: event.blockNumber,
+        args: event.args || {}
+      };
+    });
 
     // Sort events by timestamp
     events.sort((a, b) => {

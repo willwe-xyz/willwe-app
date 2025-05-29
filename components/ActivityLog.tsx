@@ -81,6 +81,18 @@ export default function ActivityLog({ nodeId, userAddress, limit = 10, chainId }
     }
   };
 
+  // Function to format timestamp
+  const formatTimestamp = (log: any) => {
+    const timestamp = log.timestamp || log.blockTimestamp || log.when;
+    if (!timestamp) return 'Unknown time';
+    try {
+      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+    } catch (err) {
+      console.error('Error formatting timestamp:', err);
+      return 'Unknown time';
+    }
+  };
+
   if (isLoading) {
     return (
       <Box textAlign="center" py={4}>
@@ -133,7 +145,7 @@ export default function ActivityLog({ nodeId, userAddress, limit = 10, chainId }
               <Badge colorScheme={getBadgeColor(log.event_type)}>{log.event_type}</Badge>
               <Text mt={2}>{formatActivityLogMessage(log)}</Text>
               <Text fontSize="sm" color="gray.500" mt={1}>
-                {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                {formatTimestamp(log)}
               </Text>
             </Box>
           ))}

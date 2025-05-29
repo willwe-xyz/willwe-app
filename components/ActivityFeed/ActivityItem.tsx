@@ -18,7 +18,6 @@ export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
         const resolvedName = await resolveENS(activity.userAddress);
         setDisplayName(resolvedName);
         console.log(resolvedName);
-
       }
     };
     resolveName();
@@ -102,7 +101,10 @@ export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
         {/* Timestamp in bottom right */}
         <Flex justify="flex-end">
           <Text fontSize="xs" color="gray.500">
-            {formatDistanceToNow(new Date(activity.timestamp || activity.when || Date.now()), { addSuffix: true })}
+            {activity.timestamp || activity.when ? 
+              formatDistanceToNow(new Date(activity.timestamp || activity.when), { addSuffix: true }) :
+              'Unknown time'
+            }
           </Text>
         </Flex>
       </VStack>
