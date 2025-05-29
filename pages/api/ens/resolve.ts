@@ -12,7 +12,7 @@ const BASE_RESOLVER = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD';
 // RPC client for Base network
 const baseRpcClient = createPublicClient({
   chain: base,
-  transport: http(process.env.RPC_URL_BASE || 'https://mainnet.base.org'),
+  transport: http(process.env.BASE_RPC_URL|| 'https://mainnet.base.org'),
 });
 
 // ABI for the reverse registrar's node function

@@ -29,6 +29,8 @@ import Link from 'next/link';
 import { Signal, History } from 'lucide-react';
 import { isEndpoint, getEndpointDisplayName } from '../../../utils/formatters';
 
+// Array of random emojis for WillWe-owned endpoints
+const ENDPOINT_EMOJIS = ['🚀', '🌟', '💫', '✨', '⚡', '🔥', '💎', '🎯', '🎨', '🎭', '🎪', '🎡', '🎢', '🎠', '🎨', '🎭', '🎪', '🎡', '🎢', '🎠'];
 
 interface SignalFormProps {
   chainId: string;
@@ -85,19 +87,19 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
     try {
       const cleanChainId = chainId.replace('eip155:', '');
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       
-      if (!deployments.WillWe[cleanChainId]) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      // Fetch node data from the API endpoint
+      const response = await fetch(
+        `/api/nodes/data?chainId=${cleanChainId}&nodeId=${childId}&userAddress=${user.wallet.address}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch node data');
       }
       
-      const contract = new ethers.Contract(
-        deployments.WillWe[cleanChainId],
-        ABIs.WillWe,
-        provider
-      );
-
-      const node = await contract.getNodeData(childId, user.wallet.address);
+      const result = await response.json();
+      const node = result.data;
+      
       if (!node?.basicInfo?.[0]) return null;
 
       let membraneName = node.basicInfo[0].slice(-6);
@@ -130,13 +132,20 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         console.error('Error fetching membrane metadata:', error);
       }
 
-      // Get the signal value for this child
+      // Get the signal value for this child using the new API endpoint
       let currentSignalBasisPoints = 0;
       try {
-        const signals = await contract.getUserNodeSignals(user.wallet.address, nodeId);
-        const childIndex = parentNodeData?.childrenNodes?.indexOf(childId);
-        if (childIndex !== undefined && childIndex >= 0 && signals.length > childIndex + 2) {
-          currentSignalBasisPoints = Number(signals[childIndex + 2]);
+        const response = await fetch(
+          `/api/nodes/signals?chainId=${cleanChainId}&nodeId=${nodeId}&userAddress=${user.wallet.address}`
+        );
+        
+        if (response.ok) {
+          const result = await response.json();
+          const signals = result.data;
+          const childIndex = parentNodeData?.childrenNodes?.indexOf(childId);
+          if (childIndex !== undefined && childIndex >= 0 && signals.length > childIndex + 2) {
+            currentSignalBasisPoints = Number(signals[childIndex + 2]);
+          }
         }
       } catch (error) {
         console.error('Error fetching signals:', error);
@@ -164,22 +173,69 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
       const endpointLabels = new Map<string, string>();
       try {
-        const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
-        const executionAddress = deployments.Execution[chainId.toString()];
-
         await Promise.all(parentNodeData.childrenNodes.map(async (childId) => {
           // Check if this is an endpoint by checking its rootPath
           if (parentNodeData.rootPath && parentNodeData.rootPath.length > 0) {
             const parentNodeId = parentNodeData.rootPath[parentNodeData.rootPath.length - 1];
             if (isEndpoint(childId, parentNodeId)) {
-              const endpointName = await getEndpointDisplayName(
-                childId,
-                parentNodeId,
-                provider,
-                chainId.toString()
-              );
-              if (endpointName) {
-                endpointLabels.set(childId, endpointName);
+              try {
+                // Convert nodeId to address
+                const nodeIdBigInt = BigInt(childId);
+                const endpointAddress = ethers.getAddress('0x' + nodeIdBigInt.toString(16).padStart(40, '0'));
+
+                // Get the owner of the endpoint
+                const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
+                const powerProxy = new ethers.Contract(
+                  endpointAddress,
+                  ['function owner() view returns (address)'],
+                  provider
+                );
+
+                const ownerAddress = await powerProxy.owner();
+
+                // If owner is Execution contract, it's an execution endpoint
+                const executionAddress = deployments.Execution[chainId];
+                if (ownerAddress.toLowerCase() === executionAddress.toLowerCase()) {
+                  // Execution endpoint: random emoji
+                  try {
+                    const willweContract = new ethers.Contract(
+                      deployments.WillWe[chainId],
+                      ABIs.WillWe,
+                      provider
+                    );
+                    const nodeData = await willweContract.getNodeData(parentNodeId, ethers.ZeroAddress);
+                    const endpoints = nodeData.movementEndpoints || [];
+                    const index = endpoints.findIndex((ep: string) => ep.toLowerCase() === endpointAddress.toLowerCase());
+                    const emojiIndex = index % ENDPOINT_EMOJIS.length;
+                    endpointLabels.set(childId, ENDPOINT_EMOJIS[emojiIndex]);
+                  } catch (error) {
+                    // Fallback to hash-based emoji selection
+                    const addressHash = ethers.keccak256(ethers.toUtf8Bytes(endpointAddress));
+                    const emojiIndex = Number(addressHash.slice(0, 8)) % ENDPOINT_EMOJIS.length;
+                    endpointLabels.set(childId, ENDPOINT_EMOJIS[emojiIndex]);
+                  }
+                } else {
+                  // User endpoint: try to resolve Base ENS name
+                  try {
+                    const response = await fetch(`/api/ens/resolve?address=${ownerAddress}`);
+                    if (response.ok) {
+                      const data = await response.json();
+                      if (data.name) {
+                        endpointLabels.set(childId, `🚪 ${data.name}`);
+                      } else {
+                        endpointLabels.set(childId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                      }
+                    } else {
+                      endpointLabels.set(childId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                    }
+                  } catch (error) {
+                    console.warn('Error resolving ENS name:', error);
+                    endpointLabels.set(childId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                  }
+                }
+              } catch (error) {
+                console.warn('Error fetching endpoint name:', error);
+                endpointLabels.set(childId, `Endpoint ${childId.slice(0, 6)}...${childId.slice(-4)}`);
               }
             }
           }
@@ -211,20 +267,22 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
             let displayName = childData.membraneName || childId.slice(-6);
             // Use isEndpoint logic as in SankeyChart
             if (isEndpoint(childId, nodeId)) {
-              // Use getEndpointDisplayName for endpoint label
-              const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
-              const executionAddress = deployments.Execution[chainId.toString()];
-              let endpointDisplay = await getEndpointDisplayName(
-                childId,
-                nodeId,
-                provider,
-                chainId.toString()
-              );
-              // Only append 0x... if not a user endpoint (door emoji)
-              if (endpointDisplay && !endpointDisplay.startsWith('🚪') && endpointDisplay.length === 2 && !/\w/.test(endpointDisplay)) {
-                endpointDisplay += ` 0x${childId.slice(0, 6)}`;
+              try {
+                const response = await fetch(
+                  `/api/nodes/endpoint-name?nodeId=${childId}&parentNodeId=${nodeId}&chainId=${chainId}`
+                );
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.name) {
+                    displayName = data.name;
+                  }
+                }
+              } catch (error) {
+                console.warn('Error fetching endpoint name:', error);
+                // Use a default name if the fetch fails
+                displayName = `Endpoint ${childId.slice(0, 6)}...${childId.slice(-4)}`;
               }
-              displayName = endpointDisplay;
             }
 
             // Convert basis points to percentage for slider value

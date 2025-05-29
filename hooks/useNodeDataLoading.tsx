@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ethers } from 'ethers';
 import { NodeState } from '../types/chainData';
-import { deployments, ABIs, getRPCUrl } from '../config/contracts';
 
 export function useNodeDataLoading(chainId: string | undefined, nodeId: string | undefined) {
   const [isLoading, setIsLoading] = useState(true);
@@ -16,46 +14,22 @@ export function useNodeDataLoading(chainId: string | undefined, nodeId: string |
     }
 
     try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      
-      // Create provider
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
-      
-      // Get contract instance
-      const contractAddress = deployments.WillWe[cleanChainId];
-      if (!contractAddress) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
-      }
-      
-      const contract = new ethers.Contract(
-        contractAddress,
-        ABIs.WillWe,
-        provider as unknown as ethers.ContractRunner
+      setIsLoading(true);
+      const response = await fetch(
+        `/api/nodes/data?chainId=${chainId}&nodeId=${nodeId}`
       );
 
-      // Fetch node data
-      const nodeData = await contract.getNodeData(nodeId);
-      
-      // Transform and validate the data
-      if (!nodeData || !nodeData.basicInfo) {
-        throw new Error('Invalid node data received');
+      if (!response.ok) {
+        throw new Error('Failed to fetch node data');
       }
 
-      const transformedData: NodeState = {
-        basicInfo: nodeData.basicInfo.map(String),
-        membersOfNode: nodeData.membersOfNode || [],
-        childrenNodes: nodeData.childrenNodes || [],
-        rootPath: nodeData.rootPath || [],
-        signals: nodeData.signals || [],
-        membraneMeta: nodeData.membraneMeta || null,
-        movementEndpoints: nodeData.movementEndpoints || []
-      };
-
-      setData(transformedData);
+      const result = await response.json();
+      setData(result.data);
       setError(null);
     } catch (err) {
       console.error('Error fetching node data:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch node data'));
+      setData(null);
     } finally {
       setIsLoading(false);
     }

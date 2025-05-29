@@ -50,6 +50,9 @@ const Plot = dynamic(() => import('react-plotly.js'), {
   loading: () => <Box>Loading...</Box>
 });
 
+// Array of random emojis for WillWe-owned endpoints
+const ENDPOINT_EMOJIS = ['🚀', '🌟', '💫', '✨', '⚡', '🔥', '💎', '🎯', '🎨', '🎭', '🎪', '🎡', '🎢', '🎠', '🎨', '🎭', '🎪', '🎡', '🎢', '🎠'];
+
 interface SankeyChartProps {
   nodes: NodeState[];
   selectedTokenColor: string;
@@ -109,56 +112,19 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
       const endpointLabels = new Map<string, string>();
       
       try {
-        const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
-        const executionAddress = deployments.Execution[chainId.toString()];
-
         await Promise.all(nodes.map(async (node) => {
           if (!node?.basicInfo?.[0]) return;
           
           const nodeId = node.basicInfo[0].toString();
           
-          // Check if this is an endpoint
-          if (node.rootPath && node.rootPath.length > 0) {
-            const parentNodeId = node.rootPath[node.rootPath.length - 1];
-            if (isEndpoint(nodeId, parentNodeId)) {
-              const endpointName = await getEndpointDisplayName(
-                nodeId,
-                parentNodeId,
-                provider,
-                chainId.toString()
-              );
-              if (endpointName) {
-                endpointLabels.set(nodeId, endpointName);
-                return;
-              }
-            }
-          }
-
-          // If not an endpoint or no endpoint name, try to get membrane name
-          const labelCID = node.basicInfo[6].toString(); // Active membrane ID
-          
           try {
-            if (labelCID && labelCID !== '0') {
-              const membraneContract = new ethers.Contract(
-                deployments.Membrane[chainId.toString()],
-                ABIs.Membrane,
-                provider
-              );
-
-              // Get membrane data from contract
-              const membrane = await membraneContract.getMembraneById(labelCID);
-              if (membrane && membrane.meta) {
-                const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
-                const response = await fetch(`${IPFS_GATEWAY}${membrane.meta}`);
-                if (response.ok) {
-                  const metadata = await response.json();
-                  labels.set(nodeId, metadata.name || metadata.title || `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`);
-                  return;
-                }
+            const response = await fetch(`/api/nodes/labels?nodeId=${nodeId}&chainId=${chainId}&rootPath=${JSON.stringify(node.rootPath || [])}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.label) {
+                labels.set(nodeId, data.label);
               }
             }
-            // Fallback if no valid membrane metadata
-            labels.set(nodeId, `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`);
           } catch (error) {
             console.warn(`Error fetching label for node ${nodeId}:`, error);
             labels.set(nodeId, `Node ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`);
@@ -191,37 +157,11 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
       }
 
       try {
-        const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
-        const tokenAddress = nodeIdToAddress(selectedToken);
-        
-        // First check if the contract exists
-        const code = await provider.getCode(tokenAddress);
-        if (code === '0x') {
-          setTokenName(selectedToken.slice(0, 6) + '...' + selectedToken.slice(-4));
-          return;
-        }
-
-        // Try to get the name using a more robust ABI
-        const tokenContract = new ethers.Contract(
-          tokenAddress,
-          [
-            'function name() view returns (string)',
-            'function symbol() view returns (string)'
-          ],
-          provider
-        );
-
-        try {
-          const name = await tokenContract.name();
-          setTokenName(name);
-        } catch (nameError) {
-          // If name() fails, try symbol()
-          try {
-            const symbol = await tokenContract.symbol();
-            setTokenName(symbol);
-          } catch (symbolError) {
-            // If both fail, use the address
-            setTokenName(selectedToken.slice(0, 6) + '...' + selectedToken.slice(-4));
+        const response = await fetch(`/api/tokens/name?tokenId=${selectedToken}&chainId=${chainId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.name) {
+            setTokenName(data.name);
           }
         }
       } catch (error) {
@@ -232,6 +172,90 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
 
     fetchTokenName();
   }, [selectedToken, chainId, providedTokenName]);
+
+  // Add endpoint name resolution
+  useEffect(() => {
+    const fetchEndpointNames = async () => {
+      const endpointLabels = new Map<string, string>();
+      try {
+        await Promise.all(nodes.map(async (node) => {
+          if (!node?.basicInfo?.[0] || !node?.rootPath?.length) return;
+          
+          const nodeId = node.basicInfo[0].toString();
+          const parentNodeId = node.rootPath[node.rootPath.length - 1];
+          
+          // Check if this is an endpoint
+          if (isEndpoint(nodeId, parentNodeId)) {
+            try {
+              // Convert nodeId to address
+              const nodeIdBigInt = BigInt(nodeId);
+              const endpointAddress = ethers.getAddress('0x' + nodeIdBigInt.toString(16).padStart(40, '0'));
+
+              // Get the owner of the endpoint
+              const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
+              const powerProxy = new ethers.Contract(
+                endpointAddress,
+                ['function owner() view returns (address)'],
+                provider
+              );
+
+              const ownerAddress = await powerProxy.owner();
+
+              // If owner is Execution contract, it's an execution endpoint
+              const executionAddress = deployments.Execution[chainId.toString()];
+              if (ownerAddress.toLowerCase() === executionAddress.toLowerCase()) {
+                // Execution endpoint: random emoji
+                try {
+                  const willweContract = new ethers.Contract(
+                    deployments.WillWe[chainId.toString()],
+                    ABIs.WillWe,
+                    provider
+                  );
+                  const nodeData = await willweContract.getNodeData(parentNodeId, ethers.ZeroAddress);
+                  const endpoints = nodeData.movementEndpoints || [];
+                  const index = endpoints.findIndex((ep: string) => ep.toLowerCase() === endpointAddress.toLowerCase());
+                  const emojiIndex = index % ENDPOINT_EMOJIS.length;
+                  endpointLabels.set(nodeId, ENDPOINT_EMOJIS[emojiIndex]);
+                } catch (error) {
+                  // Fallback to hash-based emoji selection
+                  const addressHash = ethers.keccak256(ethers.toUtf8Bytes(endpointAddress));
+                  const emojiIndex = Number(addressHash.slice(0, 8)) % ENDPOINT_EMOJIS.length;
+                  endpointLabels.set(nodeId, ENDPOINT_EMOJIS[emojiIndex]);
+                }
+              } else {
+                // User endpoint: try to resolve Base ENS name
+                try {
+                  const response = await fetch(`/api/ens/resolve?address=${ownerAddress}`);
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (data.name) {
+                      endpointLabels.set(nodeId, `🚪 ${data.name}`);
+                    } else {
+                      endpointLabels.set(nodeId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                    }
+                  } else {
+                    endpointLabels.set(nodeId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                  }
+                } catch (error) {
+                  console.warn('Error resolving ENS name:', error);
+                  endpointLabels.set(nodeId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                }
+              }
+            } catch (error) {
+              console.warn('Error fetching endpoint name:', error);
+              endpointLabels.set(nodeId, `Endpoint ${nodeId.slice(0, 6)}...${nodeId.slice(-4)}`);
+            }
+          }
+        }));
+
+        setEndpointNames(endpointLabels);
+      } catch (error) {
+        console.error('Error fetching endpoint names:', error);
+      }
+    };
+
+    fetchEndpointNames();
+  }, [nodes, chainId]);
 
   // Calculate node metrics
   const nodeMetrics = useMemo(() => {
