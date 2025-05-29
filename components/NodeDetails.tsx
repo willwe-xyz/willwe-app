@@ -91,13 +91,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       if (!nodeData?.rootPath?.[0] || !cleanChainId) return;
 
       try {
-        const code = await provider.getCode(tokenAddress);
-        if (code === '0x') {
-          setTokenSymbol('$TOKEN');
-          return;
-        }
-
-        // Use our internal API endpoint to get token metadata
+        // Use our internal API endpoint to get token metadata (including code check)
         const response = await fetch(`/api/tokens/metadata?address=${tokenAddress}&chainId=${cleanChainId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch token metadata');
@@ -115,7 +109,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     };
 
     fetchTokenSymbol();
-  }, [nodeData, cleanChainId, provider, tokenAddress]);
+  }, [nodeData, cleanChainId, tokenAddress]);
   
   // Theme colors
   const bgColor = useColorModeValue('white', 'gray.800');
