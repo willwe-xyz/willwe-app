@@ -118,6 +118,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
           const when = item.when;
           let timeAgo = '';
           let dateObj: Date | null = null;
+          // Only use 'when' if it is present and valid; do NOT fallback to current time
           if (when && !isNaN(Number(when))) {
             const timestamp = Number(when);
             dateObj = new Date(timestamp < 1e12 ? timestamp * 1000 : timestamp);
@@ -130,6 +131,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
               timeAgo = formatDistanceToNow(dateObj, { addSuffix: true });
             }
           }
+          // If 'when' is null, undefined, or invalid, timeAgo remains ''
           return {
             ...item,
             when,
@@ -159,6 +161,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
           const when = activity.when;
           let timeAgo = '';
           let dateObj: Date | null = null;
+          // Only use 'when' if it is present and valid; do NOT fallback to current time
           if (when && !isNaN(Number(when))) {
             const timestamp = Number(when);
             dateObj = new Date(timestamp < 1e12 ? timestamp * 1000 : timestamp);
@@ -171,6 +174,7 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
               timeAgo = formatDistanceToNow(dateObj, { addSuffix: true });
             }
           }
+          // If 'when' is null, undefined, or invalid, timeAgo remains ''
           return {
             id: activity.id || `activity-${index}`,
             nodeId: activity.nodeId || '',
