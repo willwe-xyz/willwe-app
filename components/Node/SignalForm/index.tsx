@@ -198,12 +198,13 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 if (ownerAddress.toLowerCase() === executionAddress.toLowerCase()) {
                   // Execution endpoint: random emoji
                   try {
-                    const willweContract = new ethers.Contract(
-                      deployments.WillWe[chainId],
-                      ABIs.WillWe,
-                      provider
-                    );
-                    const nodeData = await willweContract.getNodeData(parentNodeId, ethers.ZeroAddress);
+                    // Fetch node data from internal API
+                    const response = await fetch(`/api/nodes/data?chainId=${chainId}&nodeId=${parentNodeId}&userAddress=${ethers.ZeroAddress}`);
+                    if (!response.ok) {
+                      throw new Error('Failed to fetch node data');
+                    }
+                    const result = await response.json();
+                    const nodeData = result.data;
                     const endpoints = nodeData.movementEndpoints || [];
                     const index = endpoints.findIndex((ep: string) => ep.toLowerCase() === endpointAddress.toLowerCase());
                     const emojiIndex = index % ENDPOINT_EMOJIS.length;

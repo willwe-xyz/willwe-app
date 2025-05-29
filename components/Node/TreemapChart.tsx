@@ -168,8 +168,8 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
   };
 
   const transformDataForTreemap = useCallback(async () => {
-    if (!nodeData?.rootPath?.length || !contract) {
-      console.warn('No root path data available or contract not initialized');
+    if (!nodeData?.rootPath?.length) {
+      console.warn('No root path data available');
       return { labels: [], parents: [], ids: [], values: [], text: [], colors: [] };
     }
 
@@ -203,12 +203,15 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
       }
 
       try {
-        const data = await contract.getNodeData(ethers.toBigInt(nodeId), ethers.ZeroAddress).catch(error => {
-          console.warn(`Failed to fetch node data for ${nodeId}:`, error);
-          return [null, null, [null, null, '0']];
-        });
-        
-        const balanceAnchor = data[0]?.[2]?.toString() || '0';
+        // Fetch node data from internal API
+        const response = await fetch(`/api/nodes/data?chainId=${chainId}&nodeId=${nodeId}&userAddress=${ethers.ZeroAddress}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch node data');
+        }
+        const result = await response.json();
+        const data = result.data;
+        // Use the same logic as before to extract the value
+        const balanceAnchor = data.basicInfo?.[2]?.toString() || '0';
         const formattedValue = Number(ethers.formatUnits(balanceAnchor, 'ether')) || MIN_DISPLAY_VALUE;
         rawValues.push(formattedValue);
       } catch (error) {
@@ -240,7 +243,7 @@ const TreemapChart: React.FC<TreemapChartProps> = ({
     }
 
     return { labels, parents, ids, values, text, colors };
-  }, [nodeData, chainId, contract, selectedTokenColor, tokenSymbol]);
+  }, [nodeData, chainId, selectedTokenColor, tokenSymbol]);
 
   // Fetch data once on component mount and when dependencies change
   useEffect(() => {
