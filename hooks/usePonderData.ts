@@ -389,7 +389,6 @@ export function usePonderData() {
     try {
       // Use the internal API endpoint
       const url = `/api/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`;
-      console.log('Fetching user feed from:', url);
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -398,7 +397,6 @@ export function usePonderData() {
       }
       
       const data = await response.json();
-      console.log('User feed response:', data);
       
       // Validate the data format
       if (!data.events) {
