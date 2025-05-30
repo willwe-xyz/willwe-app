@@ -19,7 +19,7 @@ import { ABIs, getRPCUrl } from '../../config/contracts';
 import { NodeState } from '../../types/chainData';
 import TreemapChart from './TreemapChart';
 import { nodeIdToAddress } from '../../utils/formatters';
-import { resolveMultipleENS } from '../../utils/ensUtils';
+import { resolveENS } from '../../utils/ensUtils';
 import RequirementsTable from '../TokenOperations/RequirementsTable';
 import router from 'next/router';
 import { NodeOperations } from '../Node/NodeOperations';
@@ -106,6 +106,34 @@ const calculateMetrics = (node: NodeState): NodeMetrics => {
   };
 };
 
+const fetchNodeMetadata = async (membraneMeta: string, chainId: string) => {
+  try {
+    if (!membraneMeta || membraneMeta.trim() === '') return null;
+
+    // Check if it's an IPFS hash (starts with Qm)
+    if (membraneMeta.trim().startsWith('Qm')) {
+      // Use our new IPFS metadata endpoint
+      const response = await fetch(`/api/ipfs/metadata?cid=${membraneMeta.trim()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch IPFS metadata');
+      }
+      const data = await response.json();
+      return data.metadata;
+    } else {
+      // Use token metadata endpoint for addresses
+      const response = await fetch(`/api/tokens/metadata?address=${membraneMeta.trim()}&chainId=${chainId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch token metadata');
+      }
+      const data = await response.json();
+      return data.metadata;
+    }
+  } catch (error) {
+    console.error('Error fetching node metadata:', error);
+    return null;
+  }
+};
+
 const NodeInfo: React.FC<NodeInfoProps> = ({ 
   node, 
   chainId, 
@@ -150,7 +178,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
     );
   }, [tokenAddress, provider]);
 
-  const [memberData, setMemberData] = useState<Array<{ address: string; ensName: string | null }>>([]);
+  const [memberData, setMemberData] = useState<Array<{ address: string; displayName: string }>>([]);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     const fetchMembraneMetadata = async () => {
@@ -163,11 +191,16 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
       try {
         setIsLoadingTitle(true);
         setIsLoadingCharacteristics(true);
-        const response = await fetch(`${IPFS_GATEWAY}${node.membraneMeta}`);
-        const data = await response.json();
-        setMembraneTitle(data.name || 'Unnamed Membrane');
-        setMembraneCharacteristics(data.characteristics || []);
-        setMembraneRequirements(data.membershipConditions || []);
+        const metadata = await fetchNodeMetadata(node.membraneMeta, chainId);
+        if (metadata) {
+          setMembraneTitle(metadata.name || 'Unnamed Membrane');
+          setMembraneCharacteristics(metadata.characteristics || []);
+          setMembraneRequirements(metadata.membershipConditions || []);
+        } else {
+          setMembraneTitle('Unknown Membrane');
+          setMembraneCharacteristics([]);
+          setMembraneRequirements([]);
+        }
       } catch (error) {
         console.error('Error fetching membrane metadata:', error);
         setMembraneTitle('Unknown Membrane');
@@ -180,7 +213,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
     };
 
     fetchMembraneMetadata();
-  }, [node]);
+  }, [node, chainId]);
 
   const formatCurrency = (value: string) => {
     const num = parseFloat(value);
@@ -206,28 +239,27 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
   };
 
   useEffect(() => {
-    const resolveEnsNames = async () => {
-      if (!node?.membersOfNode || node.membersOfNode.length === 0) return;
-
+    const resolveAllNames = async () => {
+      if (!node?.membersOfNode || node.membersOfNode.length === 0) {
+        setMemberData([]);
+        return;
+      }
       try {
-        const resolvedNames = await resolveMultipleENS(node.membersOfNode);
-        const memberData = node.membersOfNode.map((address) => ({
-          address,
-          ensName: resolvedNames[address.toLowerCase()] || null
-        }));
+        const memberData = await Promise.all(
+          node.membersOfNode.map(async (address) => {
+            const displayName = await resolveENS(address);
+            return { address, displayName };
+          })
+        );
         setMemberData(memberData);
       } catch (error) {
-        console.error('Error resolving ENS names:', error);
-        // Fallback to raw addresses if resolution fails
-        const memberData = node.membersOfNode.map((address) => ({
+        setMemberData(node.membersOfNode.map(address => ({
           address,
-          ensName: null
-        }));
-        setMemberData(memberData);
+          displayName: `${address.slice(0, 6)}...${address.slice(-4)}`
+        })));
       }
     };
-
-    resolveEnsNames();
+    resolveAllNames();
   }, [node]);
 
   const metrics = useMemo(() => calculateMetrics(node), [node]);
@@ -541,7 +573,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
                     },
                   }}
                 >
-                  {memberData.map(({ address, ensName }, index) => (
+                  {memberData.map(({ address, displayName }, index) => (
                     <HStack
                       key={index}
                       py={1.5}
@@ -551,7 +583,7 @@ const NodeInfo: React.FC<NodeInfoProps> = ({
                       transition="all 0.2s"
                     >
                       <Text fontSize="sm" isTruncated>
-                        {ensName || `${address.slice(0, 6)}...${address.slice(-4)}`}
+                        {displayName}
                       </Text>
                       <IconButton
                         aria-label="Copy address"

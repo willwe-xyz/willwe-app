@@ -1,43 +1,23 @@
 import { ActivityItem } from '@/types/chainData';
 import { resolveENS } from './ensUtils';
 
-export async function transformActivities(activities: any[]): Promise<ActivityItem[]> {
-  if (!Array.isArray(activities)) {
-    console.warn('transformActivities received non-array input:', activities);
+export function transformActivities(activities: any[]): ActivityItem[] {
+  if (!activities || !Array.isArray(activities)) {
     return [];
   }
 
-  const transformedActivities = await Promise.all(
-    activities.map(async (activity) => {
-      try {
-        // Ensure all required fields are present with defaults
-        const transformed: ActivityItem = {
-          id: activity.id || `activity-${Date.now()}-${Math.random()}`,
-          nodeId: activity.nodeId || activity.node_id || '0',
-          who: activity.who || activity.userAddress || activity.user_address || 'unknown',
-          eventName: activity.eventName || activity.eventName || 'Unknown Activity',
-          eventType: activity.eventType || activity.event_type || 'unknown',
-          when: activity.when || activity.timestamp || new Date().toISOString(),
-          createdBlockNumber: activity.createdBlockNumber || activity.blockNumber || 0,
-          network: activity.network || 'unknown',
-          networkId: activity.networkId || activity.chainId || '0',
-          description: activity.description || `Activity in node ${activity.nodeId || 'unknown'}`
-        };
-
-        // Add optional fields if present
-        if (activity.amount) transformed.amount = activity.amount;
-        if (activity.tokenSymbol) transformed.tokenSymbol = activity.tokenSymbol;
-
-        return transformed;
-      } catch (error) {
-        console.error('Error transforming activity:', error);
-        return null;
-      }
-    })
-  );
-
-  // Filter out any null values from failed transformations
-  return transformedActivities.filter((activity): activity is ActivityItem => activity !== null);
+  return activities.map((activity, index) => ({
+    id: activity.id || `activity-${index}`,
+    nodeId: activity.nodeId || '',
+    who: activity.who || '',
+    eventName: activity.eventName || 'Unknown Activity',
+    eventType: activity.eventType || 'unknown',
+    when: activity.when || new Date().toISOString(),
+    createdBlockNumber: activity.createdBlockNumber || 0,
+    network: activity.network || 'unknown',
+    networkId: activity.networkId || '',
+    description: activity.description || `Activity related to node ${activity.nodeId}`
+  }));
 }
 
 async function generateActivityDescription(

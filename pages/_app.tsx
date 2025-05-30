@@ -111,9 +111,6 @@ function MyApp(props: AppProps) {
             embeddedWallets: {
               noPromptOnSignature: false
             },
-            analytics: {
-              enabled: process.env.NODE_ENV === 'production'
-            },
             session: {
               autoRefresh: true,
               refreshInterval: 60 * 60 * 1000 // 1 hour

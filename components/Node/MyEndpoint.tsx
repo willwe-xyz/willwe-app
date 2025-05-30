@@ -148,17 +148,16 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
 
   useEffect(() => {
     const fetchEndpointData = async () => {
-      if (!endpointAddress || endpointAddress === "0" || !endpointId || !readProvider) return;
+      if (!endpointAddress || endpointAddress === "0" || !endpointId) return;
       
       try {
-        const willWeContract = new ethers.Contract(
-          deployments.WillWe[chainId.replace('eip155:', '')],
-          ABIs.WillWe,
-          readProvider
-        );
-
-        const data = await willWeContract.getNodeData(endpointId, userAddress);
-        setEndpointNodeData(data);
+        // Fetch node data from internal API
+        const response = await fetch(`/api/nodes/data?chainId=${chainId.replace('eip155:', '')}&nodeId=${endpointId}&userAddress=${userAddress}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch endpoint node data');
+        }
+        const result = await response.json();
+        setEndpointNodeData(result.data);
       } catch (error) {
         console.error('Error fetching endpoint data:', error);
       }
@@ -167,7 +166,7 @@ export const MyEndpoint: React.FC<MyEndpointProps> = ({
     if (endpointAddress && endpointAddress !== "0" && endpointAddress !== ethers.ZeroAddress) {
       fetchEndpointData();
     }
-  }, [endpointAddress, endpointId, readProvider, userAddress, chainId, setEndpointNodeData]);
+  }, [endpointAddress, endpointId, userAddress, chainId, setEndpointNodeData]);
 
   useEffect(() => {
     const fetchRootTokenSymbol = async () => {

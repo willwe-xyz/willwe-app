@@ -104,8 +104,8 @@ export const getEndpointDisplayName = async (
     // Get the endpoint address
     const endpointAddress = nodeIdToAddress(nodeId);
 
-    // Get the Execution contract address for this chain
-    const executionAddress = deployments.Execution[chainId];
+    // Get the WillWe contract address for this chain
+    const willweAddress = deployments.WillWe[chainId];
 
     // Call owner() on the endpoint (PowerProxy) contract
     const powerProxy = new ethers.Contract(
@@ -116,16 +116,17 @@ export const getEndpointDisplayName = async (
     const ownerAddress = await powerProxy.owner();
 
     // If owner is Execution contract, it's an execution endpoint
+    const executionAddress = deployments.Execution[chainId];
     if (ownerAddress.toLowerCase() === executionAddress.toLowerCase()) {
       // Execution endpoint: random emoji
       try {
         // Get all endpoints for this parent node
-        const executionContract = new ethers.Contract(
-          executionAddress,
-          ABIs.Execution,
+        const willweContract = new ethers.Contract(
+          willweAddress,
+          ABIs.WillWe,
           provider
         );
-        const nodeData = await executionContract.getNodeData(parentNodeId);
+        const nodeData = await willweContract.getNodeData(parentNodeId, ethers.ZeroAddress);
         const endpoints = nodeData.movementEndpoints || [];
         const index = endpoints.findIndex((ep: string) => ep.toLowerCase() === endpointAddress.toLowerCase());
         const emojiIndex = index % ENDPOINT_EMOJIS.length;
@@ -139,12 +140,25 @@ export const getEndpointDisplayName = async (
 
     // User endpoint: door emoji + ENS or address
     try {
-      const ensName = await provider.lookupAddress(ownerAddress);
-      if (ensName) {
-        return `🚪 ${ensName}`;
+      // Use our internal API endpoint to get token metadata
+      let baseUrl = '';
+      if (typeof window !== 'undefined') {
+        // Client-side
+        baseUrl = window.location.origin;
+      } else {
+        // Server-side
+        baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      }
+      const response = await fetch(`${baseUrl}/api/tokens/metadata?address=${ownerAddress}&chainId=${chainId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch token metadata');
+      }
+      const data = await response.json();
+      if (data.metadata?.name) {
+        return `🚪 ${data.metadata.name}`;
       }
     } catch (error) {
-      console.warn('Error looking up ENS name:', error);
+      console.warn('Error looking up token metadata:', error);
     }
     return `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`;
   } catch (error) {

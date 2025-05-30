@@ -1,100 +1,93 @@
-import { useCallback } from 'react';
 import { useAlchemyBalances, AlchemyTokenBalance } from './useAlchemyBalances';
 import { useWillBalances } from './useWillBalances';
+import { useCallback, useEffect, useState } from 'react';
 
-interface UseBalancesResult {
-  balances: AlchemyTokenBalance[];
+// Extend the AlchemyTokenBalance interface to include protocol balance
+interface ExtendedTokenBalance extends AlchemyTokenBalance {
+  protocolBalance?: AlchemyTokenBalance;
+}
+
+export interface UseBalancesResult {
+  balances: ExtendedTokenBalance[];
   protocolBalances: AlchemyTokenBalance[];
   isLoading: boolean;
   error: Error | null;
-  refetch: () => void;
+  refetch: () => Promise<void>;
 }
 
-export function useBalances(
+export const useBalances = (
   userAddress: string | undefined,
   chainId: string | undefined
-): UseBalancesResult {
+): UseBalancesResult => {
   const alchemyBalancesResult = useAlchemyBalances(userAddress, chainId);
   const balances = alchemyBalancesResult.balances;
   const isBalancesLoading = alchemyBalancesResult.isLoading;
   const balancesError = alchemyBalancesResult.error;
 
-  const {
-    willBalanceItems: protocolBalances,
-    isLoading: isProtocolBalancesLoading,
-    error: protocolBalancesError,
-  } = useWillBalances(chainId || '');
+  const willBalancesResult = useWillBalances(chainId);
+  const protocolBalances = willBalancesResult.willBalanceItems;
+  const isProtocolLoading = willBalancesResult.isLoading;
+  const protocolError = willBalancesResult.error;
 
-  const isLoading = isBalancesLoading || isProtocolBalancesLoading;
-  const error = balancesError || protocolBalancesError;
-  const refetch = useCallback(() => {
-    alchemyBalancesResult.refetch();
-    useWillBalances(chainId || '').refetch();
-  }, [alchemyBalancesResult, useWillBalances, chainId]);
+  const [mergedBalances, setMergedBalances] = useState<ExtendedTokenBalance[]>([]);
+
+  const refetch = useCallback(async () => {
+    await Promise.all([
+      alchemyBalancesResult.refetch(),
+      willBalancesResult.refetch()
+    ]);
+  }, [alchemyBalancesResult, willBalancesResult]);
+
+  useEffect(() => {
+    if (balances && protocolBalances) {
+      const merged = mergeBalances(balances, protocolBalances);
+      setMergedBalances(merged);
+    }
+  }, [balances, protocolBalances]);
 
   return {
-    balances,
+    balances: mergedBalances,
     protocolBalances,
-    isLoading,
-    error,
+    isLoading: isBalancesLoading || isProtocolLoading,
+    error: balancesError || protocolError,
     refetch
   };
-}
+};
 
-// Helper function to merge user and protocol balances
-export function mergeBalances(
+function mergeBalances(
   userBalances: AlchemyTokenBalance[],
   protocolBalances: AlchemyTokenBalance[]
-): AlchemyTokenBalance[] {
-  const mergedBalances = [...userBalances];
-  
-  protocolBalances.forEach(protocolBalance => {
-    const existingIndex = mergedBalances.findIndex(
-      balance => balance.contractAddress === protocolBalance.contractAddress
-    );
-    
-    if (existingIndex === -1) {
-      mergedBalances.push(protocolBalance);
+): ExtendedTokenBalance[] {
+  const balanceMap = new Map<string, ExtendedTokenBalance>();
+
+  // Add user balances to map
+  userBalances.forEach(balance => {
+    balanceMap.set(balance.contractAddress.toLowerCase(), balance as ExtendedTokenBalance);
+  });
+
+  // Merge protocol balances
+  protocolBalances.forEach(balance => {
+    const key = balance.contractAddress.toLowerCase();
+    const existingBalance = balanceMap.get(key);
+
+    if (existingBalance) {
+      // Update existing balance with protocol info
+      balanceMap.set(key, {
+        ...existingBalance,
+        protocolBalance: balance
+      });
+    } else {
+      // Add new protocol balance
+      balanceMap.set(key, balance as ExtendedTokenBalance);
     }
   });
-  
-  return mergedBalances.sort((a: AlchemyTokenBalance, b: AlchemyTokenBalance) => {
-    // Convert balance strings to BigInt for proper comparison
-    const aUserBalance = BigInt(a.tokenBalance || '0');
-    const bUserBalance = BigInt(b.tokenBalance || '0');
-    
-    const aProtocolBalance = BigInt(
-      protocolBalances.find(p => p.contractAddress === a.contractAddress)?.tokenBalance || '0'
-    );
-    
-    const bProtocolBalance = BigInt(
-      protocolBalances.find(p => p.contractAddress === b.contractAddress)?.tokenBalance || '0'
-    );
-    
-    // Calculate total balances
-    const aTotalBalance = aUserBalance + aProtocolBalance;
-    const bTotalBalance = bUserBalance + bProtocolBalance;
-    
-    // Compare and return sort order
-    if (aTotalBalance < bTotalBalance) return 1;
-    if (aTotalBalance > bTotalBalance) return -1;
-    return 0;
+
+  return Array.from(balanceMap.values()).sort((a, b) => {
+    // Sort by balance value (descending)
+    const aValue = parseFloat(a.formattedBalance);
+    const bValue = parseFloat(b.formattedBalance);
+    return bValue - aValue;
   });
 }
 
-// Utility function to format balance display
-export function formatBalance(balance: string | bigint): string {
-  const balanceBigInt = typeof balance === 'string' ? BigInt(balance) : balance;
-  // Convert to string and handle decimals (assuming 18 decimals)
-  const stringBalance = balanceBigInt.toString();
-  const decimalPosition = Math.max(0, stringBalance.length - 18);
-  
-  if (decimalPosition === 0) {
-    return `0.${stringBalance.padStart(18, '0')}`;
-  }
-  
-  const wholePart = stringBalance.slice(0, decimalPosition);
-  const decimalPart = stringBalance.slice(decimalPosition);
-  
-  return `${wholePart}.${decimalPart.padEnd(18, '0')}`;
-}
+export default useBalances;

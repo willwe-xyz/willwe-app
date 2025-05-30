@@ -9,7 +9,7 @@ export const ponderConfig = {
   /**
    * URL of the Ponder server
    */
-  serverUrl: process.env.PONDER_SERVER_URL || 'http://localhost:8080'
+  // serverUrl: process.env.PONDER_SERVER_URL || 'http://localhost:8080'
 };
 
 /**

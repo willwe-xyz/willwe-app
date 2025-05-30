@@ -221,6 +221,12 @@ export interface ActivityItem {
   status?: 'pending' | 'success' | 'failed'; // Status of the activity
   userAddress?: string; // User address for ENS resolution
   timestamp?: string; // Timestamp for display
+  verb?: string; // Action verb
+  target?: string; // Target of the action
+  context?: {
+    icon?: string;
+    [key: string]: any;
+  }; // Additional context
 }
 
 ///////////////////////////////////////////

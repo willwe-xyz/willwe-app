@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useEffect } from 'react';
+import React, { memo, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Box,
   Slider,
@@ -107,34 +107,43 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
 }) => {
   const { user } = usePrivy();
   const contract = useWillWeContract(chainId);
-  const [localValue, setLocalValue] = useState(externalValue || 0);
+  const initialValue = useMemo(() => {
+    if (typeof lastSignal === 'string') {
+      const basisPoints = parseInt(lastSignal, 10);
+      return isNaN(basisPoints) ? 0 : basisPoints / 100;
+    }
+    return externalValue;
+  }, [lastSignal, externalValue]);
+
+  const [value, setValue] = useState(initialValue);
   const [eligibilityImpact, setEligibilityImpact] = useState<string | null>(null);
-  const [initialThumbValue, setInitialThumbValue] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [tempTotalAllocation, setTempTotalAllocation] = useState(totalAllocation || 0);
+  const [remainingAllocation, setRemainingAllocation] = useState(100);
 
   useEffect(() => {
-    setLocalValue(externalValue || 0);
+    setValue(externalValue);
   }, [externalValue]);
 
+  useEffect(() => {
+    setRemainingAllocation(100 - totalAllocation);
+  }, [totalAllocation]);
+
   const handleIncrement = useCallback(() => {
-    const newValue = Math.min(100, localValue + STEP_SIZE);
-    const newTotal = (totalAllocation - localValue + newValue);
+    const newValue = Math.min(100, value + STEP_SIZE);
+    const newTotal = (totalAllocation - value + newValue);
     if (newTotal <= 100) {
-      setLocalValue(newValue);
-      setTempTotalAllocation(newTotal);
+      setValue(newValue);
       onChange(newValue);
       if (onChangeEnd) onChangeEnd(newValue);
     }
-  }, [localValue, totalAllocation, onChange, onChangeEnd]);
+  }, [value, totalAllocation, onChange, onChangeEnd]);
 
   const handleDecrement = useCallback(() => {
-    const newValue = Math.max(0, localValue - STEP_SIZE);
-    setLocalValue(newValue);
-    setTempTotalAllocation(totalAllocation - localValue + newValue);
+    const newValue = Math.max(0, value - STEP_SIZE);
+    setValue(newValue);
     onChange(newValue);
     if (onChangeEnd) onChangeEnd(newValue);
-  }, [localValue, totalAllocation, onChange, onChangeEnd]);
+  }, [value, onChange, onChangeEnd]);
 
   const calculateEligibilityImpact = useCallback(async (newValue: number) => {
     if (!user?.wallet?.address || !contract) return;
@@ -167,22 +176,18 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
   }, [nodeId, parentId, lastSignal, user?.wallet?.address, contract]);
 
   const handleChange = useCallback((v: number) => {
-    setLocalValue(v);
-    const diff = v - initialThumbValue;
-    const newTempTotal = totalAllocation + diff;
-    setTempTotalAllocation(newTempTotal);
+    setValue(v);
     onChange(v);
-  }, [onChange, initialThumbValue, totalAllocation]);
+  }, [onChange]);
 
   const handleChangeEnd = useCallback((v: number) => {
-    setLocalValue(v);
+    setValue(v);
     onChange(v);
     if (onChangeEnd) onChangeEnd(v);
     calculateEligibilityImpact(v);
   }, [onChange, onChangeEnd, calculateEligibilityImpact]);
 
   const handleDragStart = () => {
-    setInitialThumbValue(localValue);
     setIsDragging(true);
   };
 
@@ -194,7 +199,7 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
     if (!isDragging) {
       return (100 - totalAllocation).toFixed(1);
     }
-    const currentDiff = localValue - initialThumbValue;
+    const currentDiff = value - initialValue;
     const projectedTotal = totalAllocation + currentDiff;
     return (100 - projectedTotal).toFixed(1);
   };
@@ -210,7 +215,7 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
             aria-label="Decrease allocation"
             icon={<Minus size={14} />}
             onClick={handleDecrement}
-            isDisabled={isDisabled || localValue <= 0}
+            isDisabled={isDisabled || value <= 0}
             colorScheme="gray"
             variant="ghost"
           />
@@ -218,7 +223,7 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
             aria-label="Increase allocation"
             icon={<Plus size={14} />}
             onClick={handleIncrement}
-            isDisabled={isDisabled || tempTotalAllocation >= 100}
+            isDisabled={isDisabled || totalAllocation >= 100}
             colorScheme="gray"
             variant="ghost"
           />
@@ -226,7 +231,7 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
       </HStack>
 
       <Slider
-        value={localValue}
+        value={value}
         onChange={handleChange}
         onChangeEnd={handleChangeEnd}
         onMouseDown={handleDragStart}
@@ -244,7 +249,7 @@ const SignalSlider: React.FC<SignalSliderProps> = ({
         <Tooltip
           label={
             <VStack spacing={0} align="center">
-              <Text>{localValue.toFixed(1)}%</Text>
+              <Text>{value.toFixed(1)}%</Text>
               <Text
                 fontSize="xs"
                 color={calculateRemainingAllocation() < "0" ? "red.500" : "white"}

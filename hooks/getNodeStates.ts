@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NodeState } from '../types/chainData';
-import { ethers } from 'ethers';
-import { deployments, ABIs, getRPCUrl } from '../config/contracts';
 
 interface UseNodeStatesResult {
     nodeStates: (NodeState | null)[];
@@ -31,22 +29,28 @@ export function useNodeStates(
             // Filter out nodeIds that start with '0x'
             const validNodeIds = nodeIds.filter(nodeId => !nodeId.startsWith('0x'));
             
-            // Initialize provider and contract
-            const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
-            const contract = new ethers.Contract(deployments[chainId].address, ABIs.nodeContract, provider);
+            // Fetch data for each node in parallel
+            const promises = validNodeIds.map(async (nodeId) => {
+                try {
+                    const response = await fetch(
+                        `/api/nodes/data?chainId=${chainId}&nodeId=${nodeId}`
+                    );
 
-            // Call the contract's getNodes function
-            const result = await contract.getNodes(validNodeIds);
-            
-            // Transform the result into NodeState array
-            const states = validNodeIds.map((_, index) => ({
-                // Map contract response to NodeState structure
-                // Adjust according to your contract's return structure
-                ...result[index]
-            }));
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch node data');
+                    }
 
-            setNodeStates(states);
-            setErrors(states.map(() => null));
+                    const result = await response.json();
+                    return result.data;
+                } catch (error) {
+                    console.error(`Error fetching node ${nodeId}:`, error);
+                    return null;
+                }
+            });
+
+            const results = await Promise.all(promises);
+            setNodeStates(results);
+            setErrors(results.map(result => result === null ? new Error('Failed to fetch node data') : null));
         } catch (error) {
             setErrors(nodeIds.map(() => error as Error));
             setNodeStates(nodeIds.map(() => null));

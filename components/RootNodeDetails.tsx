@@ -71,6 +71,9 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
   const userAddress = wallets?.[0]?.address;
   const willweContract = useWillWeContract(chainId);
   const [totalSupplyValue, setTotalSupplyValue] = useState<bigint>(BigInt(0));
+  const [activities, setActivities] = useState<any[]>([]);
+  const [refreshLoading, setRefreshLoading] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTotalSupply = async () => {
@@ -162,6 +165,25 @@ export const RootNodeDetails: React.FC<RootNodeDetailsProps> = ({
     const formatted = formatBalance(value.toString());
     return Number(formatted).toFixed(4);
   };
+
+  const fetchRootNodeEvents = useCallback(async () => {
+    if (!selectedToken || !chainId) return;
+    setRefreshLoading(true);
+    setRefreshError(null);
+    try {
+      // Use internal API endpoint that will proxy to Ponder
+      const response = await fetch(`/api/rootnode/events?nodeId=${selectedToken}&networkId=${chainId}`);
+      if (!response.ok) {
+        throw new Error(`Error fetching root node events: ${response.statusText}`);
+      }
+      const data = await response.json();
+      setActivities(data.events || []);
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : 'Failed to fetch activities');
+    } finally {
+      setRefreshLoading(false);
+    }
+  }, [selectedToken, chainId]);
 
   if (isLoading) {
     return (

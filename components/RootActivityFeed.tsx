@@ -52,10 +52,8 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   // Function to convert token address to root node ID (uint160)
   const getRootNodeId = useCallback((address: string): string => {
     if (!address || !address.startsWith('0x')) return '';
-    
     // Remove '0x' prefix if present
     const cleanAddress = address.startsWith('0x') ? address.slice(2) : address;
-    
     try {
       // Use BigInt to handle the conversion from hex to decimal
       const uint160Value = BigInt('0x' + cleanAddress.toLowerCase()).toString();
@@ -69,12 +67,9 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   // Function to fetch activities using the getRootNodeEvents endpoint
   const fetchActivities = useCallback(async () => {
     if (!tokenAddress || !chainId) return;
-    
     setIsLoading(true);
     setError(null);
-    
     const rootNodeId = getRootNodeId(tokenAddress);
-    
     try {
       setDebugInfo(prev => ({
         ...prev,
@@ -83,11 +78,9 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
         tokenAddress,
         chainId
       }));
-      
       const result = await getRootNodeEvents(rootNodeId, chainId, 50, 0);
       setActivities(result.events || []);
       setPaginationMeta(result.meta || { total: 0, limit: 50, offset: 0, nodeCount: 0 });
-      
       // Update debug info
       setDebugInfo(prev => ({
         ...prev,
@@ -95,11 +88,9 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
         responseData: result,
         meta: result.meta
       }));
-      
     } catch (err) {
       console.error('Error fetching root node events:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
-      
       toast({
         title: 'Error fetching activities',
         description: err instanceof Error ? err.message : 'Unknown error fetching activities',
@@ -121,9 +112,33 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   useEffect(() => {
     if (activities.length) {
       try {
-        const transformed = transformActivities(activities, true);
+        // transformActivities returns ActivityItem[], so we need to map to ExtendedActivityItem[]
+        const transformedBase = transformActivities(activities);
+        const transformed: ExtendedActivityItem[] = transformedBase.map((item) => {
+          const when = item.when;
+          let timeAgo = '';
+          let dateObj: Date | null = null;
+          // Only use 'when' if it is present and valid; do NOT fallback to current time
+          if (when && !isNaN(Number(when))) {
+            const timestamp = Number(when);
+            dateObj = new Date(timestamp < 1e12 ? timestamp * 1000 : timestamp);
+            if (!isNaN(dateObj.getTime())) {
+              timeAgo = formatDistanceToNow(dateObj, { addSuffix: true });
+            }
+          } else if (when && !isNaN(Date.parse(when))) {
+            dateObj = new Date(when);
+            if (!isNaN(dateObj.getTime())) {
+              timeAgo = formatDistanceToNow(dateObj, { addSuffix: true });
+            }
+          }
+          // If 'when' is null, undefined, or invalid, timeAgo remains ''
+          return {
+            ...item,
+            when,
+            timeAgo,
+          };
+        });
         setTransformedActivities(transformed);
-        
         // Update debug info
         setDebugInfo(prev => ({
           ...prev,
@@ -141,24 +156,39 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
           duration: 5000,
           isClosable: true,
         });
-        
         // If transformation fails, create a simple version of the activities
-        const simpleActivities = activities.map((activity, index) => ({
-          id: activity.id || `activity-${index}`,
-          type: activity.eventType || 'unknown',
-          timestamp: activity.when || new Date().toISOString(),
-          title: activity.eventName || 'Unknown Activity',
-          description: `Activity related to node ${activity.nodeId}`,
-          node: {
-            id: activity.nodeId || '',
-            name: activity.nodeName || 'Unknown Node'
-          },
-          network: activity.network || 'unknown',
-          user: {
-            address: activity.who || ''
+        const simpleActivities: ExtendedActivityItem[] = activities.map((activity, index) => {
+          const when = activity.when;
+          let timeAgo = '';
+          let dateObj: Date | null = null;
+          // Only use 'when' if it is present and valid; do NOT fallback to current time
+          if (when && !isNaN(Number(when))) {
+            const timestamp = Number(when);
+            dateObj = new Date(timestamp < 1e12 ? timestamp * 1000 : timestamp);
+            if (!isNaN(dateObj.getTime())) {
+              timeAgo = formatDistanceToNow(dateObj, { addSuffix: true });
+            }
+          } else if (when && !isNaN(Date.parse(when))) {
+            dateObj = new Date(when);
+            if (!isNaN(dateObj.getTime())) {
+              timeAgo = formatDistanceToNow(dateObj, { addSuffix: true });
+            }
           }
-        }));
-        
+          // If 'when' is null, undefined, or invalid, timeAgo remains ''
+          return {
+            id: activity.id || `activity-${index}`,
+            nodeId: activity.nodeId || '',
+            who: activity.who || '',
+            eventName: activity.eventName || 'Unknown Activity',
+            eventType: activity.eventType || 'unknown',
+            when,
+            timeAgo,
+            createdBlockNumber: activity.createdBlockNumber || 0,
+            network: activity.network || 'unknown',
+            networkId: activity.networkId || '',
+            description: activity.description || `Activity related to node ${activity.nodeId}`
+          };
+        });
         setTransformedActivities(simpleActivities);
       }
     } else {

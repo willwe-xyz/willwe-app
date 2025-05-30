@@ -29,6 +29,8 @@ import Link from 'next/link';
 import { Signal, History } from 'lucide-react';
 import { isEndpoint, getEndpointDisplayName } from '../../../utils/formatters';
 
+// Array of random emojis for WillWe-owned endpoints
+const ENDPOINT_EMOJIS = ['🚀', '🌟', '💫', '✨', '⚡', '🔥', '💎', '🎯', '🎨', '🎭', '🎪', '🎡', '🎢', '🎠', '🎨', '🎭', '🎪', '🎡', '🎢', '🎠'];
 
 interface SignalFormProps {
   chainId: string;
@@ -85,19 +87,19 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
     try {
       const cleanChainId = chainId.replace('eip155:', '');
-      const provider = new ethers.JsonRpcProvider(getRPCUrl(cleanChainId));
       
-      if (!deployments.WillWe[cleanChainId]) {
-        throw new Error(`No contract deployment found for chain ${cleanChainId}`);
+      // Fetch node data from the API endpoint
+      const response = await fetch(
+        `/api/nodes/data?chainId=${cleanChainId}&nodeId=${childId}&userAddress=${user.wallet.address}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch node data');
       }
       
-      const contract = new ethers.Contract(
-        deployments.WillWe[cleanChainId],
-        ABIs.WillWe,
-        provider
-      );
-
-      const node = await contract.getNodeData(childId, user.wallet.address);
+      const result = await response.json();
+      const node = result.data;
+      
       if (!node?.basicInfo?.[0]) return null;
 
       let membraneName = node.basicInfo[0].slice(-6);
@@ -105,26 +107,45 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
       
       try {
         if (node.membraneMeta && typeof node.membraneMeta === 'string' && node.membraneMeta.trim() !== '') {
-          const IPFS_GATEWAY = 'https://underlying-tomato-locust.myfilebase.com/ipfs/';
-          const metadataUrl = `${IPFS_GATEWAY}${node.membraneMeta.trim()}`;
-          
-          const response = await fetch(metadataUrl);
-          if (response.ok) {
-            const metadata = await response.json();
-            membraneName = metadata.title || metadata.name || membraneName;
+          // Check if it's an IPFS hash (starts with Qm)
+          if (node.membraneMeta.trim().startsWith('Qm')) {
+            // Use our new IPFS metadata endpoint
+            const response = await fetch(`/api/ipfs/metadata?cid=${node.membraneMeta.trim()}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.metadata?.name) {
+                membraneName = data.metadata.name;
+              }
+            }
+          } else {
+            // Use token metadata endpoint for addresses
+            const response = await fetch(`/api/tokens/metadata?address=${node.membraneMeta.trim()}&chainId=${cleanChainId}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.metadata?.name) {
+                membraneName = data.metadata.name;
+              }
+            }
           }
         }
       } catch (error) {
         console.error('Error fetching membrane metadata:', error);
       }
 
-      // Get the signal value for this child
+      // Get the signal value for this child using the new API endpoint
       let currentSignalBasisPoints = 0;
       try {
-        const signals = await contract.getUserNodeSignals(user.wallet.address, nodeId);
-        const childIndex = parentNodeData?.childrenNodes?.indexOf(childId);
-        if (childIndex !== undefined && childIndex >= 0 && signals.length > childIndex + 2) {
-          currentSignalBasisPoints = Number(signals[childIndex + 2]);
+        const response = await fetch(
+          `/api/nodes/signals?chainId=${cleanChainId}&nodeId=${nodeId}&userAddress=${user.wallet.address}`
+        );
+        
+        if (response.ok) {
+          const result = await response.json();
+          const signals = result.data;
+          const childIndex = parentNodeData?.childrenNodes?.indexOf(childId);
+          if (childIndex !== undefined && childIndex >= 0 && signals.length > childIndex + 2) {
+            currentSignalBasisPoints = Number(signals[childIndex + 2]);
+          }
         }
       } catch (error) {
         console.error('Error fetching signals:', error);
@@ -152,22 +173,75 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
       const endpointLabels = new Map<string, string>();
       try {
-        const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
-        const executionAddress = deployments.Execution[chainId.toString()];
-
         await Promise.all(parentNodeData.childrenNodes.map(async (childId) => {
           // Check if this is an endpoint by checking its rootPath
           if (parentNodeData.rootPath && parentNodeData.rootPath.length > 0) {
             const parentNodeId = parentNodeData.rootPath[parentNodeData.rootPath.length - 1];
             if (isEndpoint(childId, parentNodeId)) {
-              const endpointName = await getEndpointDisplayName(
-                childId,
-                parentNodeId,
-                provider,
-                chainId.toString()
-              );
-              if (endpointName) {
-                endpointLabels.set(childId, endpointName);
+              try {
+                // Convert nodeId to address
+                const nodeIdBigInt = BigInt(childId);
+                const endpointAddress = ethers.getAddress('0x' + nodeIdBigInt.toString(16).padStart(40, '0'));
+
+                // Get the owner of the endpoint
+                let ownerAddress = '';
+                try {
+                  const response = await fetch(`/api/nodes/endpoint-owner?chainId=${chainId}&endpointAddress=${endpointAddress}`);
+                  if (response.ok) {
+                    const data = await response.json();
+                    ownerAddress = data.owner;
+                  } else {
+                    throw new Error('Failed to fetch endpoint owner');
+                  }
+                } catch (error) {
+                  console.warn('Error fetching endpoint owner:', error);
+                  ownerAddress = '';
+                }
+
+                // If owner is Execution contract, it's an execution endpoint
+                const executionAddress = deployments.Execution[chainId];
+                if (ownerAddress.toLowerCase() === executionAddress.toLowerCase()) {
+                  // Execution endpoint: random emoji
+                  try {
+                    // Fetch node data from internal API
+                    const response = await fetch(`/api/nodes/data?chainId=${chainId}&nodeId=${parentNodeId}&userAddress=${ethers.ZeroAddress}`);
+                    if (!response.ok) {
+                      throw new Error('Failed to fetch node data');
+                    }
+                    const result = await response.json();
+                    const nodeData = result.data;
+                    const endpoints = nodeData.movementEndpoints || [];
+                    const index = endpoints.findIndex((ep: string) => ep.toLowerCase() === endpointAddress.toLowerCase());
+                    const emojiIndex = index % ENDPOINT_EMOJIS.length;
+                    endpointLabels.set(childId, ENDPOINT_EMOJIS[emojiIndex]);
+                  } catch (error) {
+                    // Fallback to hash-based emoji selection
+                    const addressHash = ethers.keccak256(ethers.toUtf8Bytes(endpointAddress));
+                    const emojiIndex = Number(addressHash.slice(0, 8)) % ENDPOINT_EMOJIS.length;
+                    endpointLabels.set(childId, ENDPOINT_EMOJIS[emojiIndex]);
+                  }
+                } else {
+                  // User endpoint: try to resolve Base ENS name
+                  try {
+                    const response = await fetch(`/api/ens/resolve?address=${ownerAddress}`);
+                    if (response.ok) {
+                      const data = await response.json();
+                      if (data.name) {
+                        endpointLabels.set(childId, `🚪 ${data.name}`);
+                      } else {
+                        endpointLabels.set(childId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                      }
+                    } else {
+                      endpointLabels.set(childId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                    }
+                  } catch (error) {
+                    console.warn('Error resolving ENS name:', error);
+                    endpointLabels.set(childId, `🚪 ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`);
+                  }
+                }
+              } catch (error) {
+                console.warn('Error fetching endpoint name:', error);
+                endpointLabels.set(childId, `Endpoint ${childId.slice(0, 6)}...${childId.slice(-4)}`);
               }
             }
           }
@@ -192,33 +266,38 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
 
       try {
         const children = await Promise.all(
-          parentNodeData.childrenNodes.map(async (childId) => {
+          parentNodeData.childrenNodes.map(async (childId: string) => {
             const childData = await fetchNodeData(childId);
             if (!childData) return null;
 
             let displayName = childData.membraneName || childId.slice(-6);
             // Use isEndpoint logic as in SankeyChart
             if (isEndpoint(childId, nodeId)) {
-              // Use getEndpointDisplayName for endpoint label
-              const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId.toString()));
-              const executionAddress = deployments.Execution[chainId.toString()];
-              let endpointDisplay = await getEndpointDisplayName(
-                childId,
-                nodeId,
-                provider,
-                chainId.toString()
-              );
-              // Only append 0x... if not a user endpoint (door emoji)
-              if (endpointDisplay && !endpointDisplay.startsWith('🚪') && endpointDisplay.length === 2 && !/\w/.test(endpointDisplay)) {
-                endpointDisplay += ` 0x${childId.slice(0, 6)}`;
+              try {
+                const response = await fetch(
+                  `/api/nodes/endpoint-name?nodeId=${childId}&parentNodeId=${nodeId}&chainId=${chainId}`
+                );
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.name) {
+                    displayName = data.name;
+                  }
+                }
+              } catch (error) {
+                console.warn('Error fetching endpoint name:', error);
+                // Use a default name if the fetch fails
+                displayName = `Endpoint ${childId.slice(0, 6)}...${childId.slice(-4)}`;
               }
-              displayName = endpointDisplay;
             }
+
+            // Convert basis points to percentage for slider value
+            const sliderValue = childData.currentSignal ? childData.currentSignal / 100 : 0;
 
             // Initialize slider value for this child
             setSliderValues(prev => ({
               ...prev,
-              [childId]: childData.currentSignal || 0
+              [childId]: sliderValue
             }));
 
             return {
@@ -235,8 +314,11 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         const validChildren = children.filter(Boolean) as ChildData[];
         setChildrenData(validChildren);
 
-        // Calculate initial total allocation
-        const initialTotal = validChildren.reduce((sum, child) => sum + (child.currentSignal || 0), 0);
+        // Calculate initial total allocation from the actual signal values
+        const initialTotal = validChildren.reduce((sum: number, child: ChildData) => {
+          const childValue = sliderValues[child.nodeId] || 0;
+          return sum + (childValue * 100); // Convert back to percentage for total
+        }, 0);
         setTotalAllocation(initialTotal);
       } catch (error) {
         console.error('Error fetching children data:', error);

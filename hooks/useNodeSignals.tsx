@@ -14,6 +14,18 @@ interface SignalData {
   value: string;
 }
 
+interface ProcessedSignals {
+  membrane: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+  inflation: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+  redistribution: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+  other: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
+}
+
+interface NodeConfigSignalsResult {
+  signals: ProcessedSignals;
+  raw: NodeState;
+}
+
 interface NodeSignalsResult {
   recentSignals: SignalData[];
   totalSignalValue: bigint;
@@ -29,29 +41,10 @@ interface NodeConfigSignals {
   other: Record<string, { value: string; supporters: string[]; totalStrength: string }>;
 }
 
-interface NodeConfigSignalsResult {
-  nodeId: string;
-  chainId: string;
-  signals: ProcessedSignals;
-  raw: {
-    membraneSignals: any[];
-    inflationSignals: any[];
-    redistributionPreferences: any[];
-    otherSignals: any[];
-  };
-}
-
 interface Signal {
   value: string;
   supporters: string[];
   totalStrength: string;
-}
-
-interface ProcessedSignals {
-  membrane: Record<string, Signal>;
-  inflation: Record<string, Signal>;
-  redistribution: Record<string, Signal>;
-  other: Record<string, Signal>;
 }
 
 interface RawSignal {
@@ -65,20 +58,39 @@ export function useNodeSignals(node: NodeState): NodeSignalsResult {
     // Process signals from the node state
     const allSignals: SignalData[] = [];
     
-    // If node has signals array, process them
-    if (node.signals && Array.isArray(node.signals)) {
-      // Process each signal in the array
-      node.signals.forEach((signal: any) => {
-        if (signal && signal.MembraneInflation && Array.isArray(signal.MembraneInflation)) {
-          signal.MembraneInflation.forEach((mi: any[], index: number) => {
-            if (Array.isArray(mi) && mi.length >= 2) {
-              allSignals.push({
-                membrane: mi[0]?.toString() || '',
-                inflation: mi[1]?.toString() || '',
-                timestamp: Number(signal.lastRedistSignal?.[index]) || Date.now(),
-                value: mi[1]?.toString() || '0'
-              });
-            }
+    // Process membrane signals
+    if (node.nodeSignals?.membraneSignals) {
+      node.nodeSignals.membraneSignals.forEach(([membrane, support]) => {
+        allSignals.push({
+          membrane,
+          inflation: '0',
+          timestamp: Date.now(),
+          value: support
+        });
+      });
+    }
+
+    // Process inflation signals
+    if (node.nodeSignals?.inflationSignals) {
+      node.nodeSignals.inflationSignals.forEach(([value, support]) => {
+        allSignals.push({
+          membrane: '0',
+          inflation: value,
+          timestamp: Date.now(),
+          value: support
+        });
+      });
+    }
+
+    // Process redistribution signals
+    if (node.nodeSignals?.redistributionSignals) {
+      node.nodeSignals.redistributionSignals.forEach((signal) => {
+        if (Array.isArray(signal) && signal.length > 0) {
+          allSignals.push({
+            membrane: signal[0],
+            inflation: '0',
+            timestamp: Date.now(),
+            value: signal.length.toString()
           });
         }
       });
@@ -112,7 +124,7 @@ export function useNodeSignals(node: NodeState): NodeSignalsResult {
       hasActiveSignals: allSignals.length > 0,
       getLastSignalTime,
     };
-  }, [node.signals]);
+  }, [node.nodeSignals]);
 }
 
 export function useNodeConfigSignals(nodeId: string, chainId: string) {
@@ -127,10 +139,10 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
     setError(null);
 
     try {
-      const cleanChainId = chainId.replace('eip155:', '');
-      const ponderServerUrl = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || 'http://localhost:8080';
-      const response = await fetch(`${ponderServerUrl}/getNodeConfigSignals?nodeId=${nodeId}&chainId=${cleanChainId}`);
-      
+      const response = await fetch(
+        `/api/nodes/data?chainId=${chainId}&nodeId=${nodeId}`
+      );
+
       if (!response.ok) {
         throw new Error(`Error fetching node signals: ${response.statusText}`);
       }
@@ -145,35 +157,51 @@ export function useNodeConfigSignals(nodeId: string, chainId: string) {
         other: {}
       };
 
-      // Process all signals from otherSignals array using their signalType
-      result.raw.otherSignals.forEach((signal: any) => {
-        if (!signal.signalValue || !signal.signalType) return;
+      // Process all signals from the node data
+      if (result.data?.nodeSignals) {
+        const { nodeSignals } = result.data;
 
-        const signalData = {
-          value: signal.signalValue,
-          supporters: [signal.who].filter(Boolean),
-          totalStrength: signal.totalStrength || '0'
-        };
-
-        switch (signal.signalType) {
-          case 'inflation':
-            processedSignals.inflation[signal.signalValue] = signalData;
-            break;
-          case 'membrane':
-            processedSignals.membrane[signal.signalValue] = signalData;
-            break;
-          case 'redistribution':
-            processedSignals.redistribution[signal.signalValue] = signalData;
-            break;
-          default:
-            processedSignals.other[signal.signalValue] = signalData;
+        // Process membrane signals
+        if (Array.isArray(nodeSignals.membraneSignals)) {
+          nodeSignals.membraneSignals.forEach(([value, support]: [string, string]) => {
+            processedSignals.membrane[value] = {
+              value,
+              supporters: [support].filter(Boolean),
+              totalStrength: support
+            };
+          });
         }
-      });
 
-      // Update the result with processed signals
-      result.signals = processedSignals;
+        // Process inflation signals
+        if (Array.isArray(nodeSignals.inflationSignals)) {
+          nodeSignals.inflationSignals.forEach(([value, support]: [string, string]) => {
+            processedSignals.inflation[value] = {
+              value,
+              supporters: [support].filter(Boolean),
+              totalStrength: support
+            };
+          });
+        }
+
+        // Process redistribution signals
+        if (Array.isArray(nodeSignals.redistributionSignals)) {
+          nodeSignals.redistributionSignals.forEach((signal: string[]) => {
+            if (Array.isArray(signal) && signal.length > 0) {
+              const value = signal[0];
+              processedSignals.redistribution[value] = {
+                value,
+                supporters: signal.slice(1).filter(Boolean),
+                totalStrength: signal.length.toString()
+              };
+            }
+          });
+        }
+      }
       
-      setData(result);
+      setData({
+        signals: processedSignals,
+        raw: result.data
+      });
     } catch (err) {
       console.error('Error fetching node config signals:', err);
       setError(err instanceof Error ? err : new Error(String(err)));

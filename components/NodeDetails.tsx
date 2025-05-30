@@ -17,6 +17,7 @@ import {
   Flex,
   Heading,
   Spacer,
+  Button,
 } from "@chakra-ui/react";
 import { usePrivy } from '@privy-io/react-auth';
 import { useNodeData } from '../hooks/useNodeData';
@@ -90,14 +91,17 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
       if (!nodeData?.rootPath?.[0] || !cleanChainId) return;
 
       try {
-        const code = await provider.getCode(tokenAddress);
-        if (code === '0x') {
-          setTokenSymbol('$TOKEN');
-          return;
+        // Use our internal API endpoint to get token metadata (including code check)
+        const response = await fetch(`/api/tokens/metadata?address=${tokenAddress}&chainId=${cleanChainId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch token metadata');
         }
-
-        const symbol = await tokenContract.symbol();
-        setTokenSymbol(symbol);
+        const data = await response.json();
+        if (data.metadata?.symbol) {
+          setTokenSymbol(data.metadata.symbol);
+        } else {
+          setTokenSymbol('$TOKEN');
+        }
       } catch (error) {
         console.error('Error fetching token symbol:', error);
         setTokenSymbol('$TOKEN');
@@ -105,7 +109,7 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
     };
 
     fetchTokenSymbol();
-  }, [nodeData, cleanChainId, provider, tokenContract, tokenAddress]);
+  }, [nodeData, cleanChainId, tokenAddress]);
   
   // Theme colors
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -162,7 +166,18 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           borderColor="red.100"
         >
           <AlertIcon />
-          <Text>Error loading node data: {error.message || 'Unknown error'}</Text>
+          <VStack align="start" spacing={2}>
+            <Text fontWeight="medium">Error loading node data</Text>
+            <Text fontSize="sm">{error.message || 'Unknown error'}</Text>
+            <Button
+              size="sm"
+              colorScheme="red"
+              variant="outline"
+              onClick={() => fetchNodeData()}
+            >
+              Retry
+            </Button>
+          </VStack>
         </Alert>
       </Box>
     );
@@ -181,7 +196,20 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({
           borderColor="orange.100"
         >
           <AlertIcon />
-          <Text>No data available for this node</Text>
+          <VStack align="start" spacing={2}>
+            <Text fontWeight="medium">No data available for this node</Text>
+            <Text fontSize="sm">
+              The node may not exist or you may not have permission to view it.
+            </Text>
+            <Button
+              size="sm"
+              colorScheme="orange"
+              variant="outline"
+              onClick={() => fetchNodeData()}
+            >
+              Retry
+            </Button>
+          </VStack>
         </Alert>
       </Box>
     );

@@ -1,15 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 // New type to replace the Covalent BalanceItem
 export interface AlchemyTokenBalance {
   contractAddress: string;
-  tokenBalance: string | null;
-  // Metadata fields
+  tokenBalance: string;
   name: string;
   symbol: string;
-  decimals: number | null;
-  logo?: string | null;
-  // Formatted balance in human readable form
+  decimals: number;
+  logo: string | null;
   formattedBalance: string;
 }
 
@@ -34,14 +32,12 @@ export const useAlchemyBalances = (
   chainId: string | undefined
 ): UseAlchemyBalancesResult => {
   const [balances, setBalances] = useState<AlchemyTokenBalance[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const fetchTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const fetchBalances = async () => {
+  const fetchBalances = useCallback(async () => {
     if (!address || !chainId) {
       setBalances([]);
-      setIsLoading(false);
       return;
     }
 
@@ -60,41 +56,31 @@ export const useAlchemyBalances = (
     setError(null);
 
     try {
+      // Use our internal API endpoint
       const response = await fetch(`/api/alchemy/balances?address=${address}&chainId=${chainId}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch balances');
+        throw new Error(`Error fetching balances: ${response.statusText}`);
       }
-      const data = await response.json();
 
+      const data = await response.json();
       // Update cache
       balanceCache.set(cacheKey, {
         balances: data.balances,
         timestamp: now
       });
-
       setBalances(data.balances);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch balances'));
+      console.error('Error fetching balances:', err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      setBalances([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [address, chainId]);
 
   useEffect(() => {
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current);
-    }
-
-    fetchTimeoutRef.current = setTimeout(() => {
-      fetchBalances();
-    }, 300);
-
-    return () => {
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-      }
-    };
-  }, [address, chainId]);
+    fetchBalances();
+  }, [fetchBalances]);
 
   return {
     balances,

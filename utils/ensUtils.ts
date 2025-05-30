@@ -23,7 +23,7 @@ const BASE_RESOLVER = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD';
  */
 const baseRpcClient = createPublicClient({
   chain: base,
-  transport: http(process.env.NEXT_PUBLIC_RPC_URL_BASE || 'https://mainnet.base.org'),
+  transport: http(process.env.NEXT_PUBLIC_RPC_URL_BASE || 'https://base.llamarpc.com'),
 });
 
 /**
@@ -106,6 +106,22 @@ const setCache = (address: string, value: string) => {
   logCacheState(lowerAddress, 'SET');
 };
 
+// Add rate limiting
+const RATE_LIMIT_DELAY = 1000; // 1 second between requests
+let lastRequestTime = 0;
+
+const rateLimitedRequest = async <T>(fn: () => Promise<T>): Promise<T> => {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  
+  if (timeSinceLastRequest < RATE_LIMIT_DELAY) {
+    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY - timeSinceLastRequest));
+  }
+  
+  lastRequestTime = Date.now();
+  return fn();
+};
+
 /**
  * Calculate the reverse resolution node for an address on Base
  */
@@ -137,32 +153,37 @@ function calculateNameHash(name: string): `0x${string}` {
 async function lookupBaseENS(address: Address): Promise<BaseENSName | undefined> {
   try {
     // First get the node for the address from ReverseRegistrar
-    const node = await baseRpcClient.readContract({
-      address: BASE_REVERSE_REGISTRAR,
-      abi: REVERSE_REGISTRAR_ABI,
-      functionName: 'node',
-      args: [address],
-    });
+    const node = await rateLimitedRequest(() => 
+      baseRpcClient.readContract({
+        address: BASE_REVERSE_REGISTRAR,
+        abi: REVERSE_REGISTRAR_ABI,
+        functionName: 'node',
+        args: [address],
+      })
+    );
     
     // Then get the name for that node from the Resolver
-    const result = await baseRpcClient.readContract({
-      address: BASE_RESOLVER,
-      abi: RESOLVER_ABI,
-      functionName: 'name',
-      args: [node],
-    });
+    const result = await rateLimitedRequest(() =>
+      baseRpcClient.readContract({
+        address: BASE_RESOLVER,
+        abi: RESOLVER_ABI,
+        functionName: 'name',
+        args: [node],
+      })
+    );
     
     if (result && typeof result === 'string' && result.endsWith('.base.eth')) {
       return result as BaseENSName;
     }
     return undefined;
   } catch (error) {
+    console.warn('Error looking up Base ENS:', error);
     return undefined;
   }
 }
 
 /**
- * Resolves an Ethereum address to its Base ENS name first, then regular ENS name if available, otherwise returns a truncated address
+ * Resolves an Ethereum address to its ENS name through the API endpoint
  */
 export async function resolveENS(address: string): Promise<string> {
   if (!address || !ethers.isAddress(address)) {
@@ -178,24 +199,38 @@ export async function resolveENS(address: string): Promise<string> {
   }
 
   try {
-    const response = await fetch(`/api/ens/resolve?address=${address}`);
+    // Get the base URL for the API
+    let baseUrl = '';
+    if (typeof window !== 'undefined') {
+      // Client-side
+      baseUrl = window.location.origin;
+    } else {
+      // Server-side
+      baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    }
+
+    const response = await fetch(`${baseUrl}/api/ens/resolve?address=${address}`);
     if (!response.ok) {
       throw new Error('Failed to resolve ENS name');
     }
+    
     const data = await response.json();
-    setCache(lowerAddress, data.name);
-    return data.name;
+    if (data.name) {
+      setCache(lowerAddress, data.name);
+      return data.name;
+    }
   } catch (error) {
-    // Fallback to truncated address
-    const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-    setCache(lowerAddress, truncatedAddress);
-    return truncatedAddress;
+    console.warn('Error resolving ENS name:', error);
   }
+
+  // Fallback to truncated address
+  const truncatedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+  setCache(lowerAddress, truncatedAddress);
+  return truncatedAddress;
 }
 
 /**
  * Batch resolves multiple addresses to their ENS names
- * This is more efficient than resolving one by one
  */
 export async function resolveMultipleENS(addresses: string[]): Promise<Record<string, string>> {
   const uniqueAddresses = Array.from(new Set(addresses.map(addr => addr.toLowerCase())));
