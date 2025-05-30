@@ -26,6 +26,7 @@ import RedistributionSection from './RedistributionSection';
 import SignalDetailsModal from './SignalDetailsModal';
 import { SignalValue } from './types';
 import { usePrivy } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
 
 interface ExistingSignalsTabProps {
   nodeId: string;
@@ -46,7 +47,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
   const [selectedSignal, setSelectedSignal] = useState<SignalValue | null>(null);
   const [selectedSignalType, setSelectedSignalType] = useState<'membrane' | 'inflation' | 'redistribution'>('membrane');
   const { user } = usePrivy();
-  const userAddress = user?.wallet?.address || '';
+  const userAddress = user?.wallet?.address || ethers.ZeroAddress;
   const toast = useToast();
   
   // Get node data
@@ -93,21 +94,32 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
 
         if (userIndex >= 0) {
           // Copy membrane signal
-          if (nodeData.nodeSignals.membraneSignals[userIndex] && nodeData.nodeSignals.membraneSignals[userIndex][0]) {
+          if (
+            nodeData.nodeSignals.membraneSignals &&
+            nodeData.nodeSignals.membraneSignals[userIndex] &&
+            nodeData.nodeSignals.membraneSignals[userIndex][0]
+          ) {
             lastSignalArray[0] = nodeData.nodeSignals.membraneSignals[userIndex][0];
           } else {
             lastSignalArray[0] = '0';
           }
           
           // Copy inflation signal
-          if (nodeData.nodeSignals.inflationSignals[userIndex] && nodeData.nodeSignals.inflationSignals[userIndex][0]) {
+          if (
+            nodeData.nodeSignals.inflationSignals &&
+            nodeData.nodeSignals.inflationSignals[userIndex] &&
+            nodeData.nodeSignals.inflationSignals[userIndex][0]
+          ) {
             lastSignalArray[1] = nodeData.nodeSignals.inflationSignals[userIndex][0];
           } else {
             lastSignalArray[1] = '0';
           }
           
           // Copy redistribution signals
-          if (nodeData.nodeSignals.redistributionSignals[userIndex]) {
+          if (
+            nodeData.nodeSignals.redistributionSignals &&
+            nodeData.nodeSignals.redistributionSignals[userIndex]
+          ) {
             lastSignalArray = [
               ...lastSignalArray,
               ...nodeData.nodeSignals.redistributionSignals[userIndex]
@@ -118,7 +130,7 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
           lastSignalArray = ['0', '0'];
           
           // Equal distribution for children if no previous signal
-          if (nodeData.childrenNodes && nodeData.childrenNodes.length > 0) {
+          if (nodeData && nodeData.childrenNodes && nodeData.childrenNodes.length > 0) {
             const equalShare = Math.floor(10000 / nodeData.childrenNodes.length);
             const remainder = 10000 - (equalShare * nodeData.childrenNodes.length);
             
@@ -179,9 +191,11 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
       });
 
       // Find the originator's signal to copy
-      const originatorIndex = nodeData.nodeSignals.signalers.findIndex(
-        (addr: string) => addr.toLowerCase() === originator.toLowerCase()
-      );
+      const originatorIndex = nodeData && nodeData.nodeSignals && nodeData.nodeSignals.signalers
+        ? nodeData.nodeSignals.signalers.findIndex(
+            (addr: string) => addr.toLowerCase() === originator.toLowerCase()
+          )
+        : -1;
 
       if (originatorIndex === -1) {
         throw new Error('Original signal not found');
@@ -191,35 +205,62 @@ const ExistingSignalsTab: React.FC<ExistingSignalsTabProps> = ({
       let signalArray: string[] = [];
       
       // Find if the user has any existing signals for membrane/inflation
-      const userIndex = nodeData.nodeSignals.signalers.findIndex(
-        (addr: string) => addr.toLowerCase() === userAddress.toLowerCase()
-      );
+      const userIndex = nodeData && nodeData.nodeSignals && nodeData.nodeSignals.signalers
+        ? nodeData.nodeSignals.signalers.findIndex(
+            (addr: string) => addr.toLowerCase() === userAddress.toLowerCase()
+          )
+        : -1;
 
       if (userIndex >= 0) {
         // Copy user's existing membrane signal
-        if (nodeData.nodeSignals.membraneSignals[userIndex] && nodeData.nodeSignals.membraneSignals[userIndex][0]) {
+        if (
+          nodeData &&
+          nodeData.nodeSignals &&
+          nodeData.nodeSignals.membraneSignals &&
+          nodeData.nodeSignals.membraneSignals[userIndex] &&
+          nodeData.nodeSignals.membraneSignals[userIndex][0]
+        ) {
           signalArray[0] = nodeData.nodeSignals.membraneSignals[userIndex][0];
         } else {
           signalArray[0] = '0';
         }
         
         // Copy user's existing inflation signal
-        if (nodeData.nodeSignals.inflationSignals[userIndex] && nodeData.nodeSignals.inflationSignals[userIndex][0]) {
+        if (
+          nodeData &&
+          nodeData.nodeSignals &&
+          nodeData.nodeSignals.inflationSignals &&
+          nodeData.nodeSignals.inflationSignals[userIndex] &&
+          nodeData.nodeSignals.inflationSignals[userIndex][0]
+        ) {
           signalArray[1] = nodeData.nodeSignals.inflationSignals[userIndex][0];
         } else {
           signalArray[1] = '0';
         }
+        
+        // Copy redistribution signals from the originator
+        if (nodeData.nodeSignals.redistributionSignals[originatorIndex]) {
+          signalArray = [
+            ...signalArray,
+            ...nodeData.nodeSignals.redistributionSignals[originatorIndex]
+          ];
+        }
       } else {
         // No existing signals, initialize with zeros
         signalArray = ['0', '0'];
-      }
-      
-      // Copy redistribution signals from the originator
-      if (nodeData.nodeSignals.redistributionSignals[originatorIndex]) {
-        signalArray = [
-          ...signalArray,
-          ...nodeData.nodeSignals.redistributionSignals[originatorIndex]
-        ];
+        
+        // Equal distribution for children if no previous signal
+        if (nodeData && nodeData.childrenNodes && nodeData.childrenNodes.length > 0) {
+          const equalShare = Math.floor(10000 / nodeData.childrenNodes.length);
+          const remainder = 10000 - (equalShare * nodeData.childrenNodes.length);
+          
+          nodeData.childrenNodes.forEach((_: string, index: number) => {
+            signalArray.push(
+              // Add remainder to the first child if needed
+              index === 0 ? (equalShare + remainder).toString() : equalShare.toString()
+            );
+          });
+        }
       }
 
       // Send the signal transaction

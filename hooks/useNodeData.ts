@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NodeState } from '../types/chainData';
+import { ethers } from 'ethers';
 
 export function useNodeData(chainId: string, userAddress: string, nodeId: string | number | bigint) {
   const [data, setData] = useState<NodeState | null>(null);
@@ -9,6 +10,7 @@ export function useNodeData(chainId: string, userAddress: string, nodeId: string
   const fetchData = useCallback(async () => {
     if (!chainId || !nodeId) {
       setIsLoading(false);
+      setError(new Error('Missing required parameters: chainId and nodeId'));
       return;
     }
 
@@ -17,9 +19,11 @@ export function useNodeData(chainId: string, userAddress: string, nodeId: string
       setError(null);
       
       const nodeIdStr = nodeId.toString();
+      // Use ZeroAddress if userAddress is empty or undefined
+      const effectiveUserAddress = userAddress || ethers.ZeroAddress;
       
       const response = await fetch(
-        `/api/nodes/data?chainId=${chainId}&nodeId=${nodeIdStr}&userAddress=${userAddress}`
+        `/api/nodes/data?chainId=${chainId}&nodeId=${nodeIdStr}&userAddress=${effectiveUserAddress}`
       );
 
       if (!response.ok) {

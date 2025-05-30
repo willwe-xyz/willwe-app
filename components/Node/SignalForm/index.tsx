@@ -184,14 +184,19 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
                 const endpointAddress = ethers.getAddress('0x' + nodeIdBigInt.toString(16).padStart(40, '0'));
 
                 // Get the owner of the endpoint
-                const provider = new ethers.JsonRpcProvider(getRPCUrl(chainId));
-                const powerProxy = new ethers.Contract(
-                  endpointAddress,
-                  ['function owner() view returns (address)'],
-                  provider
-                );
-
-                const ownerAddress = await powerProxy.owner();
+                let ownerAddress = '';
+                try {
+                  const response = await fetch(`/api/nodes/endpoint-owner?chainId=${chainId}&endpointAddress=${endpointAddress}`);
+                  if (response.ok) {
+                    const data = await response.json();
+                    ownerAddress = data.owner;
+                  } else {
+                    throw new Error('Failed to fetch endpoint owner');
+                  }
+                } catch (error) {
+                  console.warn('Error fetching endpoint owner:', error);
+                  ownerAddress = '';
+                }
 
                 // If owner is Execution contract, it's an execution endpoint
                 const executionAddress = deployments.Execution[chainId];
