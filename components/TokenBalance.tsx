@@ -100,6 +100,13 @@ export const TokenBalance: React.FC<TokenBalanceProps> = ({
               lineHeight={isCompact ? "1" : "normal"}
             >
               {renderBalance(formattedAmounts.user)}
+              {protocolBalance && balanceItem.tokenBalance === '0' && (
+                <Tooltip label="This is a protocol balance" placement="top">
+                  <Text as="span" color={contrastingColor} fontWeight="bold" ml={1}>
+                    *
+                  </Text>
+                </Tooltip>
+              )}
             </Text>
           </HStack>
         </Tooltip>

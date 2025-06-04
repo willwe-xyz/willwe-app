@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Fetch events from Ponder server
     const response = await fetch(
-      `${PONDER_SERVER_URL}/user/${address.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`
+      `${PONDER_SERVER_URL}/userFeed/${address.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`
     );
 
     if (!response.ok) {

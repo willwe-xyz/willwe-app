@@ -37,19 +37,66 @@ function getAlchemyNetwork(chainId: string): Network {
   }
 }
 
-// Helper function to get excluded token strings
+// Helper function to get excluded token strings from env or default
 function getExcludedTokenStrings(): string[] {
+  const envList = process.env.NEXT_PUBLIC_TOKEN_BALANCE_EXCLUDEIF;
+  if (envList) {
+    return envList.split(',').map(s => s.trim()).filter(Boolean);
+  }
   return [
     'test',
     'mock',
     'fake',
     'dummy',
     'sample',
-    'example'
+    'example',
+    't.me',
+    't.ly',
+    'fli.so',
+    'claim until',
+    'visit to claim',
+    'swap within',
+    'reward pool',
+    'token distribution',
+    'airdrop',
+    '✅',
+    '|',
+    '[',
+    ']',
+    '*',
+    'claim',
+    'http',
+    'ro'
   ];
 }
 
+// Helper function to check if a token is spam
+function isSpamToken(token: { name: string; symbol: string }): boolean {
+  const name = (token.name || '').toLowerCase().trim();
+  const symbol = (token.symbol || '').toLowerCase().trim();
+  const excludedStrings = getExcludedTokenStrings().map(s => s.trim()); // do not lowercase filter items
+
+  // Exclude if any excluded string is contained in name or symbol (case-sensitive for filter items)
+  if (excludedStrings.some(str => name.includes(str) || symbol.includes(str))) {
+    return true;
+  }
+
+  // Emoji regex (matches most emoji, compatible with ES5+)
+  const emojiPattern = /[\u203C-\u3299\u1F000-\u1F9FF\u1F300-\u1F5FF\u1F600-\u1F64F\u1F680-\u1F6FF\u1F700-\u1F77F\u1F780-\u1F7FF\u1F800-\u1F8FF\u1F900-\u1F9FF\u1FA00-\u1FA6F\u1FA70-\u1FAFF\u2600-\u26FF\u2700-\u27BF]/;
+  if (emojiPattern.test(name) || emojiPattern.test(symbol)) {
+    return true;
+  }
+
+  return false;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Set cache control headers to prevent caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -69,21 +116,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const network = getAlchemyNetwork(chainId as string);
-    console.log(`Using Alchemy network: ${network} for chainId: ${chainId}`);
 
     const alchemy = new Alchemy({
       apiKey: alchemyApiKey,
-      network
+      network,
+      maxRetries: 3
     });
 
-    console.log(`Fetching token balances for address: ${address}`);
     const response = await alchemy.core.getTokenBalances(address as string);
+
     // Get WETH and WILL token addresses for the current chain
     const wethAddress = deployments.WETH?.[chainId as string];
     const willAddress = deployments.Will?.[chainId as string];
     
     if (!wethAddress || !willAddress) {
-      console.warn(`Missing token addresses for chainId ${chainId}:`, { wethAddress, willAddress });
     }
     
     // Ensure WETH and WILL are included in the balances
@@ -107,7 +153,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    console.log(`Processing ${allBalances.length} token balances`);
     const balances = await Promise.all(
       allBalances.map(async (token) => {
         try {
@@ -128,7 +173,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             formattedBalance
           };
         } catch (error) {
-          console.error(`Error processing token ${token.contractAddress}:`, error);
           return {
             contractAddress: token.contractAddress,
             tokenBalance: token.tokenBalance,
@@ -143,21 +187,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     // Filter out tokens based on name or symbol, but keep WETH and WILL
-    const excludedStrings = getExcludedTokenStrings();
     const filteredBalances = balances.filter(token => {
-      const tokenName = token.name.toLowerCase();
-      const tokenSymbol = token.symbol.toLowerCase();
-      const isExcluded = excludedStrings.some(str => tokenName.includes(str) || tokenSymbol.includes(str));
+      const isSpam = isSpamToken(token);
       const isWethOrWill = token.contractAddress.toLowerCase() === wethAddress?.toLowerCase() || 
                           token.contractAddress.toLowerCase() === willAddress?.toLowerCase();
-      return !isExcluded || isWethOrWill;
+      return !isSpam || isWethOrWill;
     });
 
-    console.log(`Returning ${filteredBalances.length} filtered balances`);
     res.status(200).json({ balances: filteredBalances });
   } catch (error) {
-    console.error('Error fetching balances:', error);
-    // Return a more detailed error message
     res.status(500).json({ 
       error: 'Failed to fetch balances',
       details: error instanceof Error ? error.message : 'Unknown error'

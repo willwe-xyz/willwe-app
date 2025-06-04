@@ -2,6 +2,12 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { deployments } from '../../../config/deployments';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Set cache control headers to prevent caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -21,8 +27,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const network = chainId === '8453' ? 'mainnet' : 'testnet';
     const apiUrl = `https://api.routescan.io/v2/network/${network}/evm/${chainId}/etherscan/api`;
     
+    console.log('Fetching from Routescan API:', `${apiUrl}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100`);
+    
     const response = await fetch(
-      `${apiUrl}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100&apikey=${process.env.ROUTESCAN_API_KEY}`
+      `${apiUrl}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100&apikey=${process.env.ROUTESCAN_API_KEY}`,
+      {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      }
     );
     
     if (!response.ok) {
@@ -31,6 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const data = await response.json();
+    console.log('Routescan API response:', data);
     
     if (data.status !== '1' || !data.result) {
       console.warn('Routescan API returned invalid data:', data);
@@ -76,6 +91,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    console.log('Returning balances:', balances);
     res.status(200).json({ balances });
   } catch (error) {
     console.error('Error fetching Routescan balances:', error);
