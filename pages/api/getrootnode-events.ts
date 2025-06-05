@@ -56,11 +56,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return timeB - timeA;
     });
 
-    // Only log when if events[0] exists and has a when property
-    if (events.length > 0 && events[0] && events[0].when) {
-      console.log('when:', events[0].when, 'dateObj:', new Date(events[0].when), 'now:', new Date());
-    }
-
     res.status(200).json({
       events,
       meta: {

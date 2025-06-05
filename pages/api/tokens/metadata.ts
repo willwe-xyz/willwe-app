@@ -56,14 +56,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const network = getAlchemyNetwork(chainId as string);
-    console.log(`Using Alchemy network: ${network} for chainId: ${chainId}`);
 
     const alchemy = new Alchemy({
       apiKey: alchemyApiKey,
       network
     });
 
-    console.log(`Fetching token metadata for address: ${address}`);
     const metadata = await alchemy.core.getTokenMetadata(address as string);
     
     res.status(200).json({ metadata });

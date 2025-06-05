@@ -226,7 +226,16 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({
               } else {
                 // User endpoint: try to resolve Base ENS name
                 try {
-                  const response = await fetch(`/api/ens/resolve?address=${ownerAddress}`);
+                  // Get the base URL for the API
+                  let baseUrl = '';
+                  if (typeof window !== 'undefined') {
+                    // Client-side
+                    baseUrl = window.location.origin;
+                  } else {
+                    // Server-side
+                    baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+                  }
+                  const response = await fetch(`${baseUrl}/api/ens/resolve?address=${ownerAddress}`);
                   if (response.ok) {
                     const data = await response.json();
                     if (data.name) {

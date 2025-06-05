@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { deployments } from '../../../config/deployments';
+import { filterTokenBalances } from '../../../utils/tokenSpamFilter';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set cache control headers to prevent caching
@@ -27,8 +28,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const network = chainId === '8453' ? 'mainnet' : 'testnet';
     const apiUrl = `https://api.routescan.io/v2/network/${network}/evm/${chainId}/etherscan/api`;
     
-    console.log('Fetching from Routescan API:', `${apiUrl}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100`);
-    
     const response = await fetch(
       `${apiUrl}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100&apikey=${process.env.ROUTESCAN_API_KEY}`,
       {
@@ -40,15 +39,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     
     if (!response.ok) {
-      console.warn('Routescan API request failed:', response.statusText);
       return res.status(200).json({ balances: [] }); // Return empty array to trigger Alchemy fallback
     }
 
     const data = await response.json();
-    console.log('Routescan API response:', data);
     
     if (data.status !== '1' || !data.result) {
-      console.warn('Routescan API returned invalid data:', data);
       return res.status(200).json({ balances: [] });
     }
 
@@ -91,10 +87,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    console.log('Returning balances:', balances);
-    res.status(200).json({ balances });
+    // Use centralized filter
+    const filteredBalances = filterTokenBalances(balances, chainId as string);
+    res.status(200).json({ balances: filteredBalances });
   } catch (error) {
-    console.error('Error fetching Routescan balances:', error);
     // Return empty array to trigger Alchemy fallback
     res.status(200).json({ balances: [] });
   }

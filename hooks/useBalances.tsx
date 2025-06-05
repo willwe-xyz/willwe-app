@@ -82,8 +82,8 @@ function mergeBalances(
     }
   });
 
+  // Sort by balance value (descending)
   return Array.from(balanceMap.values()).sort((a, b) => {
-    // Sort by balance value (descending)
     const aValue = parseFloat(a.formattedBalance);
     const bValue = parseFloat(b.formattedBalance);
     return bValue - aValue;

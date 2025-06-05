@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Network, Alchemy } from 'alchemy-sdk';
 import { deployments } from '../../../config/deployments';
+import { filterTokenBalances } from '../../../utils/tokenSpamFilter';
 
 // Helper function to get Alchemy network from chainId
 function getAlchemyNetwork(chainId: string): Network {
@@ -72,11 +73,11 @@ function getExcludedTokenStrings(): string[] {
 
 // Helper function to check if a token is spam
 function isSpamToken(token: { name: string; symbol: string }): boolean {
-  const name = (token.name || '').toLowerCase().trim();
-  const symbol = (token.symbol || '').toLowerCase().trim();
-  const excludedStrings = getExcludedTokenStrings().map(s => s.trim()); // do not lowercase filter items
+  const name = (token.name || '').toLowerCase();
+  const symbol = (token.symbol || '').toLowerCase();
+  const excludedStrings = getExcludedTokenStrings().map(s => s.toLowerCase().trim());
 
-  // Exclude if any excluded string is contained in name or symbol (case-sensitive for filter items)
+  // Exclude if any excluded string is contained in name or symbol (case-insensitive)
   if (excludedStrings.some(str => name.includes(str) || symbol.includes(str))) {
     return true;
   }
@@ -124,13 +125,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     const response = await alchemy.core.getTokenBalances(address as string);
+    console.log("returned balances", response.tokenBalances.length);
 
     // Get WETH and WILL token addresses for the current chain
     const wethAddress = deployments.WETH?.[chainId as string];
     const willAddress = deployments.Will?.[chainId as string];
     
     if (!wethAddress || !willAddress) {
+      console.error('WETH or WILL address not found for chainId:', chainId);
     }
+
+    console.log("returned balances", response.tokenBalances.length);
     
     // Ensure WETH and WILL are included in the balances
     const allBalances = [...response.tokenBalances];
@@ -186,14 +191,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     );
 
-    // Filter out tokens based on name or symbol, but keep WETH and WILL
-    const filteredBalances = balances.filter(token => {
-      const isSpam = isSpamToken(token);
-      const isWethOrWill = token.contractAddress.toLowerCase() === wethAddress?.toLowerCase() || 
-                          token.contractAddress.toLowerCase() === willAddress?.toLowerCase();
-      return !isSpam || isWethOrWill;
-    });
-
+    // Restore: Use centralized filter
+    const filteredBalances = filterTokenBalances(balances, chainId as string);
     res.status(200).json({ balances: filteredBalances });
   } catch (error) {
     res.status(500).json({ 

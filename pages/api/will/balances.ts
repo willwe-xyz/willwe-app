@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { deployments } from '../../../config/deployments';
 import { AlchemyTokenBalance } from '../../../hooks/useAlchemyBalances';
+import { filterTokenBalances } from '../../../utils/tokenSpamFilter';
 
 export default async function handler(
   req: NextApiRequest,
@@ -91,14 +92,17 @@ export default async function handler(
           balance.formattedBalance = formattedBalance.toFixed(6);
         }
       } catch (error) {
-        console.error(`Error fetching metadata for token ${balance.contractAddress}:`, error);
+        // Ignore metadata errors, leave defaults
       }
       return balance;
     });
 
     const balancesWithMetadata = await Promise.all(metadataPromises);
 
-    return res.status(200).json({ balances: balancesWithMetadata });
+    // Use centralized filter
+    const filteredBalances = filterTokenBalances(balancesWithMetadata, chainId);
+
+    return res.status(200).json({ balances: filteredBalances });
   } catch (error) {
     console.error('Error fetching Will balances:', error);
     return res.status(500).json({ error: 'Failed to fetch Will balances' });

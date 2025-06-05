@@ -17,7 +17,6 @@ export const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
       if (activity.userAddress) {
         const resolvedName = await resolveENS(activity.userAddress);
         setDisplayName(resolvedName);
-        console.log(resolvedName);
       }
     };
     resolveName();
