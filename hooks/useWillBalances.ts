@@ -31,7 +31,6 @@ export const useWillBalances = (chainId: string | undefined) => {
       const data = await response.json();
       setWillBalanceItems(data.balances);
     } catch (err) {
-      console.error('Error fetching Will balances:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setWillBalanceItems([]);
     } finally {

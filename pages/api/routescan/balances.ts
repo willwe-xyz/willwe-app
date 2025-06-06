@@ -1,7 +1,14 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { deployments } from '../../../config/deployments';
+import { filterTokenBalances } from '../../../utils/tokenSpamFilter';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Set cache control headers to prevent caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -22,18 +29,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const apiUrl = `https://api.routescan.io/v2/network/${network}/evm/${chainId}/etherscan/api`;
     
     const response = await fetch(
-      `${apiUrl}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100&apikey=${process.env.ROUTESCAN_API_KEY}`
+      `${apiUrl}?module=account&action=addresstokenbalance&address=${address}&page=1&offset=100&apikey=${process.env.ROUTESCAN_API_KEY}`,
+      {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      }
     );
     
     if (!response.ok) {
-      console.warn('Routescan API request failed:', response.statusText);
       return res.status(200).json({ balances: [] }); // Return empty array to trigger Alchemy fallback
     }
 
     const data = await response.json();
     
     if (data.status !== '1' || !data.result) {
-      console.warn('Routescan API returned invalid data:', data);
       return res.status(200).json({ balances: [] });
     }
 
@@ -76,9 +87,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    res.status(200).json({ balances });
+    // Use centralized filter
+    const filteredBalances = filterTokenBalances(balances, chainId as string);
+    res.status(200).json({ balances: filteredBalances });
   } catch (error) {
-    console.error('Error fetching Routescan balances:', error);
     // Return empty array to trigger Alchemy fallback
     res.status(200).json({ balances: [] });
   }

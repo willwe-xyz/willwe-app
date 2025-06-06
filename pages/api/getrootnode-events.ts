@@ -56,8 +56,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return timeB - timeA;
     });
 
-    console.log('when:', events[0].when, 'dateObj:', new Date(events[0].when), 'now:', new Date());
-
     res.status(200).json({
       events,
       meta: {
