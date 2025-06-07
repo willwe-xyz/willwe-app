@@ -15,7 +15,7 @@ import {
 } from '@chakra-ui/react';
 import { useAccount } from 'wagmi';
 import { usePrivy } from '@privy-io/react-auth';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { NodeState } from '../types/chainData';
 import { usePonderData } from '@/hooks/usePonderData';
 import { limits } from 'chroma-js';
@@ -221,9 +221,12 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
 
   const formatTimestamp = (timestamp: string) => {
     try {
-      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+      const date = new Date(Number(timestamp));
+      const relative = formatDistanceToNow(date, { addSuffix: true });
+      const absolute = format(date, 'yyyy-MM-dd HH:mm');
+      return { relative, absolute };
     } catch (e) {
-      return 'just now';
+      return { relative: 'just now', absolute: '' };
     }
   };
   
@@ -311,9 +314,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
                         {getDisplayName(message.sender)}
                       </Text>
                     </Tooltip>
-                    <Text fontSize="xs" color="gray.500">
-                      {formatTimestamp(message.timestamp)}
-                    </Text>
+                    <Tooltip label={formatTimestamp(message.timestamp).absolute} placement="top">
+                      <Text fontSize="xs" color="gray.500">
+                        {formatTimestamp(message.timestamp).relative}
+                      </Text>
+                    </Tooltip>
                   </HStack>
                   <Text mt={1} wordBreak="break-word">{message.content}</Text>
                 </Box>
