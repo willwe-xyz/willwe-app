@@ -90,15 +90,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       // Check if we actually have new messages
       const latestMessageId = sortedMessages[sortedMessages.length - 1]?.id;
       if (lastMessageIdRef.current && latestMessageId === lastMessageIdRef.current) {
-        console.log('fetchMessages: skipping setMessages, already up to date', { lastMessageId: lastMessageIdRef.current, latestMessageId });
         return; // No new messages, don't update state
       }
-      // Debug log before isMountedRef check
-      console.log('fetchMessages: about to check isMountedRef, sortedMessages:', sortedMessages, 'lastMessageIdRef:', lastMessageIdRef.current, 'latestMessageId:', latestMessageId);
       if (isMountedRef.current) {
         setMessages(sortedMessages);
         lastMessageIdRef.current = latestMessageId;
-        console.log('fetchMessages: setMessages called with', sortedMessages);
         // Only scroll to bottom if we were already at the bottom
         const container = messagesContainerRef.current;
         const wasAtBottom = container ? 
@@ -110,7 +106,6 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       }
     } catch (error) {
       // Don't show error toast for 404s or when the server is not available
-      console.error('fetchMessages: error caught', error);
       if (error instanceof Error && !error.message.includes('404') && !error.message.includes('Failed to fetch')) {
         if (isMountedRef.current) {
           toast({
@@ -247,9 +242,6 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     if (address === authenticatedAddress) return 'You';
     return ensNames[address] || formatAddress(address);
   };
-
-  // Debug log to check messages at render time
-  console.log('NodeChat render: messages.length =', messages.length, messages);
 
   if (isLoading && messages.length === 0) {
     return (

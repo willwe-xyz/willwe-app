@@ -206,7 +206,6 @@ export function usePonderData() {
     setError(null);
     
     try {
-      console.log('Fetching chat messages for node:', nodeId);
       const response = await fetch(`/api/chat/messages?nodeId=${nodeId}&limit=${limit}`);
       
       if (!response.ok) {
@@ -220,7 +219,6 @@ export function usePonderData() {
       }
       
       const messages = await response.json();
-      console.log('Received chat messages:', messages);
       
       // The API now returns the messages array directly
       if (!Array.isArray(messages)) {
@@ -238,7 +236,6 @@ export function usePonderData() {
         networkId: msg.networkId || msg.network_id
       }));
       
-      console.log('Formatted messages:', formattedMessages);
       setIsLoading(false);
       return formattedMessages;
     } catch (err) {
@@ -269,7 +266,6 @@ export function usePonderData() {
         networkId
       };
       
-      console.log('Sending chat message:', messageData);
       
       // Send message to the server API
       const response = await fetch('/api/chat/messages', {
@@ -292,7 +288,6 @@ export function usePonderData() {
       
       // The API now returns the message object directly
       const message = await response.json();
-      console.log('Received message response:', message);
       
       // Format the message to match the expected structure
       const formattedMessage = {
@@ -304,7 +299,6 @@ export function usePonderData() {
         networkId: message.networkId || message.network_id
       };
       
-      console.log('Formatted message:', formattedMessage);
       setIsLoading(false);
       return formattedMessage;
     } catch (err) {
