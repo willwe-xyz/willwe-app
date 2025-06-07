@@ -62,6 +62,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
 
   // Cleanup function
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (pollTimeoutRef.current) {
@@ -88,27 +89,28 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       
       // Check if we actually have new messages
       const latestMessageId = sortedMessages[sortedMessages.length - 1]?.id;
-      if (latestMessageId === lastMessageIdRef.current) {
+      if (lastMessageIdRef.current && latestMessageId === lastMessageIdRef.current) {
+        console.log('fetchMessages: skipping setMessages, already up to date', { lastMessageId: lastMessageIdRef.current, latestMessageId });
         return; // No new messages, don't update state
       }
-      
-      // Preserve scroll position when updating messages
-      const container = messagesContainerRef.current;
-      const wasAtBottom = container ? 
-        container.scrollHeight - container.scrollTop === container.clientHeight : 
-        true;
-      
+      // Debug log before isMountedRef check
+      console.log('fetchMessages: about to check isMountedRef, sortedMessages:', sortedMessages, 'lastMessageIdRef:', lastMessageIdRef.current, 'latestMessageId:', latestMessageId);
       if (isMountedRef.current) {
         setMessages(sortedMessages);
         lastMessageIdRef.current = latestMessageId;
-        
+        console.log('fetchMessages: setMessages called with', sortedMessages);
         // Only scroll to bottom if we were already at the bottom
+        const container = messagesContainerRef.current;
+        const wasAtBottom = container ? 
+          container.scrollHeight - container.scrollTop === container.clientHeight : 
+          true;
         if (wasAtBottom) {
           setShouldScrollToBottom(true);
         }
       }
     } catch (error) {
       // Don't show error toast for 404s or when the server is not available
+      console.error('fetchMessages: error caught', error);
       if (error instanceof Error && !error.message.includes('404') && !error.message.includes('Failed to fetch')) {
         if (isMountedRef.current) {
           toast({
@@ -198,7 +200,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       const result = await sendChatMessage(nodeId, authenticatedAddress, newMessage.trim(), chainId);
       
       // Handle different response formats from the Ponder server
-      const messageToAdd = result.message || result;
+      const messageToAdd = result;
       if (messageToAdd) {
         setMessages(prev => [...prev, messageToAdd]);
         setNewMessage('');
@@ -245,6 +247,9 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     if (address === authenticatedAddress) return 'You';
     return ensNames[address] || formatAddress(address);
   };
+
+  // Debug log to check messages at render time
+  console.log('NodeChat render: messages.length =', messages.length, messages);
 
   if (isLoading && messages.length === 0) {
     return (

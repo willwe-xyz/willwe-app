@@ -197,28 +197,39 @@ export function usePonderData() {
    * Fetch chat messages for a specific node
    */
   const getNodeChatMessages = useCallback(async (nodeId: string, limit = 50) => {
-    if (!nodeId) return [];
+    if (!nodeId) {
+      console.warn('getNodeChatMessages called without nodeId');
+      return [];
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Use our Next.js API endpoint instead of calling Ponder directly
+      console.log('Fetching chat messages for node:', nodeId);
       const response = await fetch(`/api/chat/messages?nodeId=${nodeId}&limit=${limit}`);
       
       if (!response.ok) {
-        throw new Error(`Error fetching chat messages: ${response.statusText}`);
+        const errorText = await response.text().catch(() => response.statusText);
+        console.error('Error response from chat messages API:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+        throw new Error(`Error fetching chat messages: ${errorText}`);
       }
       
-      const data = await response.json();
-      setIsLoading(false);
+      const messages = await response.json();
+      console.log('Received chat messages:', messages);
       
-      // The Ponder server returns messages in a nested structure
-      // Check both possible response formats
-      const messages = data.messages || (data.data && data.data.messages) || [];
+      // The API now returns the messages array directly
+      if (!Array.isArray(messages)) {
+        console.warn('Unexpected response format:', messages);
+        return [];
+      }
       
       // Ensure messages are properly formatted
-      return messages.map((msg: any) => ({
+      const formattedMessages = messages.map((msg: any) => ({
         id: msg.id,
         nodeId: msg.nodeId || msg.node_id,
         sender: msg.sender,
@@ -226,6 +237,10 @@ export function usePonderData() {
         timestamp: msg.timestamp,
         networkId: msg.networkId || msg.network_id
       }));
+      
+      console.log('Formatted messages:', formattedMessages);
+      setIsLoading(false);
+      return formattedMessages;
     } catch (err) {
       console.error('Error fetching node chat messages:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -239,10 +254,10 @@ export function usePonderData() {
    */
   const sendChatMessage = useCallback(async (nodeId: string, userAddress: string, content: string, networkId: string) => {
     if (!nodeId || !content) {
+      console.warn('sendChatMessage called with missing parameters:', { nodeId, content });
       throw new Error('Missing required parameters: nodeId, content, or sender address');
     }
     
-
     setIsLoading(true);
     setError(null);
     
@@ -254,9 +269,9 @@ export function usePonderData() {
         networkId
       };
       
-      // Send message to the server API with correct endpoint
+      console.log('Sending chat message:', messageData);
       
-      // Use fetch with our Next.js API endpoint (not directly to Ponder)
+      // Send message to the server API
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: {
@@ -267,41 +282,35 @@ export function usePonderData() {
       
       if (!response.ok) {
         const errorText = await response.text().catch(() => response.statusText);
-        console.error('Chat error response:', errorText);
+        console.error('Error response from chat messages API:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
         throw new Error(`Error sending chat message: ${errorText}`);
       }
       
-      const data = await response.json();
-      setIsLoading(false);
+      // The API now returns the message object directly
+      const message = await response.json();
+      console.log('Received message response:', message);
       
-      return data;
+      // Format the message to match the expected structure
+      const formattedMessage = {
+        id: message.id,
+        nodeId: message.nodeId || message.node_id,
+        sender: message.sender,
+        content: message.content,
+        timestamp: message.timestamp,
+        networkId: message.networkId || message.network_id
+      };
+      
+      console.log('Formatted message:', formattedMessage);
+      setIsLoading(false);
+      return formattedMessage;
     } catch (err) {
       console.error('Error sending chat message:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
-      
-      // Local storage fallback is removed since we're just using the Ponder server directly
-      
-      // For backwards compatibility, keep this stub
-      try {
-        if (typeof window !== 'undefined') {
-          const newMessage = {
-            id: `remote-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            nodeId,
-            sender: userAddress,
-            content,
-            timestamp: Date.now(),
-            networkId
-          };
-          
-          // Don't actually modify localStorage, just log for debugging
-          console.log("Local storage fallback is disabled");
-          return newMessage;
-        }
-      } catch (localError) {
-        console.warn('Error storing message in localStorage fallback:', localError);
-      }
-      
       throw err;
     }
   }, []);
