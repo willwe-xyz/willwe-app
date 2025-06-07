@@ -539,8 +539,6 @@ const SignalForm: React.FC<SignalFormProps> = ({ chainId, nodeId, parentNodeData
         }
       }
 
-      console.log("Submitting signals:", signalArray);
-      console.log("Signal array as strings:", signalArray.map(String));
       await signal(nodeId, signalArray.map(String));
       if (onSuccess) onSuccess();
       

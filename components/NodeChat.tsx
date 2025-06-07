@@ -15,7 +15,7 @@ import {
 } from '@chakra-ui/react';
 import { useAccount } from 'wagmi';
 import { usePrivy } from '@privy-io/react-auth';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { NodeState } from '../types/chainData';
 import { usePonderData } from '@/hooks/usePonderData';
 import { limits } from 'chroma-js';
@@ -62,6 +62,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
 
   // Cleanup function
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (pollTimeoutRef.current) {
@@ -88,21 +89,17 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       
       // Check if we actually have new messages
       const latestMessageId = sortedMessages[sortedMessages.length - 1]?.id;
-      if (latestMessageId === lastMessageIdRef.current) {
+      if (lastMessageIdRef.current && latestMessageId === lastMessageIdRef.current) {
         return; // No new messages, don't update state
       }
-      
-      // Preserve scroll position when updating messages
-      const container = messagesContainerRef.current;
-      const wasAtBottom = container ? 
-        container.scrollHeight - container.scrollTop === container.clientHeight : 
-        true;
-      
       if (isMountedRef.current) {
         setMessages(sortedMessages);
         lastMessageIdRef.current = latestMessageId;
-        
         // Only scroll to bottom if we were already at the bottom
+        const container = messagesContainerRef.current;
+        const wasAtBottom = container ? 
+          container.scrollHeight - container.scrollTop === container.clientHeight : 
+          true;
         if (wasAtBottom) {
           setShouldScrollToBottom(true);
         }
@@ -198,7 +195,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       const result = await sendChatMessage(nodeId, authenticatedAddress, newMessage.trim(), chainId);
       
       // Handle different response formats from the Ponder server
-      const messageToAdd = result.message || result;
+      const messageToAdd = result;
       if (messageToAdd) {
         setMessages(prev => [...prev, messageToAdd]);
         setNewMessage('');
@@ -224,9 +221,12 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
 
   const formatTimestamp = (timestamp: string) => {
     try {
-      return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+      const date = new Date(Number(timestamp));
+      const relative = formatDistanceToNow(date, { addSuffix: true });
+      const absolute = format(date, 'yyyy-MM-dd HH:mm');
+      return { relative, absolute };
     } catch (e) {
-      return 'just now';
+      return { relative: 'just now', absolute: '' };
     }
   };
   
@@ -314,9 +314,11 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
                         {getDisplayName(message.sender)}
                       </Text>
                     </Tooltip>
-                    <Text fontSize="xs" color="gray.500">
-                      {formatTimestamp(message.timestamp)}
-                    </Text>
+                    <Tooltip label={formatTimestamp(message.timestamp).absolute} placement="top">
+                      <Text fontSize="xs" color="gray.500">
+                        {formatTimestamp(message.timestamp).relative}
+                      </Text>
+                    </Tooltip>
                   </HStack>
                   <Text mt={1} wordBreak="break-word">{message.content}</Text>
                 </Box>

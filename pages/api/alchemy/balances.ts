@@ -125,7 +125,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     const response = await alchemy.core.getTokenBalances(address as string);
-    console.log("returned balances", response.tokenBalances.length);
 
     // Get WETH and WILL token addresses for the current chain
     const wethAddress = deployments.WETH?.[chainId as string];
@@ -135,7 +134,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error('WETH or WILL address not found for chainId:', chainId);
     }
 
-    console.log("returned balances", response.tokenBalances.length);
     
     // Ensure WETH and WILL are included in the balances
     const allBalances = [...response.tokenBalances];
