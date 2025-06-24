@@ -103,35 +103,74 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { address, chainId } = req.query;
+  const debug = process.env.DEBUG_LOGGING === 'true';
+  
+  if (debug) {
+    console.log(`[DEBUG] Fetching balances for address: ${address} on chain: ${chainId}`);
+  }
 
   if (!address || !chainId) {
-    return res.status(400).json({ error: 'Missing required parameters' });
+    const errorMsg = `Missing required parameters. Address: ${address}, ChainId: ${chainId}`;
+    console.error(errorMsg);
+    return res.status(400).json({ error: 'Missing required parameters', details: errorMsg });
   }
 
   // Check for Alchemy API key
   const alchemyApiKey = process.env.ALCHEMY_API_KEY;
   if (!alchemyApiKey) {
-    console.error('ALCHEMY_API_KEY is not set in environment variables');
-    return res.status(500).json({ error: 'Alchemy API key is not configured' });
+    const errorMsg = 'ALCHEMY_API_KEY is not set in environment variables';
+    console.error(errorMsg);
+    return res.status(500).json({ 
+      error: 'Alchemy API key is not configured',
+      details: errorMsg 
+    });
   }
 
   try {
+    if (debug) {
+      console.log(`[DEBUG] Initializing Alchemy for chainId: ${chainId}`);
+    }
+    
     const network = getAlchemyNetwork(chainId as string);
+    
+    if (!network) {
+      const errorMsg = `Unsupported chainId: ${chainId}`;
+      console.error(errorMsg);
+      return res.status(400).json({ 
+        error: 'Unsupported network',
+        details: errorMsg,
+        supportedNetworks: ['1', '11155111', '137', '42161', '421614', '10', '11155420', '8453', '84532']
+      });
+    }
 
+    if (debug) {
+      console.log(`[DEBUG] Using Alchemy network: ${network}`);
+    }
+    
     const alchemy = new Alchemy({
       apiKey: alchemyApiKey,
       network,
       maxRetries: 3
     });
 
+    if (debug) {
+      console.log(`[DEBUG] Fetching token balances for address: ${address}`);
+    }
+    
     const response = await alchemy.core.getTokenBalances(address as string);
+    
+    if (debug) {
+      console.log(`[DEBUG] Received ${response.tokenBalances?.length || 0} token balances`);
+    }
 
     // Get WETH and WILL token addresses for the current chain
     const wethAddress = deployments.WETH?.[chainId as string];
     const willAddress = deployments.Will?.[chainId as string];
     
     if (!wethAddress || !willAddress) {
-      console.error('WETH or WILL address not found for chainId:', chainId);
+      if (debug) {
+        console.warn(`[DEBUG] WETH or WILL address not found for chainId: ${chainId}`);
+      }
     }
 
     
@@ -156,26 +195,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    if (debug) {
+      console.log(`[DEBUG] Processing ${allBalances.length} token balances...`);
+    }
+    
     const balances = await Promise.all(
-      allBalances.map(async (token) => {
+      allBalances.map(async (token, index) => {
+        const tokenStartTime = debug ? Date.now() : 0;
+        
         try {
-          const metadata = await alchemy.core.getTokenMetadata(
-            token.contractAddress
-          );
+          if (debug) {
+            console.log(`[DEBUG] Fetching metadata for token ${index + 1}/${allBalances.length}: ${token.contractAddress}`);
+          }
+          
+          const metadata = await alchemy.core.getTokenMetadata(token.contractAddress);
+          
+          if (!metadata) {
+            if (debug) {
+              console.warn(`[DEBUG] No metadata returned for token: ${token.contractAddress}`);
+            }
+            return null;
+          }
 
-          const balance = Number(token.tokenBalance) / Math.pow(10, metadata.decimals ?? 18);
-          const formattedBalance = balance.toFixed(2);
+          const decimals = metadata.decimals ?? 18;
+          const balance = token.tokenBalance !== '0' 
+            ? (Number(token.tokenBalance) / Math.pow(10, decimals)).toFixed(6)
+            : '0';
 
-          return {
+          const tokenData = {
             contractAddress: token.contractAddress,
             tokenBalance: token.tokenBalance,
             name: metadata.name || 'Unknown Token',
             symbol: metadata.symbol || '???',
-            decimals: metadata.decimals,
+            decimals,
             logo: metadata.logo,
-            formattedBalance
+            formattedBalance: balance
           };
+          
+          if (debug) {
+            const duration = Date.now() - tokenStartTime;
+            console.log(`[DEBUG] Processed token ${index + 1}/${allBalances.length} in ${duration}ms: ${tokenData.symbol} (${tokenData.name})`);
+          }
+          
+          return tokenData;
         } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          if (debug) {
+            console.error(`[DEBUG] Error processing token ${token.contractAddress}:`, errorMsg);
+          }
+          
+          // Only return basic info for failed tokens
           return {
             contractAddress: token.contractAddress,
             tokenBalance: token.tokenBalance,
@@ -183,19 +252,67 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             symbol: '???',
             decimals: 18,
             logo: null,
-            formattedBalance: '0.00'
+            formattedBalance: '0',
+            error: 'Failed to fetch metadata'
           };
         }
       })
     );
 
-    // Restore: Use centralized filter
-    const filteredBalances = filterTokenBalances(balances, chainId as string);
-    res.status(200).json({ balances: filteredBalances });
+    // Filter out null balances and tokens with zero balance
+    const validBalances = balances.filter(
+      (balance): balance is NonNullable<typeof balance> => 
+        balance !== null && balance.tokenBalance !== '0'
+    );
+    
+    if (debug) {
+      console.log(`[DEBUG] Successfully processed ${validBalances.length} non-zero token balances`);
+    }
+    
+    try {
+      // Use centralized filter
+      const filteredBalances = filterTokenBalances(validBalances, chainId as string);
+      
+      if (debug) {
+        console.log(`[DEBUG] Filtered down to ${filteredBalances.length} non-spam token balances`);
+      }
+      
+      return res.status(200).json({ 
+        success: true,
+        balances: filteredBalances,
+        meta: {
+          total: filteredBalances.length,
+          chainId,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (filterError) {
+      console.error('Error filtering token balances:', filterError);
+      // If filtering fails, return the unfiltered but valid balances
+      return res.status(200).json({
+        success: true,
+        balances: validBalances,
+        warning: 'Token filtering failed, returning unfiltered results',
+        meta: {
+          total: validBalances.length,
+          chainId,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
   } catch (error) {
-    res.status(500).json({ 
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Critical error in balances API:', error);
+    
+    return res.status(500).json({ 
+      success: false,
       error: 'Failed to fetch balances',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: errorMsg,
+      request: {
+        address,
+        chainId,
+        timestamp: new Date().toISOString()
+      }
     });
   }
 } 

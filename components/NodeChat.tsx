@@ -11,7 +11,9 @@ import {
   useColorModeValue,
   Divider,
   useToast,
-  Tooltip
+  Tooltip,
+  Alert,
+  AlertIcon
 } from '@chakra-ui/react';
 import { useAccount } from 'wagmi';
 import { usePrivy } from '@privy-io/react-auth';
@@ -246,11 +248,44 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
     return ensNames[address] || formatAddress(address);
   };
 
+  // Check if social features are enabled
+  const isSocialEnabled = process.env.NEXT_PUBLIC_SOCIAL_ENABLED === 'true';
+
   if (isLoading && messages.length === 0) {
     return (
       <Box p={6} textAlign="center">
         <Spinner size="xl" color="purple.500" />
         <Text mt={4}>Loading chat messages...</Text>
+      </Box>
+    );
+  }
+
+  // Show disabled state if social features are off
+  if (!isSocialEnabled) {
+    return (
+      <Box
+        borderRadius="lg"
+        bg={bgColor}
+        border="1px solid"
+        borderColor={borderColor}
+        overflow="hidden"
+        height="500px"
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        p={6}
+        textAlign="center"
+      >
+        <Alert status="info" maxW="md" borderRadius="md">
+          <AlertIcon />
+          <Box>
+            <Text fontWeight="bold">Chat is currently disabled</Text>
+            <Text fontSize="sm" mt={1}>
+              Social features including chat are temporarily unavailable. Please check back later.
+            </Text>
+          </Box>
+        </Alert>
       </Box>
     );
   }

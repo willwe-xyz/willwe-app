@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 
-// Environment variable for the Ponder API server URL with fallback to empty string (resolved at build time)
-// const PONDER_SERVER_URL = process.env.NEXT_PUBLIC_PONDER_SERVER_URL || '';
+// Check if social features are enabled
+const isSocialEnabled = process.env.NEXT_PUBLIC_SOCIAL_ENABLED === 'true';
 
 /**
  * Hook to fetch and interact with data indexed by Ponder
@@ -197,6 +197,12 @@ export function usePonderData() {
    * Fetch chat messages for a specific node
    */
   const getNodeChatMessages = useCallback(async (nodeId: string, limit = 50) => {
+    // Return empty array immediately if social features are disabled
+    if (!isSocialEnabled) {
+      console.log('Social features are disabled. Returning empty chat messages.');
+      return [];
+    }
+    
     if (!nodeId) {
       console.warn('getNodeChatMessages called without nodeId');
       return [];
@@ -209,6 +215,12 @@ export function usePonderData() {
       const response = await fetch(`/api/chat/messages?nodeId=${nodeId}&limit=${limit}`);
       
       if (!response.ok) {
+        // Don't show error if social features are disabled
+        if (response.status === 403 || response.status === 404) {
+          console.log('Chat API endpoint not available. Social features may be disabled.');
+          return [];
+        }
+        
         const errorText = await response.text().catch(() => response.statusText);
         console.error('Error response from chat messages API:', {
           status: response.status,
@@ -239,17 +251,31 @@ export function usePonderData() {
       setIsLoading(false);
       return formattedMessages;
     } catch (err) {
+      // Don't show error if social features are disabled
+      if (err instanceof Error && 
+          (err.message.includes('Failed to fetch') || 
+           err.message.includes('NetworkError'))) {
+        console.log('Chat API not available. Social features may be disabled.');
+        return [];
+      }
+      
       console.error('Error fetching node chat messages:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, []);
+  }, [isSocialEnabled]);
 
   /**
    * Send a chat message for a specific node
    */
   const sendChatMessage = useCallback(async (nodeId: string, userAddress: string, content: string, networkId: string) => {
+    // Don't proceed if social features are disabled
+    if (!isSocialEnabled) {
+      console.log('Social features are disabled. Message not sent.');
+      throw new Error('Chat features are currently disabled');
+    }
+    
     if (!nodeId || !content) {
       console.warn('sendChatMessage called with missing parameters:', { nodeId, content });
       throw new Error('Missing required parameters: nodeId, content, or sender address');
@@ -266,7 +292,6 @@ export function usePonderData() {
         networkId
       };
       
-      
       // Send message to the server API
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
@@ -277,6 +302,12 @@ export function usePonderData() {
       });
       
       if (!response.ok) {
+        // Don't show error if social features are disabled
+        if (response.status === 403 || response.status === 404) {
+          console.log('Chat API not available. Social features may be disabled.');
+          throw new Error('Chat features are currently unavailable');
+        }
+        
         const errorText = await response.text().catch(() => response.statusText);
         console.error('Error response from chat messages API:', {
           status: response.status,
@@ -307,12 +338,27 @@ export function usePonderData() {
       setIsLoading(false);
       throw err;
     }
-  }, []);
+  }, [isSocialEnabled]);
 
   /**
    * Validate chat message content
    */
   const validateChatMessage = useCallback(async (content: string) => {
+    // If social features are disabled, just do client-side validation
+    if (!isSocialEnabled) {
+      return {
+        isValid: false,
+        validations: {
+          tooLong: false,
+          isEmpty: content.trim().length === 0,
+          hasInvalidChars: false,
+          disabled: true
+        },
+        content,
+        message: 'Chat features are currently disabled'
+      };
+    }
+    
     try {
       const response = await fetch(apiUrl('/chat/validate'), {
         method: 'POST',
@@ -336,12 +382,14 @@ export function usePonderData() {
         validations: {
           tooLong: content.length > 1000,
           isEmpty: content.trim().length === 0,
-          hasInvalidChars: /[\u0000-\u001F]/.test(content)
+          hasInvalidChars: /[\u0000-\u001F]/.test(content),
+          disabled: false
         },
-        content
+        content,
+        message: 'Server validation unavailable, using client-side validation'
       };
     }
-  }, []);
+  }, [isSocialEnabled]);
 
   /**
    * Submit a signature for a node or movement
@@ -386,16 +434,35 @@ export function usePonderData() {
   const getUserFeed = useCallback(async (userAddress: string, networkId: string, limit = 50, offset = 0) => {
     if (!userAddress) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     
+    // Return empty result if social features are disabled
+    if (!isSocialEnabled) {
+      console.log('Social features are disabled. User feed will be empty.');
+      return { 
+        events: [], 
+        meta: { 
+          total: 0, 
+          limit, 
+          offset, 
+          nodeCount: 0,
+          message: 'Social features are currently disabled'
+        } 
+      };
+    }
+    
     setIsLoading(true);
     setError(null);
     
     try {
       // Use the internal API endpoint
-      const url = `/api/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`;
+      const url = apiUrl(`/api/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`);
 
       const response = await fetch(url);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        // Don't throw error for disabled features, just return empty result
+        if (errorData.meta?.message === 'Social features are currently disabled') {
+          return { events: [], meta: { ...errorData.meta, limit, offset, nodeCount: 0 }};
+        }
         throw new Error(`Error fetching user feed: ${errorData.error || response.statusText}`);
       }
       
@@ -431,7 +498,22 @@ export function usePonderData() {
    * Get events for a root node and all its derived nodes
    */
   const getRootNodeEvents = useCallback(async (rootNodeId: string, networkId: string, limit = 50, offset = 0) => {
-    if (!rootNodeId) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
+    if (!rootNodeId) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 }};
+    
+    // Return empty result if social features are disabled
+    if (!isSocialEnabled) {
+      console.log('Social features are disabled. Root node events will be empty.');
+      return { 
+        events: [], 
+        meta: { 
+          total: 0, 
+          limit, 
+          offset, 
+          nodeCount: 0,
+          message: 'Social features are currently disabled'
+        } 
+      };
+    }
     
     setIsLoading(true);
     setError(null);
@@ -442,7 +524,12 @@ export function usePonderData() {
 
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Error fetching root node events: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        // Don't throw error for disabled features, just return empty result
+        if (errorData.meta?.message === 'Social features are currently disabled') {
+          return { events: [], meta: { ...errorData.meta, limit, offset, nodeCount: 0 }};
+        }
+        throw new Error(`Error fetching root node events: ${errorData.error || response.statusText}`);
       }
       
       const data = await response.json();
@@ -469,7 +556,7 @@ export function usePonderData() {
       console.error('Error fetching root node events:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
-      return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
+      return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 }};
     }
   }, []);
 
@@ -477,18 +564,36 @@ export function usePonderData() {
    * Get events for the entire network
    */
   const getNetworkEvents = useCallback(async (networkId: string, limit = 50, offset = 0) => {
-    if (!networkId) return { events: [], meta: { total: 0, limit, offset } };
+    if (!networkId) return { events: [], meta: { total: 0, limit, offset }};
+    
+    // Return empty result if social features are disabled
+    if (!isSocialEnabled) {
+      console.log('Social features are disabled. Network events will be empty.');
+      return { 
+        events: [], 
+        meta: { 
+          total: 0, 
+          limit, 
+          offset,
+          message: 'Social features are currently disabled'
+        } 
+      };
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Use the new network-events endpoint with /api/ prefix
       const url = apiUrl(`/api/network-events?limit=${limit}&offset=${offset}&networkId=${networkId}`);
 
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Error fetching network events: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        // Don't throw error for disabled features, just return empty result
+        if (errorData.meta?.message === 'Social features are currently disabled') {
+          return { events: [], meta: { ...errorData.meta, limit, offset }};
+        }
+        throw new Error(`Error fetching network events: ${errorData.error || response.statusText}`);
       }
       
       const data = await response.json();
@@ -514,7 +619,7 @@ export function usePonderData() {
       console.error('Error fetching network events:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
-      return { events: [], meta: { total: 0, limit, offset } };
+      return { events: [], meta: { total: 0, limit, offset }};
     }
   }, []);
 

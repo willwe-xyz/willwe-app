@@ -5,6 +5,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Check if social features are enabled
+  if (process.env.NEXT_PUBLIC_SOCIAL_ENABLED !== 'true') {
+    return res.status(200).json({
+      events: [],
+      meta: {
+        total: 0,
+        limit: 0,
+        offset: 0,
+        nodeCount: 0,
+        message: 'Social features are currently disabled'
+      }
+    });
+  }
+
   const { address } = req.query;
   const { limit = '50', offset = '0', networkId } = req.query;
 
