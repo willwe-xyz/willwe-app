@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 
-// Check if social features are enabled
-const isSocialEnabled = process.env.NEXT_PUBLIC_SOCIAL_ENABLED === 'true';
-
 /**
  * Hook to fetch and interact with data indexed by Ponder
  */
@@ -11,8 +8,6 @@ export function usePonderData() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   
-
-
   /**
    * Helper function to build full API URLs
    */
@@ -138,30 +133,7 @@ export function usePonderData() {
     }
   }, []);
 
-  /**
-   * Fetch activity logs for a specific node
-   */
-  const getNodeActivityLogs = useCallback(async (nodeId: string, networkId: string, limit = 50) => {
-    if (!nodeId) return [];
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(apiUrl(`/api/events?nodeId=${nodeId}&limit=${limit}&networkId=${networkId}`));
-      if (!response.ok) {
-        throw new Error(`Error fetching activity logs: ${response.statusText}`);
-      }
-      const data = await response.json();
-      setIsLoading(false);
-      return data.events || [];
-    } catch (err) {
-      console.error('Error fetching node activity logs:', err);
-      setError(err instanceof Error ? err : new Error(String(err)));
-      setIsLoading(false);
-      return [];
-    }
-  }, []);
+
 
   /**
    * Fetch activity logs for a specific user
@@ -197,30 +169,18 @@ export function usePonderData() {
    * Fetch chat messages for a specific node
    */
   const getNodeChatMessages = useCallback(async (nodeId: string, limit = 50) => {
-    // Return empty array immediately if social features are disabled
-    if (!isSocialEnabled) {
-      console.log('Social features are disabled. Returning empty chat messages.');
-      return [];
-    }
-    
-    if (!nodeId) {
-      console.warn('getNodeChatMessages called without nodeId');
-      return [];
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    
     try {
+      if (!nodeId) {
+        console.warn('getNodeChatMessages called without nodeId');
+        return [];
+      }
+      
+      setIsLoading(true);
+      setError(null);
+      
       const response = await fetch(`/api/chat/messages?nodeId=${nodeId}&limit=${limit}`);
       
       if (!response.ok) {
-        // Don't show error if social features are disabled
-        if (response.status === 403 || response.status === 404) {
-          console.log('Chat API endpoint not available. Social features may be disabled.');
-          return [];
-        }
-        
         const errorText = await response.text().catch(() => response.statusText);
         console.error('Error response from chat messages API:', {
           status: response.status,
@@ -251,33 +211,19 @@ export function usePonderData() {
       setIsLoading(false);
       return formattedMessages;
     } catch (err) {
-      // Don't show error if social features are disabled
-      if (err instanceof Error && 
-          (err.message.includes('Failed to fetch') || 
-           err.message.includes('NetworkError'))) {
-        console.log('Chat API not available. Social features may be disabled.');
-        return [];
-      }
-      
       console.error('Error fetching node chat messages:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
       return [];
     }
-  }, [isSocialEnabled]);
+  }, []);
 
   /**
    * Send a chat message for a specific node
    */
-  const sendChatMessage = useCallback(async (nodeId: string, userAddress: string, content: string, networkId: string) => {
-    // Don't proceed if social features are disabled
-    if (!isSocialEnabled) {
-      console.log('Social features are disabled. Message not sent.');
-      throw new Error('Chat features are currently disabled');
-    }
-    
-    if (!nodeId || !content) {
-      console.warn('sendChatMessage called with missing parameters:', { nodeId, content });
+  const sendChatMessage = useCallback(async (nodeId: string, userAddress: string, content: string, networkId: string = '1') => {
+    if (!nodeId || !content || !userAddress) {
+      console.warn('sendChatMessage called with missing parameters:', { nodeId, content, userAddress });
       throw new Error('Missing required parameters: nodeId, content, or sender address');
     }
     
@@ -298,35 +244,27 @@ export function usePonderData() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(messageData),
+        body: JSON.stringify({
+          nodeId,
+          userAddress,
+          content,
+          networkId
+        })
       });
-      
+
       if (!response.ok) {
-        // Don't show error if social features are disabled
-        if (response.status === 403 || response.status === 404) {
-          console.log('Chat API not available. Social features may be disabled.');
-          throw new Error('Chat features are currently unavailable');
-        }
-        
-        const errorText = await response.text().catch(() => response.statusText);
-        console.error('Error response from chat messages API:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
-        throw new Error(`Error sending chat message: ${errorText}`);
+        throw new Error(`Error sending message: ${response.statusText}`);
       }
-      
-      // The API now returns the message object directly
+
       const message = await response.json();
       
-      // Format the message to match the expected structure
+      // Transform the response to match the expected format
       const formattedMessage = {
         id: message.id,
         nodeId: message.nodeId || message.node_id,
-        sender: message.sender,
+        sender: message.sender || message.userAddress,
         content: message.content,
-        timestamp: message.timestamp,
+        timestamp: message.timestamp || new Date().toISOString(),
         networkId: message.networkId || message.network_id
       };
       
@@ -338,61 +276,10 @@ export function usePonderData() {
       setIsLoading(false);
       throw err;
     }
-  }, [isSocialEnabled]);
+  }, []);
 
   /**
-   * Validate chat message content
-   */
-  const validateChatMessage = useCallback(async (content: string) => {
-    // If social features are disabled, just do client-side validation
-    if (!isSocialEnabled) {
-      return {
-        isValid: false,
-        validations: {
-          tooLong: false,
-          isEmpty: content.trim().length === 0,
-          hasInvalidChars: false,
-          disabled: true
-        },
-        content,
-        message: 'Chat features are currently disabled'
-      };
-    }
-    
-    try {
-      const response = await fetch(apiUrl('/chat/validate'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error validating message: ${response.statusText}`);
-      }
-      
-      return await response.json();
-    } catch (err) {
-      console.error('Error validating chat message:', err);
-      
-      // Fall back to client-side validation if server is unavailable
-      return {
-        isValid: content.trim().length > 0 && content.length <= 1000,
-        validations: {
-          tooLong: content.length > 1000,
-          isEmpty: content.trim().length === 0,
-          hasInvalidChars: /[\u0000-\u001F]/.test(content),
-          disabled: false
-        },
-        content,
-        message: 'Server validation unavailable, using client-side validation'
-      };
-    }
-  }, [isSocialEnabled]);
-
-  /**
-   * Submit a signature for a node or movement
+   * Store a signature for a node or movement
    */
   const storeMovementSignature = useCallback(async (signatureData: any, networkId: string) => {
     setIsLoading(true);
@@ -427,36 +314,19 @@ export function usePonderData() {
       return null;
     }
   }, []);
-
   /**
    * Get user feed based on nodes they are members of
    */
   const getUserFeed = useCallback(async (userAddress: string, networkId: string, limit = 50, offset = 0) => {
-    if (!userAddress) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
-    
-    // Return empty result if social features are disabled
-    if (!isSocialEnabled) {
-      console.log('Social features are disabled. User feed will be empty.');
-      return { 
-        events: [], 
-        meta: { 
-          total: 0, 
-          limit, 
-          offset, 
-          nodeCount: 0,
-          message: 'Social features are currently disabled'
-        } 
-      };
-    }
+    if (!userAddress) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 }};
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Use the internal API endpoint
       const url = apiUrl(`/api/userFeed/${userAddress.toLowerCase()}?limit=${limit}&offset=${offset}&networkId=${networkId}`);
-
       const response = await fetch(url);
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
         // Don't throw error for disabled features, just return empty result
@@ -500,35 +370,15 @@ export function usePonderData() {
   const getRootNodeEvents = useCallback(async (rootNodeId: string, networkId: string, limit = 50, offset = 0) => {
     if (!rootNodeId) return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 }};
     
-    // Return empty result if social features are disabled
-    if (!isSocialEnabled) {
-      console.log('Social features are disabled. Root node events will be empty.');
-      return { 
-        events: [], 
-        meta: { 
-          total: 0, 
-          limit, 
-          offset, 
-          nodeCount: 0,
-          message: 'Social features are currently disabled'
-        } 
-      };
-    }
-    
     setIsLoading(true);
     setError(null);
     
     try {
-      // Use the new getrootnode-events endpoint with /api/ prefix
       const url = apiUrl(`/api/getrootnode-events?nodeId=${rootNodeId}&limit=${limit}&offset=${offset}&networkId=${networkId}`);
-
       const response = await fetch(url);
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        // Don't throw error for disabled features, just return empty result
-        if (errorData.meta?.message === 'Social features are currently disabled') {
-          return { events: [], meta: { ...errorData.meta, limit, offset, nodeCount: 0 }};
-        }
         throw new Error(`Error fetching root node events: ${errorData.error || response.statusText}`);
       }
       
@@ -556,7 +406,7 @@ export function usePonderData() {
       console.error('Error fetching root node events:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsLoading(false);
-      return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 }};
+      return { events: [], meta: { total: 0, limit, offset, nodeCount: 0 } };
     }
   }, []);
 
@@ -565,20 +415,6 @@ export function usePonderData() {
    */
   const getNetworkEvents = useCallback(async (networkId: string, limit = 50, offset = 0) => {
     if (!networkId) return { events: [], meta: { total: 0, limit, offset }};
-    
-    // Return empty result if social features are disabled
-    if (!isSocialEnabled) {
-      console.log('Social features are disabled. Network events will be empty.');
-      return { 
-        events: [], 
-        meta: { 
-          total: 0, 
-          limit, 
-          offset,
-          message: 'Social features are currently disabled'
-        } 
-      };
-    }
     
     setIsLoading(true);
     setError(null);
@@ -622,6 +458,44 @@ export function usePonderData() {
       return { events: [], meta: { total: 0, limit, offset }};
     }
   }, []);
+
+  /**
+   * Fetch activity logs for a specific node
+   */
+  const getNodeActivityLogs = useCallback(async (nodeId: string, networkId: string, limit = 50) => {
+    if (!nodeId) return [];
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(apiUrl(`/api/events?nodeId=${nodeId}&limit=${limit}&networkId=${networkId}`));
+      if (!response.ok) {
+        throw new Error(`Error fetching activity logs: ${response.statusText}`);
+      }
+      const data = await response.json();
+      setIsLoading(false);
+      return data.events || [];
+    } catch (err) {
+      console.error('Error fetching node activity logs:', err);
+      setError(err instanceof Error ? err : new Error(String(err)));
+      setIsLoading(false);
+      return [];
+    }
+  }, []);
+
+  /**
+   * Validate a chat message
+   */
+  const validateChatMessage = (message: string): { isValid: boolean; error?: string } => {
+    if (!message || message.trim() === '') {
+      return { isValid: false, error: 'Message cannot be empty' };
+    }
+    if (message.length > 500) {
+      return { isValid: false, error: 'Message is too long (max 500 characters)' };
+    }
+    return { isValid: true };
+  };
 
   // Return the hook functions
   return {

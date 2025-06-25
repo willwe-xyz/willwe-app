@@ -48,6 +48,9 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
   const toast = useToast();
+  
+  // Check if social features are enabled
+  const socialEnabled = process.env.NEXT_PUBLIC_SOCIAL_ENABLED === 'true';
 
   // Function to convert token address to root node ID (uint160)
   const getRootNodeId = useCallback((address: string): string => {
@@ -67,6 +70,16 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
   // Function to fetch activities using the getRootNodeEvents endpoint
   const fetchActivities = useCallback(async () => {
     if (!tokenAddress || !chainId) return;
+    
+    // Don't fetch if social features are disabled
+    if (!socialEnabled) {
+      console.log('Social features are disabled. Not fetching root node activities.');
+      setActivities([]);
+      setTransformedActivities([]);
+      setPaginationMeta({ total: 0, limit: 50, offset: 0, nodeCount: 0 });
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     const rootNodeId = getRootNodeId(tokenAddress);
@@ -105,8 +118,15 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
 
   // Fetch activities on component mount and when dependencies change
   useEffect(() => {
-    fetchActivities();
-  }, [fetchActivities]);
+    if (socialEnabled) {
+      fetchActivities();
+    } else {
+      // Clear any existing data if social features are disabled
+      setActivities([]);
+      setTransformedActivities([]);
+      setPaginationMeta({ total: 0, limit: 50, offset: 0, nodeCount: 0 });
+    }
+  }, [fetchActivities, socialEnabled]);
 
   // Transform activities when they change
   useEffect(() => {
@@ -226,6 +246,19 @@ export const RootActivityFeed: React.FC<RootActivityFeedProps> = ({
 
   // Combine errors from both sources
   const combinedError = error || ponderError;
+
+  // Don't render anything if social features are disabled
+  if (!socialEnabled) {
+    return (
+      <Alert status="info" borderRadius="md" mb={4}>
+        <AlertIcon />
+        <Box>
+          <Text fontWeight="bold">Social features are disabled</Text>
+          <Text fontSize="sm">Enable social features in your environment variables to view network activities.</Text>
+        </Box>
+      </Alert>
+    );
+  }
 
   return (
     <Box

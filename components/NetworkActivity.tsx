@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Box, Button, Flex, Text, useToast, VStack, Heading, Spinner, Alert, AlertIcon, HStack } from '@chakra-ui/react';
+import { Box, Button, Flex, Text, useToast, VStack, Heading, Spinner, Alert, AlertIcon, HStack, useColorModeValue } from '@chakra-ui/react';
 import { ActivityFeed } from './ActivityFeed/ActivityFeed';
 import { ActivityItem } from '../types/chainData';
 import { transformActivities } from '../utils/activityTransformers';
@@ -26,9 +26,22 @@ export const NetworkActivity: React.FC<NetworkActivityProps> = ({
   const { getNetworkEvents, isLoading: isPonderLoading, error: ponderError } = usePonderData();
   const toast = useToast();
 
+  // Check if social features are enabled
+  const socialEnabled = process.env.NEXT_PUBLIC_SOCIAL_ENABLED === 'true';
+  const bgColor = useColorModeValue('white', 'gray.800');
+
   // Function to fetch activities using the getNetworkEvents endpoint
   const fetchActivities = useCallback(async () => {
     if (!chainId) return;
+    
+    // Don't fetch if social features are disabled
+    if (!socialEnabled) {
+      console.log('Social features are disabled. Not fetching network activities.');
+      setActivities([]);
+      setTransformedActivities([]);
+      setPaginationMeta({ total: 0, limit: 50, offset: 0 });
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
@@ -51,12 +64,19 @@ export const NetworkActivity: React.FC<NetworkActivityProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [chainId, getNetworkEvents, toast]);
+  }, [chainId, getNetworkEvents, toast, socialEnabled]);
 
   // Fetch activities on component mount and when dependencies change
   useEffect(() => {
-    fetchActivities();
-  }, [fetchActivities]);
+    if (socialEnabled) {
+      fetchActivities();
+    } else {
+      // Clear any existing data if social features are disabled
+      setActivities([]);
+      setTransformedActivities([]);
+      setPaginationMeta({ total: 0, limit: 50, offset: 0 });
+    }
+  }, [fetchActivities, socialEnabled]);
 
   // Transform activities when they change
   useEffect(() => {
@@ -111,9 +131,22 @@ export const NetworkActivity: React.FC<NetworkActivityProps> = ({
   // Combine errors from both sources
   const combinedError = error || ponderError;
 
+  // Don't render anything if social features are disabled
+  if (!socialEnabled) {
+    return (
+      <Alert status="info" borderRadius="md" mb={4}>
+        <AlertIcon />
+        <Box>
+          <Text fontWeight="bold">Social features are disabled</Text>
+          <Text fontSize="sm">Enable social features in your environment variables to view network activities.</Text>
+        </Box>
+      </Alert>
+    );
+  }
+
   return (
     <Box
-      bg="white"
+      bg={bgColor}
       shadow="sm"
       overflow="hidden"
       border="1px solid"
@@ -123,45 +156,28 @@ export const NetworkActivity: React.FC<NetworkActivityProps> = ({
       flexDirection="column"
     >
       <Box p={4} borderBottom="1px" borderColor="gray.100" bg="gray.50">
-        <Flex 
-          justifyContent="space-between" 
-          alignItems="center"
-        >
+        <Flex justifyContent="space-between" alignItems="center">
           <HStack spacing={2}>
-            <Box
-              p={2}
-              borderRadius="lg"
-              bg={`${selectedTokenColor}10`}
-            >
+            <Box p={2} borderRadius="lg" bg={`${selectedTokenColor}10`}>
               <Activity size={14} color={selectedTokenColor} />
             </Box>
-            <Heading size="sm">Network Activity</Heading>
+            <Heading size="md">Network Activity</Heading>
           </HStack>
           <Button 
-            size="sx" 
-            onClick={handleRefresh} 
+            size="sm" 
+            leftIcon={<RefreshCw size={16} />} 
+            onClick={handleRefresh}
             isLoading={isLoading || isPonderLoading}
-            borderColor={selectedTokenColor}
-            variant="outline"
-            color={selectedTokenColor}
-            bg="transparent"
-            _hover={{
-              bg: selectedTokenColor,
-              opacity: 0.9,
-              color: 'white'
-            }}
+            variant="ghost"
+            disabled={!socialEnabled}
           >
-            <RefreshCw size={16}/>
+            Refresh
           </Button>
         </Flex>
       </Box>
       
       {combinedError && (
-        <Alert 
-          status="error" 
-          variant="left-accent"
-          borderRadius="none"
-        >
+        <Alert status="error" variant="left-accent" borderRadius="none">
           <AlertIcon />
           <Text fontSize="sm">{combinedError.message}</Text>
         </Alert>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   Text, 
@@ -12,174 +12,111 @@ import {
   Divider,
   useToast,
   Tooltip,
-  Alert,
-  AlertIcon
+  Flex
 } from '@chakra-ui/react';
 import { useAccount } from 'wagmi';
 import { usePrivy } from '@privy-io/react-auth';
 import { formatDistanceToNow, format } from 'date-fns';
-import { NodeState } from '../types/chainData';
-import { usePonderData } from '@/hooks/usePonderData';
-import { limits } from 'chroma-js';
-import { resolveENS } from '@/utils/ensUtils';
+import { useChat } from '../hooks/useChat';
+// Format address helper function
+const formatAddress = (address: string) => {
+  if (!address) return '';
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
 
-interface NodeChatProps {
-  nodeId: string;
-  chainId: string;
-  nodeData: NodeState;
-  userAddress: string;
-}
+type NodeState = {
+  membersOfNode?: string[];
+  // Add other properties as needed
+};
 
 interface ChatMessage {
-  id: string;
+  id: string | number;
   nodeId: string;
   sender: string;
   content: string;
   timestamp: string;
+  networkId?: string;
   ensName?: string;
+}
+
+interface NodeChatProps {
+  nodeId: string;
+  chainId?: number;
+  nodeData: any;
+  userAddress?: string;
 }
 
 const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddress }) => {
   const { address } = useAccount();
   const { authenticated, user } = usePrivy();
-  const { getNodeChatMessages, sendChatMessage, isLoading } = usePonderData();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const toast = useToast();
+  
+  const authenticatedAddress = user?.wallet?.address || address || '';
   const [isSending, setIsSending] = useState(false);
+  
+  // Use the new useChat hook
+  const { 
+    messages = [], 
+    isLoading, 
+    error,
+    sendMessage
+  } = useChat({
+    nodeId: nodeId || '',
+    networkId: chainId?.toString() || '1',
+    pollInterval: 10000, // 10 seconds
+  });
+  
+  const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true);
-  const lastMessageIdRef = useRef<string | null>(null);
-  const pollTimeoutRef = useRef<NodeJS.Timeout>();
-  const isMountedRef = useRef(true);
-  const toast = useToast();
-  const [ensNames, setEnsNames] = useState<Record<string, string>>({});
   
-  const authenticatedAddress = user?.wallet?.address || address;
+  // Auto-scroll to bottom when new messages arrive or when component mounts
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      const isScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+      
+      if (isScrolledToBottom || shouldScrollToBottom) {
+        container.scrollTop = container.scrollHeight;
+        setShouldScrollToBottom(false);
+      }
+    }
+  }, [messages, shouldScrollToBottom]);
+  
+  // Handle errors from the useChat hook
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to load chat messages',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  }, [error, toast]);
+  
   const isMember = userAddress ? nodeData?.membersOfNode?.includes(userAddress) : false;
-  
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const inputBg = useColorModeValue('gray.50', 'gray.700');
-
-  // Cleanup function
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const fetchMessages = useCallback(async () => {
-    if (!nodeId || !isMountedRef.current) return;
-    
-    try {
-      const data = await getNodeChatMessages(nodeId, 200);
-      
-      // If we get an empty array or null, don't update the state
-      if (!data || !Array.isArray(data)) {
-        return;
-      }
-      
-      const messages = data as ChatMessage[];
-      const sortedMessages = messages.sort((a, b) => 
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-      
-      // Check if we actually have new messages
-      const latestMessageId = sortedMessages[sortedMessages.length - 1]?.id;
-      if (lastMessageIdRef.current && latestMessageId === lastMessageIdRef.current) {
-        return; // No new messages, don't update state
-      }
-      if (isMountedRef.current) {
-        setMessages(sortedMessages);
-        lastMessageIdRef.current = latestMessageId;
-        // Only scroll to bottom if we were already at the bottom
-        const container = messagesContainerRef.current;
-        const wasAtBottom = container ? 
-          container.scrollHeight - container.scrollTop === container.clientHeight : 
-          true;
-        if (wasAtBottom) {
-          setShouldScrollToBottom(true);
-        }
-      }
-    } catch (error) {
-      // Don't show error toast for 404s or when the server is not available
-      if (error instanceof Error && !error.message.includes('404') && !error.message.includes('Failed to fetch')) {
-        if (isMountedRef.current) {
-          toast({
-            title: "Error",
-            description: "Failed to load chat messages",
-            status: "error",
-            duration: 5000,
-            isClosable: true,
-          });
-        }
-      }
-    } finally {
-      // Schedule next poll only if component is still mounted and we're not in an error state
-      if (isMountedRef.current) {
-        pollTimeoutRef.current = setTimeout(fetchMessages, 10000);
-      }
-    }
-  }, [nodeId, getNodeChatMessages, toast]);
-
-  // Initial fetch and start polling
-  useEffect(() => {
-    if (nodeId) {
-      fetchMessages();
-    }
-    return () => {
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current);
-      }
-    };
-  }, [nodeId, fetchMessages]);
-
-  // Only scroll when we explicitly want to
-  useEffect(() => {
-    if (shouldScrollToBottom && messagesContainerRef.current) {
-      const container = messagesContainerRef.current;
-      container.scrollTop = container.scrollHeight;
-      setShouldScrollToBottom(false);
-    }
-  }, [shouldScrollToBottom]);
-
-  // Add ENS resolution effect
-  useEffect(() => {
-    const resolveMessageSenders = async () => {
-      const uniqueSenders = Array.from(new Set(messages.map(msg => msg.sender)));
-      const newEnsNames: Record<string, string> = {};
-      
-      for (const sender of uniqueSenders) {
-        if (!ensNames[sender]) {
-          const ensName = await resolveENS(sender);
-          if (ensName && ensName !== sender) {
-            newEnsNames[sender] = ensName;
-          }
-        }
-      }
-      
-      if (Object.keys(newEnsNames).length > 0) {
-        setEnsNames(prev => ({ ...prev, ...newEnsNames }));
-      }
-    };
-
-    if (messages.length > 0) {
-      resolveMessageSenders();
-    }
-  }, [messages]);
-
+  
+  // Handle send message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!authenticatedAddress || !newMessage.trim() || !nodeId || !authenticated) {
+      toast({
+        title: 'Error',
+        description: 'Please connect your wallet to send messages',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
       return;
     }
-    
+
     if (!isMember) {
       toast({
         title: "Not a member",
@@ -191,34 +128,18 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
       return;
     }
     
-    setIsSending(true);
-    
     try {
-      const result = await sendChatMessage(nodeId, authenticatedAddress, newMessage.trim(), chainId);
-      
-      // Handle different response formats from the Ponder server
-      const messageToAdd = result;
-      if (messageToAdd) {
-        setMessages(prev => [...prev, messageToAdd]);
-        setNewMessage('');
-        setShouldScrollToBottom(true);
-      }
+      setIsSending(true);
+      // Use sendMessage from useChat hook
+      await sendMessage(newMessage.trim(), authenticatedAddress);
+      setNewMessage('');
+      setShouldScrollToBottom(true);
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
+      console.error('Error sending message:', error);
+      // Error is already handled in the useChat hook
     } finally {
       setIsSending(false);
     }
-  };
-
-  const formatAddress = (address: string) => {
-    if (!address) return '';
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -244,48 +165,57 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
   };
 
   const getDisplayName = (address: string) => {
-    if (address === authenticatedAddress) return 'You';
-    return ensNames[address] || formatAddress(address);
+    if (!address) return 'Unknown';
+    if (address.toLowerCase() === authenticatedAddress?.toLowerCase()) return 'You';
+    // The useChat hook already handles ENS resolution, so we can use the ensName from the message
+    const message = messages.find(msg => msg.sender.toLowerCase() === address.toLowerCase());
+    return message?.ensName || formatAddress(address);
   };
 
-  // Check if social features are enabled
-  const isSocialEnabled = process.env.NEXT_PUBLIC_SOCIAL_ENABLED === 'true';
+  const renderMessages = () => {
+    if (isLoading) {
+      return (
+        <Flex justify="center" py={4}>
+          <Spinner size="md" />
+        </Flex>
+      );
+    }
+
+    if (!messages || messages.length === 0) {
+      return (
+        <Text color="gray.500" textAlign="center" py={4}>
+          No messages yet. Be the first to send a message!
+        </Text>
+      );
+    }
+
+    return messages.map((msg: any) => (
+      <Box key={msg.id} mb={4}>
+        <HStack spacing={2} align="flex-start">
+          <Avatar size="sm" name={msg.sender} src={''} />
+          <Box>
+            <HStack spacing={2} align="baseline">
+              <Text fontWeight="bold" fontSize="sm">
+                {getDisplayName(msg.sender)}
+              </Text>
+              <Text fontSize="xs" color="gray.500">
+                {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
+              </Text>
+            </HStack>
+            <Text fontSize="sm" mt={1}>
+              {msg.content}
+            </Text>
+          </Box>
+        </HStack>
+      </Box>
+    ));
+  };
 
   if (isLoading && messages.length === 0) {
     return (
       <Box p={6} textAlign="center">
         <Spinner size="xl" color="purple.500" />
-        <Text mt={4}>Loading chat messages...</Text>
-      </Box>
-    );
-  }
-
-  // Show disabled state if social features are off
-  if (!isSocialEnabled) {
-    return (
-      <Box
-        borderRadius="lg"
-        bg={bgColor}
-        border="1px solid"
-        borderColor={borderColor}
-        overflow="hidden"
-        height="500px"
-        display="flex"
-        flexDirection="column"
-        alignItems="center"
-        justifyContent="center"
-        p={6}
-        textAlign="center"
-      >
-        <Alert status="info" maxW="md" borderRadius="md">
-          <AlertIcon />
-          <Box>
-            <Text fontWeight="bold">Chat is currently disabled</Text>
-            <Text fontSize="sm" mt={1}>
-              Social features including chat are temporarily unavailable. Please check back later.
-            </Text>
-          </Box>
-        </Alert>
+        <Text mt={4}>Loading chat...</Text>
       </Box>
     );
   }
@@ -323,45 +253,7 @@ const NodeChat: React.FC<NodeChatProps> = ({ nodeId, chainId, nodeData, userAddr
           }
         }}
       >
-        {messages.length === 0 ? (
-          <Box textAlign="center" py={10}>
-            <Text color="gray.500">No messages yet. Start the conversation!</Text>
-          </Box>
-        ) : (
-          messages.map((message, index) => (
-            <Box key={message.id || index}>
-              <HStack spacing={3} align="start">
-                <Avatar 
-                  size="sm" 
-                  name={getDisplayName(message.sender)} 
-                  bg={message.sender === authenticatedAddress ? "purple.500" : "gray.500"}
-                />
-                <Box flex="1">
-                  <HStack spacing={2}>
-                    <Tooltip label="Click to copy address" placement="top">
-                      <Text 
-                        fontWeight="bold" 
-                        fontSize="sm"
-                        cursor="pointer"
-                        _hover={{ textDecoration: 'underline' }}
-                        onClick={() => copyAddressToClipboard(message.sender)}
-                      >
-                        {getDisplayName(message.sender)}
-                      </Text>
-                    </Tooltip>
-                    <Tooltip label={formatTimestamp(message.timestamp).absolute} placement="top">
-                      <Text fontSize="xs" color="gray.500">
-                        {formatTimestamp(message.timestamp).relative}
-                      </Text>
-                    </Tooltip>
-                  </HStack>
-                  <Text mt={1} wordBreak="break-word">{message.content}</Text>
-                </Box>
-              </HStack>
-              {index < messages.length - 1 && <Divider my={3} />}
-            </Box>
-          ))
-        )}
+        {renderMessages()}
         <div ref={messagesEndRef} />
       </VStack>
       
