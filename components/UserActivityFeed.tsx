@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner, Link, IconButton,  } from '@chakra-ui/react';
+import { Box, Button, Flex, Text, useToast, VStack, Heading, Code, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, Spinner, Link, IconButton, Alert, AlertIcon } from '@chakra-ui/react';
 import { ActivityFeed } from './ActivityFeed/ActivityFeed';
 import { ActivityItem } from '../types/chainData';
 import { transformActivities } from '../utils/activityTransformers';
@@ -41,9 +41,21 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
   const toast = useToast();
 
+  // Check if social features are enabled
+  const socialEnabled = process.env.NEXT_PUBLIC_SOCIAL_ENABLED === 'true';
+
   // Function to fetch activities using the new getUserFeed endpoint
   const fetchActivities = useCallback(async () => {
     if (!userAddress || !chainId) return;
+    
+    // Don't fetch if social features are disabled
+    if (!socialEnabled) {
+      console.log('Social features are disabled. Not fetching activities.');
+      setActivities([]);
+      setTransformedActivities([]);
+      setPaginationMeta({ total: 0, limit: 50, offset: 0, nodeCount: 0 });
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
@@ -78,12 +90,19 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [userAddress, chainId, getUserFeed, toast]);
+  }, [userAddress, chainId, getUserFeed, toast, socialEnabled]);
 
   // Fetch activities on component mount and when dependencies change
   useEffect(() => {
-    fetchActivities();
-  }, [fetchActivities]);
+    if (socialEnabled) {
+      fetchActivities();
+    } else {
+      // Clear any existing data if social features are disabled
+      setActivities([]);
+      setTransformedActivities([]);
+      setPaginationMeta({ total: 0, limit: 50, offset: 0, nodeCount: 0 });
+    }
+  }, [fetchActivities, socialEnabled]);
 
   // Transform activities when they change
   useEffect(() => {
@@ -170,6 +189,18 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
   // Combine errors from both sources
   const combinedError = error || ponderError;
 
+  // Don't render anything if social features are disabled
+  if (!socialEnabled) {
+    return (
+      <Alert status="info" borderRadius="md" mb={4}>
+        <AlertIcon />
+        <Box>
+          <Text fontWeight="bold">Social features are disabled</Text>
+        </Box>
+      </Alert>
+    );
+  }
+
   return (
     <VStack spacing={3} align="stretch" w="100%">
       <Flex justifyContent="space-between" alignItems="center">
@@ -204,7 +235,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
         activities={transformedActivities}
         isLoading={isLoading || isPonderLoading} 
         error={combinedError ? combinedError.message : null}
-        emptyStateMessage={`No activities found for this user. Activities will appear here when you interact with nodes or when activity occurs in nodes where you're a member.`}
+        emptyStateMessage={`No activities found or social feed has been disabled. Activities will appear here when you interact with nodes or when activity occurs in nodes where you're a member.`}
       />
       )}
     </VStack>
