@@ -204,7 +204,7 @@ export const UserActivityFeed: React.FC<UserActivityFeedProps> = ({
         activities={transformedActivities}
         isLoading={isLoading || isPonderLoading} 
         error={combinedError ? combinedError.message : null}
-        emptyStateMessage={`No activities found for this user. Activities will appear here when you interact with nodes or when activity occurs in nodes where you're a member.`}
+        emptyStateMessage={`No activities found or social feed has been disabled. Activities will appear here when you interact with nodes or when activity occurs in nodes where you're a member.`}
       />
       )}
     </VStack>
