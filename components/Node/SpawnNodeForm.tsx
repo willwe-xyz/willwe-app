@@ -68,7 +68,7 @@ const SpawnNodeForm = ({
   onSuccess,
   onClose,
   selectedTokenColor = '#805AD5',
-  rootTokenSymbol = 'PSC' // Default to PSC if not provided
+  rootTokenSymbol = '$'
 }: SpawnNodeFormProps) => {
   // Form state
   const [entityName, setEntityName] = useState('');

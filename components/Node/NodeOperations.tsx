@@ -130,7 +130,7 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
   const [userBalance, setUserBalance] = useState('0');
   const [useDirectParentMint, setUseDirectParentMint] = useState(false);
   const [useDirectParentBurn, setUseDirectParentBurn] = useState(false);
-  const [rootTokenSymbol, setRootTokenSymbol] = useState('PSC');
+  const [rootTokenSymbol, setRootTokenSymbol] = useState('');
   const [formData, setFormData] = useState<SpawnFormData>({
     name: '',
     characteristics: [],
@@ -237,13 +237,13 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
         tokenAddress = ethers.getAddress(ethers.toBeHex(rootNodeId, 20));
       } else {
         // If we don't have a valid address, return default
-        return 'PSC';
+        return '$';
       }
       
 
       // Verify we have a valid non-zero address
       if (tokenAddress === ethers.ZeroAddress) {
-        return 'PSC';
+        return '$';
       }
 
       const tokenContract = new ethers.Contract(
@@ -258,20 +258,20 @@ export const NodeOperations: React.FC<NodeOperationsProps> = ({
       try {
         // First try to get the symbol
         const symbol = await tokenContract.symbol();
-        return symbol || 'PSC';
+        return symbol || '$';
       } catch (symbolError) {
         try {
           // If symbol fails, try to get the name
           const name = await tokenContract.name();
           // Use first 3-4 characters of name as symbol if name exists
-          return name ? name.slice(0, 4).toUpperCase() : 'PSC';
+          return name ? name.slice(0, 4).toUpperCase() : '$';
         } catch (nameError) {
           // If both fail, return default
-          return 'PSC';
+          return '$';
         }
       }
     } catch (error) {
-      return 'PSC';
+      return '$';
     }
   }, [nodeData?.rootPath, nodeId, getEthersProvider]);
 

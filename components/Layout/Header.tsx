@@ -1,7 +1,7 @@
 // File: ./components/Layout/Header.tsx
 
 import React from 'react';
-import { Flex, Input, InputGroup, InputLeftElement } from '@chakra-ui/react';
+import { Flex, Input, InputGroup, InputLeftElement, Text } from '@chakra-ui/react';
 import { PaletteButton } from './PaletteButton';
 import HeaderButtons from '../HeaderButtons';
 
@@ -45,40 +45,58 @@ const Header: React.FC<HeaderProps> = ({
       borderBottom="1px solid" 
       borderColor="gray.200"
       bg="white"
+      position="relative"
     >
-      <PaletteButton 
-        cycleColors={cycleColors} 
-        contrastingColor={contrastingColor} 
-        reverseColor={reverseColor}
-      />
-      
-      {/* Search Box */}
-      <InputGroup maxW="400px" mx={4}>
-        <InputLeftElement pointerEvents="none">
-          <span role="img" aria-label="coin">🪙</span>
-        </InputLeftElement>
-        <Input
-          value={searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
-          bg="white"
-          borderRadius="md"
-          _focus={{
-            borderColor: contrastingColor,
-            boxShadow: `0 0 0 1px ${contrastingColor}`
-          }}
+      <Flex align="center" flexShrink={0}>
+        <PaletteButton 
+          cycleColors={cycleColors} 
+          contrastingColor={contrastingColor} 
+          reverseColor={reverseColor}
         />
-      </InputGroup>
-
-      <HeaderButtons 
-        logout={logout} 
-        login={login}
-        userAddress={userAddress || ''} 
-        chainId={chainId}
-        selectedNodeId={selectedNodeId}
-        onNodeSelect={onNodeSelect}
-        isTransacting={isTransacting}
-        selectedTokenColor={contrastingColor}
-      />
+        <Text 
+          color="red.500" 
+          fontFamily="'Comic Sans MS', 'Comic Sans', cursive"
+          fontWeight="bold"
+          fontSize="sm"
+          ml={2}
+          whiteSpace="nowrap"
+        >
+          [experimental]
+        </Text>
+      </Flex>
+      
+      {/* Search Box - Centered */}
+      <Flex position="absolute" left="50%" transform="translateX(-50%)" w="100%" maxW="400px">
+        <InputGroup>
+          <InputLeftElement pointerEvents="none">
+            <span role="img" aria-label="coin">🪙</span>
+          </InputLeftElement>
+          <Input
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            bg="white"
+            borderRadius="md"
+            _focus={{
+              borderColor: contrastingColor,
+              boxShadow: `0 0 0 1px ${contrastingColor}`
+            }}
+            placeholder="Search..."
+          />
+        </InputGroup>
+      </Flex>
+      
+      <Flex flexShrink={0}>
+        <HeaderButtons 
+          logout={logout} 
+          login={login}
+          userAddress={userAddress || ''} 
+          chainId={chainId}
+          selectedNodeId={selectedNodeId}
+          onNodeSelect={onNodeSelect}
+          isTransacting={isTransacting}
+          selectedTokenColor={contrastingColor}
+        />
+      </Flex>
     </Flex>
   );
 };
