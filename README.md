@@ -33,7 +33,7 @@ This repository contains a web app client for the underlying protocol.
 - **Responsive Design**: Works on desktop and mobile devices
 
 ### Technical Features
-- **Multi-chain Support**: Ethereum mainnet and Base network
+- **Multi-chain Support**: Base Mainnet (only, currently)
 - **IPFS Integration**: Decentralized metadata storage
 - **ENS Resolution**: Ethereum Name Service support
 - **Real-time Updates**: Live data fetching and updates
